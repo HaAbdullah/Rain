@@ -1,0 +1,27 @@
+# Dependencies and build output
+node_modules
+dist
+dist-ssr
+*.local
+
+# Rust / Tauri build output
+target
+src-tauri/target
+src-tauri/gen/schemas
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editor and OS files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+*.sw?
+
+# Draw.io backups
+*.bkp
+*.dtmp

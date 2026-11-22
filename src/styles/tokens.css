@@ -1,0 +1,238 @@
+/*
+ * Rain design tokens. Dark is the only theme.
+ *
+ * Section 5 of docs/ui-spec.md explains every value. The first block uses
+ * shadcn-vue's variable names so the stock components pick the colours up;
+ * the "Rain:" blocks add what the stock set does not have.
+ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+/* Defines the data-open / data-closed variants the generated components use. */
+@import "shadcn-vue/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  color-scheme: dark;
+
+  /* ---- shadcn-vue variables ---- */
+  --background: #171718;
+  --foreground: #f2f2f3;
+  --card: #262729;
+  --card-foreground: #f2f2f3;
+  --popover: #202121;
+  --popover-foreground: #f2f2f3;
+  --primary: #0a78cc; /* one step darker than the ring so white 14px text reaches 4.5:1 */
+  --primary-foreground: #ffffff;
+  --secondary: #262729;
+  --secondary-foreground: #f2f2f3;
+  --muted: #262729;
+  --muted-foreground: #a6a7ab;
+  --accent: #313235; /* hover and highlight inside shadcn components */
+  --accent-foreground: #f2f2f3;
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --border: #2d2e32;
+  --input: #494a50;
+  --ring: #0b8ce9;
+  --radius: 0.5rem; /* 8px */
+
+  --chart-1: #4f8fd6;
+  --chart-2: #3fa7a0;
+  --chart-3: #c77d3a;
+  --chart-4: #7c6bd6;
+  --chart-5: #6fae5a;
+
+  --sidebar: #202121;
+  --sidebar-foreground: #a6a7ab;
+  --sidebar-primary: #0a78cc;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #313235;
+  --sidebar-accent-foreground: #f2f2f3;
+  --sidebar-border: #2d2e32;
+  --sidebar-ring: #0b8ce9;
+
+  /* ---- Rain: surfaces ---- */
+  --surface-0: #141414; /* wells: treemap, heatmap, log, code block */
+  --surface-1: #202121; /* rail, header, detail pane */
+  --surface-2: #262729; /* cards, tiles, inputs, keycaps */
+  --hover: #313235; /* pointer hover */
+  --selected: #3c3d42; /* keyboard selection fill */
+  --border-strong: #494a50; /* inputs, overlay outline */
+  --text-3: #84858c; /* placeholder, disabled, hints only */
+
+  /* ---- Rain: status (always paired with a shape, see StatusDot) ---- */
+  --status-running: #3aa0f5;
+  --status-waiting: #fd9903;
+  --status-success: #00cd72;
+  --status-failed: #e5484d;
+  --status-idle: #84858c;
+
+  /* ---- Rain: heatmap, one hue ---- */
+  --heat-0: #262729;
+  --heat-1: #12395a;
+  --heat-2: #0f5a94;
+  --heat-3: #0b7bcc;
+  --heat-4: #3aa5f2;
+
+  /* ---- Rain: file categories (treemap) ---- */
+  --file-video: #7c6bd6;
+  --file-image: #3fa7a0;
+  --file-audio: #c77d3a;
+  --file-archive: #b8a13a;
+  --file-code: #4f8fd6;
+  --file-document: #6fae5a;
+  --file-app: #c2607a;
+  --file-other: #55565e;
+
+  /* ---- Rain: layout ---- */
+  --rail-w: 56px;
+  --header-h: 56px;
+  --strip-h: 40px;
+  --row-h: 40px;
+  --row-lg-h: 56px;
+  --pane-w: 340px;
+  --pane-w-wide: 420px;
+
+  /* ---- Rain: elevation and motion ---- */
+  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --dur: 100ms;
+  --dur-overlay: 80ms;
+  --ease: cubic-bezier(0, 0, 0.2, 1);
+
+  /* ---- Rain: type (system fonts only, nothing is downloaded) ---- */
+  --rain-font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --rain-font-mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+}
+
+/* Maps the variables above onto Tailwind utilities (bg-surface-1, text-text-3, ...). */
+@theme inline {
+  /* Every Tailwind transition runs at the Rain speed (spec 5.5). */
+  --default-transition-duration: var(--dur);
+  --default-transition-timing-function: var(--ease);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-border-strong: var(--border-strong);
+  --color-text-3: var(--text-3);
+  --color-status-running: var(--status-running);
+  --color-status-waiting: var(--status-waiting);
+  --color-status-success: var(--status-success);
+  --color-status-failed: var(--status-failed);
+  --color-status-idle: var(--status-idle);
+  --color-heat-0: var(--heat-0);
+  --color-heat-1: var(--heat-1);
+  --color-heat-2: var(--heat-2);
+  --color-heat-3: var(--heat-3);
+  --color-heat-4: var(--heat-4);
+
+  --radius-sm: calc(var(--radius) - 4px); /* 4  keycaps */
+  --radius-md: calc(var(--radius) - 2px); /* 6  controls, tags, chips */
+  --radius-lg: var(--radius); /* 8  rows, cards, tiles, covers */
+  --radius-xl: calc(var(--radius) + 4px); /* 12 popovers, dialogs */
+  --radius-2xl: calc(var(--radius) + 4px); /* stock components ask for these; capped at 12 */
+  --radius-3xl: calc(var(--radius) + 4px);
+  --radius-4xl: calc(var(--radius) + 4px);
+  --radius-cell: 3px; /* heatmap cells */
+
+  --font-sans: var(--rain-font-sans);
+  --font-heading: var(--rain-font-sans);
+  --font-mono: var(--rain-font-mono);
+  --text-13: 0.8125rem; /* utility: text-13 */
+  --text-13--line-height: 1.125rem;
+  --text-countdown: 2rem; /* utility: text-countdown */
+  --text-countdown--line-height: 2.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    font-size: 16px;
+  }
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--rain-font-sans);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    user-select: none;
+  }
+  /* Lets the frameless window be dragged by its header. */
+  [data-tauri-drag-region] {
+    app-region: drag;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--selected);
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  /* Paths, commands and logs may be selected and copied; nothing else. */
+  .selectable {
+    user-select: text;
+  }
+  /* The window is hidden, not closed: stop every animation while it is. */
+  html[data-hidden] * {
+    animation-play-state: paused !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+}
