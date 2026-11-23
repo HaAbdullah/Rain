@@ -13,7 +13,7 @@ use std::sync::Arc;
 use axum::http::StatusCode;
 use claude::{ClaudeHome, FakeDesktop, FakeProbe, ManualExits, NoExits};
 use common::TestBackend;
-use rain_backend::modules::sessions::{ExitSource, ProcessProbe, WindowApi};
+use rain_backend::modules::sessions::{ExitSource, ProcessProbe, TranscriptTiming, WindowApi};
 use rain_backend::platform::windows_focus::FocusWindow;
 use rain_types::{ClaudeSession, Health, SessionHost, SourceState, Status};
 use serde_json::{Value, json};
@@ -652,5 +652,198 @@ async fn sessions_a_registry_folder_that_appears_after_the_start_is_read() {
         .find(|s| s.name == "claude-registry")
         .unwrap();
     assert_eq!(source.state, SourceState::Ok);
+    backend.stop().await;
+}
+
+// ---- the transcript follows the file (monitoring off: no hook speaks for the session) ----
+
+/// A transcript watch that reacts in tens of milliseconds instead of seconds.
+fn quick() -> Arc<TranscriptTiming> {
+    Arc::new(TranscriptTiming {
+        quiet: std::time::Duration::from_millis(50),
+        gap: std::time::Duration::from_millis(50),
+    })
+}
+
+async fn start_following(
+    home: &ClaudeHome,
+    probe: &Arc<FakeProbe>,
+    exits: Arc<dyn ExitSource>,
+) -> TestBackend {
+    let root = home.root();
+    TestBackend::builder()
+        .config(move |config| config.claude_dir = Some(root.clone()))
+        .with::<dyn ProcessProbe>(probe.clone())
+        .with::<dyn ExitSource>(exits)
+        .with::<TranscriptTiming>(quick())
+        .start()
+        .await
+}
+
+/// One assistant line that says `text` and counts `tokens` (an input of that many tokens).
+fn assistant_line(second: u32, text: &str, tokens: u64) -> Value {
+    json!({ "type": "assistant", "timestamp": format!("2026-11-21T09:00:{second:02}.000Z"),
+            "message": { "id": format!("m{second}"), "model": "claude-sonnet-4-5-20250929",
+                         "content": [ { "type": "text", "text": text } ],
+                         "usage": { "input_tokens": tokens, "output_tokens": 0 } } })
+}
+
+fn append(path: &std::path::Path, line: &Value) {
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(path)
+        .expect("the transcript");
+    writeln!(file, "{line}").expect("a line");
+}
+
+/// Waits for a frame of the topic `sessions` that shows `id` with this last message.
+async fn wait_for_message(
+    stream: &mut common::StreamReader,
+    id: &str,
+    message: &str,
+) -> ClaudeSession {
+    loop {
+        let frame = stream.expect_topic("sessions").await;
+        let shown: Vec<ClaudeSession> =
+            serde_json::from_value(frame.payload).expect("a session list");
+        if let Some(found) = shown
+            .into_iter()
+            .find(|s| s.id == id && s.last_message == message)
+        {
+            return found;
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sessions_a_transcript_that_grows_updates_the_session_and_publishes() {
+    let home = ClaudeHome::new();
+    let probe = Arc::new(FakeProbe::default());
+    probe.add(5301, "claude.exe", 1);
+    home.write_registry(5301, ID_A, json!({ "status": "busy" }));
+    let path = home.write_transcript(
+        r"C:\work\demo",
+        ID_A,
+        &[assistant_line(1, "First answer.", 100)],
+    );
+    let backend = start_following(&home, &probe, Arc::new(NoExits)).await;
+    // The first sight read the file (it may have been published before a stream opens, so the
+    // list is asked once).
+    let mut first = None;
+    for _ in 0..100 {
+        let shown = find(&sessions(&backend).await, ID_A).clone();
+        if shown.last_message == "First answer." {
+            first = Some(shown);
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let first = first.expect("the first read");
+    assert_eq!(first.tokens, 100);
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let mut stream = backend.stream().await;
+
+    // Claude goes on writing. Nobody reads the list: the folder watch sees it.
+    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    append(&path, &assistant_line(2, "Second answer.", 250));
+    let second = wait_for_message(&mut stream, ID_A, "Second answer.").await;
+    assert_eq!(second.tokens, 250);
+    assert!(
+        second.last_activity_at > first.last_activity_at,
+        "{} then {}",
+        first.last_activity_at,
+        second.last_activity_at
+    );
+    assert_eq!(second.recent[0].text, "Second answer.");
+    backend.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sessions_an_unchanged_transcript_causes_no_read() {
+    let home = ClaudeHome::new();
+    let probe = Arc::new(FakeProbe::default());
+    probe.add(5302, "claude.exe", 1);
+    home.write_registry(5302, ID_A, json!({}));
+    let path = home.write_transcript(r"C:\work\demo", ID_A, &[assistant_line(1, "Hello.", 10)]);
+    let backend = start_following(&home, &probe, Arc::new(NoExits)).await;
+    let service = backend.state.sessions();
+    let mut found = false;
+    for _ in 0..100 {
+        if find(&sessions(&backend).await, ID_A).last_message == "Hello." {
+            found = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(found, "the first read");
+    // Let the first reads (first sight, the new watch) finish.
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    let reads = service.transcript_reads();
+
+    // Another file in the folder changes (another session), and the list is read twice: the
+    // watch fires and `GET /sessions` looks, and both find this file as it was.
+    std::fs::write(path.with_file_name("other.jsonl"), "{}\n").unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    sessions(&backend).await;
+    sessions(&backend).await;
+    assert_eq!(service.transcript_reads(), reads);
+    backend.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sessions_the_watch_of_a_session_that_ended_is_dropped() {
+    let home = ClaudeHome::new();
+    let probe = Arc::new(FakeProbe::default());
+    probe.add(5303, "claude.exe", 1);
+    probe.add(5304, "claude.exe", 1);
+    home.write_registry(5303, ID_A, json!({}));
+    home.write_registry(5304, ID_B, json!({}));
+    home.write_transcript(r"C:\work\demo", ID_A, &[assistant_line(1, "A.", 1)]);
+    home.write_transcript(r"C:\work\demo", ID_B, &[assistant_line(1, "B.", 1)]);
+    let exits = Arc::new(ManualExits::default());
+    let backend = start_following(&home, &probe, exits.clone()).await;
+    let service = backend.state.sessions();
+    assert_eq!(
+        service.transcript_watch_count(),
+        1,
+        "two sessions in one folder share one watch"
+    );
+
+    probe.end(5303);
+    assert!(exits.fire(5303));
+    let mut stream = backend.stream().await;
+    let _ = stream.expect_topic("sessions").await;
+    assert_eq!(service.transcript_watch_count(), 1, "the other still runs");
+
+    probe.end(5304);
+    assert!(exits.fire(5304));
+    let _ = stream.expect_topic("sessions").await;
+    assert_eq!(service.transcript_watch_count(), 0);
+    backend.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sessions_a_transcript_folder_that_appears_late_is_followed() {
+    let home = ClaudeHome::new();
+    let probe = Arc::new(FakeProbe::default());
+    probe.add(5305, "claude.exe", 1);
+    home.write_registry(5305, ID_A, json!({}));
+    // No transcript and no folder for it yet: the list is still fine.
+    let backend = start_following(&home, &probe, Arc::new(NoExits)).await;
+    let service = backend.state.sessions();
+    assert_eq!(find(&sessions(&backend).await, ID_A).last_message, "");
+    assert_eq!(service.transcript_watch_count(), 0);
+
+    // The first prompt creates the folder and the file. The next list finds them and starts the
+    // watch.
+    let path = home.write_transcript(r"C:\work\demo", ID_A, &[assistant_line(1, "Late.", 5)]);
+    assert_eq!(find(&sessions(&backend).await, ID_A).last_message, "Late.");
+    assert_eq!(service.transcript_watch_count(), 1);
+
+    let mut stream = backend.stream().await;
+    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    append(&path, &assistant_line(2, "Later.", 6));
+    wait_for_message(&mut stream, ID_A, "Later.").await;
     backend.stop().await;
 }

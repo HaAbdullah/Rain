@@ -53,7 +53,9 @@ pub struct Service {
     timings: Timings,
     machine: Mutex<Machine>,
     throttle: Throttle<GameMode>,
-    /// Wakes the driver when a choice changed the machine, so it computes its next sleep again.
+    /// Wakes the driver when something OUTSIDE it changed the machine (a choice, a start), so it
+    /// computes its next sleep again. The driver's own inputs must never notify this: it would
+    /// store a permit for its own next `select!` and the loop would never sleep.
     wake: Notify,
     /// True while a driver task exists. Decided under the `machine` lock (see `drive`).
     driver_running: AtomicBool,
@@ -166,7 +168,10 @@ impl Service {
         };
         info!(phase = ?state.phase, "game mode started");
 
-        if !self.driver_running.swap(true, Ordering::SeqCst) {
+        if self.driver_running.swap(true, Ordering::SeqCst) {
+            // A driver from the run before has not seen its end yet: it measures again.
+            self.wake.notify_one();
+        } else {
             spawn_named("gamemode-driver", Arc::clone(self).drive(app));
         }
         Ok(state)
@@ -179,7 +184,10 @@ impl Service {
             choice,
             now: Instant::now(),
         };
-        self.run_input(&app, input).map_err(refusal_error)
+        let state = self.run_input(&app, input).map_err(refusal_error)?;
+        // The driver computes its next sleep again (a choice can end the wait or the countdown).
+        self.wake.notify_one();
+        Ok(state)
     }
 
     /// `POST /game-mode/recap/seen`: the notice was shown, so it is not shown again.
@@ -229,7 +237,8 @@ impl Service {
     }
 
     /// Gives the machine one input and does what it asks. The lock is never held across an
-    /// `await`, so this is a plain function.
+    /// `await`, so this is a plain function. It does NOT wake the driver: the driver calls it
+    /// itself, and the callers that come from outside call `wake` after it.
     fn run_input(self: &Arc<Self>, app: &AppState, input: Input) -> Result<GameModeState, Refusal> {
         let mut machine = lock(&self.machine);
         let effects = machine.step(input)?;
@@ -260,7 +269,6 @@ impl Service {
                 Arc::clone(self).wind_down(app.clone(), busy),
             );
         }
-        self.wake.notify_one();
         Ok(snapshot)
     }
 

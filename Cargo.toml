@@ -23,6 +23,16 @@ todo = "warn"
 unwrap_used = "warn"              # allowed in tests (clippy.toml); in start-up code only with a comment
 expect_used = "allow"
 
+# Development builds: small debug information, so that `target` stays a few GB and not tens of GB.
+# Rain's own code keeps file names and line numbers (enough for a panic message and a backtrace);
+# the dependencies carry none. Full debug information for a debugger session: set `debug = true`
+# here for the time of the session.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 opt-level = "s"
 lto = "thin"

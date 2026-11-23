@@ -38,6 +38,9 @@ use media::MediaFetcher;
 
 /// Label of the one window, as declared in `tauri.conf.json`.
 const MAIN_WINDOW: &str = "main";
+/// Added to the app identifier in a sandbox (a debug build or a `RAIN_*` override), so that a
+/// development run and the installed Rain do not share the single-instance lock.
+const SANDBOX_IDENTIFIER_SUFFIX: &str = ".dev";
 
 /// Sent to the frontend after the window was shown and focused.
 const EVENT_SUMMONED: &str = "rain:summoned";
@@ -224,6 +227,16 @@ pub fn run() {
         hidden,
         "Rain shell starting"
     );
+    let mut context = tauri::generate_context!();
+    if rain_types::env::sandbox() {
+        // A development run is another app for Windows: its own single-instance lock, window
+        // state and WebView2 profile. Without this, starting it while the installed Rain runs
+        // would only wake the installed one and exit (foundation section 2.4).
+        context
+            .config_mut()
+            .identifier
+            .push_str(SANDBOX_IDENTIFIER_SUFFIX);
+    }
     tauri::Builder::default()
         // Must be the first plugin: a second launch (Start menu, Windows
         // Search) only brings the running window forward and then exits.
@@ -273,7 +286,7 @@ pub fn run() {
                 let _ = window.emit(EVENT_HIDDEN, ());
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building Rain")
         .run(move |_app, event| {
             // The process ends right after this event, so the log is written out here: the last

@@ -55,6 +55,15 @@ pub struct Ended {
     pub ok: bool,
 }
 
+/// What Rain saw of a transcript file when it last read its end: its size and its modified time.
+/// The file is read again only when one of them differs (the folder watch fires for any change in
+/// the folder, and a change of another file must cost nothing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileSig {
+    pub len: u64,
+    pub modified: SystemTime,
+}
+
 /// What `answerPermission` hands to the hook that waits: the JSON text it prints.
 pub type Decision = String;
 
@@ -152,6 +161,12 @@ pub struct SessionRec {
     pub title: TitleSources,
     pub started_at: SystemTime,
     pub last_hook_at: SystemTime,
+    /// True once a hook event of this session arrived. The hooks then feed the last message and
+    /// the recent events; before that (the switch is off, or the session started before the hooks
+    /// were installed) the transcript is the only source and is followed.
+    pub hooked: bool,
+    /// The transcript file as it was when its end was last read.
+    pub transcript_sig: Option<FileSig>,
     pub turn: Turn,
     pub registry: Option<RegistryInfo>,
     pub pending: Vec<Pending>,
@@ -178,6 +193,8 @@ impl SessionRec {
             title: TitleSources::default(),
             started_at: now,
             last_hook_at: now,
+            hooked: false,
+            transcript_sig: None,
             turn: Turn::Unknown,
             registry: None,
             pending: Vec::new(),
@@ -197,6 +214,7 @@ impl SessionRec {
     pub fn apply_event(&mut self, event: &Value, env: &HookEnv, now: SystemTime) -> Applied {
         let mut applied = Applied::default();
         self.last_hook_at = now;
+        self.hooked = true;
         if let Some(cwd) = text(event, "cwd") {
             cwd.clone_into(&mut self.cwd);
         }
@@ -377,36 +395,53 @@ impl SessionRec {
         self.registry = Some(info);
     }
 
-    /// Facts read from the tail of the transcript. Hook events are newer than the transcript for
-    /// what they carry, so they are not overwritten.
-    pub fn apply_tail(&mut self, facts: TailFacts) {
-        if let Some(model) = facts.model {
-            // A model that a hook told is as good; the transcript only fills a gap.
-            if self.model.is_none() {
-                self.model = Some(model);
+    /// Facts read from the tail of the transcript. Returns true when something that is shown
+    /// changed (the caller publishes only then).
+    ///
+    /// A session that no hook has spoken for follows the transcript: model, last message and
+    /// recent events are replaced by what the file says now. For a session with hooks the hook
+    /// events are newer than the transcript for what they carry, so those three only fill a gap.
+    pub fn apply_tail(&mut self, facts: TailFacts, sig: Option<FileSig>) -> bool {
+        let follow = !self.hooked;
+        let activity_before = self.last_activity();
+        let mut changed = false;
+        let mut set = |field: &mut Option<String>, value: Option<String>| {
+            if value.is_some() && *field != value {
+                *field = value;
+                changed = true;
             }
+        };
+        if follow || self.model.is_none() {
+            set(&mut self.model, facts.model);
         }
-        if let Some(tokens) = facts.tokens {
+        set(&mut self.branch, facts.branch);
+        set(&mut self.title.transcript, facts.title);
+        set(&mut self.title.first_prompt, facts.first_prompt);
+        if let Some(tokens) = facts.tokens
+            && self.tokens != tokens
+        {
             self.tokens = tokens;
+            changed = true;
         }
-        if facts.branch.is_some() {
-            self.branch = facts.branch;
-        }
-        if facts.title.is_some() {
-            self.title.transcript = facts.title;
-        }
-        if facts.first_prompt.is_some() {
-            self.title.first_prompt = facts.first_prompt;
-        }
-        if self.last_message.is_empty()
-            && let Some(message) = facts.last_message
+        if let Some(message) = facts.last_message
+            && (follow || self.last_message.is_empty())
+            && self.last_message != message
         {
             self.last_message = message;
+            changed = true;
         }
         // After a restart of Rain the recent events are the end of the transcript.
-        if self.recent.is_empty() {
+        if (follow || self.recent.is_empty())
+            && !facts.recent.is_empty()
+            && !self.recent.iter().eq(facts.recent.iter())
+        {
             self.recent = facts.recent.into_iter().collect();
+            changed = true;
         }
+        if let Some(sig) = sig {
+            self.transcript_sig = Some(sig);
+        }
+        changed || self.last_activity() != activity_before
     }
 
     // ---- what is shown ----
@@ -424,14 +459,19 @@ impl SessionRec {
         }
     }
 
-    /// The later of the last hook event and the registry's own time.
+    /// The latest of the last hook event, the registry's own time and the time the transcript was
+    /// last written (the only sign of work while the hooks are off).
     pub fn last_activity(&self) -> SystemTime {
         let registry = self
             .registry
             .as_ref()
             .and_then(|info| info.updated_at_ms)
             .map(|ms| UNIX_EPOCH + Duration::from_millis(ms));
-        registry.map_or(self.last_hook_at, |at| at.max(self.last_hook_at))
+        let written = self.transcript_sig.map(|sig| sig.modified);
+        [registry, written]
+            .into_iter()
+            .flatten()
+            .fold(self.last_hook_at, SystemTime::max)
     }
 
     /// The status shown and whether the process still runs (section 03 6.3.3). The first
@@ -1239,5 +1279,50 @@ mod tests {
                 }
             }
         }
+    }
+    fn facts_of(message: &str, tokens: u64) -> TailFacts {
+        TailFacts {
+            model: Some("claude-sonnet-4-5-20250929".into()),
+            tokens: Some(tokens),
+            last_message: Some(message.into()),
+            recent: vec![SessionEvent {
+                at: String::new(),
+                kind: SessionEventKind::Message,
+                text: message.into(),
+            }],
+            ..TailFacts::default()
+        }
+    }
+
+    #[test]
+    fn a_session_without_hooks_follows_every_read_of_its_transcript() {
+        let mut r = rec();
+        let sig = |len| FileSig {
+            len,
+            modified: t(len),
+        };
+        assert!(r.apply_tail(facts_of("one", 10), Some(sig(1))));
+        assert!(r.apply_tail(facts_of("two", 20), Some(sig(2))));
+        assert_eq!((r.last_message.as_str(), r.tokens), ("two", 20));
+        assert_eq!(r.recent.len(), 1);
+        assert_eq!(r.recent[0].text, "two");
+        assert_eq!(r.last_activity(), t(2), "the file time counts as activity");
+        // The same facts again change nothing that is shown.
+        assert!(!r.apply_tail(facts_of("two", 20), Some(sig(2))));
+    }
+
+    #[test]
+    fn a_session_with_hooks_keeps_what_its_hooks_said() {
+        let mut r = rec();
+        r.apply_event(
+            &event("Stop", json!({ "last_assistant_message": "from the hook" })),
+            &HookEnv::default(),
+            t(5),
+        );
+        assert!(r.hooked);
+        r.apply_tail(facts_of("from the file", 30), None);
+        assert_eq!(r.last_message, "from the hook");
+        assert_eq!(r.recent[0].text, "from the hook");
+        assert_eq!(r.tokens, 30, "the size of the context is only in the file");
     }
 }

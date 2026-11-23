@@ -20,6 +20,7 @@
     "test:rust": "cargo test --workspace",
     "check": "node scripts/check.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "install:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1",
     "idle": "node scripts/idle.mjs",
     "frontend-checks": "node scripts/frontend-checks.mjs",
     "types:identity": "tsc -p crates/rain-types/tscheck"

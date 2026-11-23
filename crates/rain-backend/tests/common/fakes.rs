@@ -404,6 +404,9 @@ pub struct FakeNeighbours {
     /// Calls of every fake in order: `jobs:pause(true)`, `scan:cancel`, `launch:<id>` ...
     pub journal: Journal,
     pub scans_cancelled: AtomicU32,
+    /// How many times game mode asked for the number of open sessions: once for each time it
+    /// measured its rows. A driver that spins makes this number run away.
+    pub measures: AtomicU32,
 }
 
 impl Default for FakeNeighbours {
@@ -417,6 +420,7 @@ impl Default for FakeNeighbours {
             launch: Mutex::new(LaunchBehaviour::Starts),
             journal,
             scans_cancelled: AtomicU32::new(0),
+            measures: AtomicU32::new(0),
         }
     }
 }
@@ -436,6 +440,7 @@ impl FakeNeighbours {
 
 impl rain_backend::modules::gamemode::Neighbours for FakeNeighbours {
     fn open_user_sessions(&self) -> u32 {
+        self.measures.fetch_add(1, Ordering::SeqCst);
         self.sessions.load(Ordering::SeqCst)
     }
 

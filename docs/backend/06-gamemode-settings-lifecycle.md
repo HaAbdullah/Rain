@@ -879,6 +879,8 @@ async fn drive(svc: Arc<Service>, mut cmds: mpsc::Receiver<Cmd>) {
 }
 ```
 
+The built driver wakes on a `Notify` that only the callers from outside signal (`start` when a driver already runs, and `choose`). The inputs the driver gives its own machine (`Items`, `Tick`) never signal it: a permit that the driver stored for itself made its `select!` ready at once, and the loop spun on one core and starved the task that writes the stream (found on the real PC, 2026-11-23). A test with paused time (`the_driver_sleeps_and_publishes_one_frame_each_second`) counts the measures and the frames.
+
 `apply` runs `Machine::step`, performs the returned effects (`Publish`, `Pause`, `BeginWait`, `StartWindDown`) and answers the reply channel with the new state or the refusal. The lock is never held across an `await`.
 
 ### 6.8 How Rain ends, and the shell's part

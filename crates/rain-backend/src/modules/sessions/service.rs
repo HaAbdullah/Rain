@@ -7,9 +7,12 @@
 //!
 //! - hook events from `rain-hook` (the main source: status, permission requests, recent events);
 //! - the registry of Claude Code, read when its folder changes (discovery, liveness, host, name);
-//! - the transcript, read from its end after a `Stop` and at first sight;
+//! - the transcript, read from its end at first sight, after a `Stop`, and whenever the file
+//!   grew (a watch on the folder of each live session; this is what feeds a session that no hook
+//!   speaks for);
 //! - the process table, for liveness, focus and stop.
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -29,7 +32,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
-use super::book::{Applied, Book, Pending, SessionRec, Turn, fit_frame, same_start};
+use super::book::{Applied, Book, FileSig, Pending, SessionRec, Turn, fit_frame, same_start};
 use super::claude_paths::ClaudePaths;
 use super::focus::{self, FocusRequest};
 use super::hook_wire::{HookEnvelope, HookMode, text};
@@ -55,6 +58,11 @@ use crate::store::hub::DirWatch;
 
 /// The registry folder is read this long after its last change event.
 const REGISTRY_QUIET: Duration = Duration::from_millis(300);
+/// A transcript folder is read this long after its last change event, and then at most once in
+/// this long again: Claude writes the file all the time while it works, and a tail read every few
+/// seconds is all the list needs. Neither time runs while no transcript changes (foundation 11.5).
+const TRANSCRIPT_QUIET: Duration = Duration::from_secs(2);
+const TRANSCRIPT_GAP: Duration = Duration::from_secs(2);
 /// The program of a session that `stopSession` may end (the image name, lower case).
 const STOPPABLE_IMAGES: [&str; 2] = ["claude.exe", "node.exe"];
 /// How long `stopSession` waits for the process to be gone.
@@ -72,6 +80,23 @@ const SOURCE_HOOKS: &str = "claude-hooks";
 /// wait 19 seconds; nothing in the product sets it.
 #[derive(Debug, Clone, Copy)]
 pub struct HookHold(pub Duration);
+
+/// How patient the transcript watch is. A test shortens both times with
+/// `TestBackend::builder().with::<TranscriptTiming>(..)`; nothing in the product sets it.
+#[derive(Debug, Clone, Copy)]
+pub struct TranscriptTiming {
+    pub quiet: Duration,
+    pub gap: Duration,
+}
+
+impl Default for TranscriptTiming {
+    fn default() -> Self {
+        Self {
+            quiet: TRANSCRIPT_QUIET,
+            gap: TRANSCRIPT_GAP,
+        }
+    }
+}
 
 /// What the hook route answers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,6 +126,12 @@ struct Inner {
     exit_rx: Mutex<Option<mpsc::UnboundedReceiver<u32>>>,
     last_event_at: Mutex<Option<SystemTime>>,
     registry_watching: Mutex<bool>,
+    /// One watch per folder that holds the transcript of a live session, shared by the sessions in
+    /// it. The token ends the task that owns the watch.
+    transcript_watches: Mutex<HashMap<PathBuf, CancellationToken>>,
+    transcript_timing: TranscriptTiming,
+    /// How many tails were really read (a quiet file is not counted). For the tests.
+    transcript_reads: AtomicU32,
     cancel: CancellationToken,
     tasks: Mutex<Vec<JoinHandle<()>>>,
     request_counter: AtomicU32,
@@ -140,6 +171,11 @@ impl Service {
             exit_rx: Mutex::new(Some(exit_rx)),
             last_event_at: Mutex::new(None),
             registry_watching: Mutex::new(false),
+            transcript_watches: Mutex::new(HashMap::new()),
+            transcript_reads: AtomicU32::new(0),
+            transcript_timing: state
+                .seam::<TranscriptTiming>()
+                .map_or_else(TranscriptTiming::default, |timing| *timing),
             cancel: CancellationToken::new(),
             tasks: Mutex::new(Vec::new()),
             request_counter: AtomicU32::new(0),
@@ -177,6 +213,17 @@ impl Service {
     /// never in the book). Game mode lists them and never stops them (decision of 2026-11-22).
     pub fn open_user_sessions(&self) -> u32 {
         u32::try_from(self.book().live_count()).unwrap_or(u32::MAX)
+    }
+
+    /// How many transcript tails were read since the start. The tests use it to see that a file
+    /// that did not change costs no read.
+    pub fn transcript_reads(&self) -> u32 {
+        self.inner.transcript_reads.load(Ordering::Relaxed)
+    }
+
+    /// How many transcript folders are watched now. For the tests.
+    pub fn transcript_watch_count(&self) -> usize {
+        lock(&self.inner.transcript_watches).len()
     }
 
     /// The state of the switch "Monitor Claude sessions" (section 06 6.1.1). Reads one small
@@ -251,6 +298,7 @@ impl Service {
         for task in tasks {
             let _ = task.await;
         }
+        lock(&self.inner.transcript_watches).clear();
         for rec in self.book().recs.values_mut() {
             rec.watch = None;
         }
@@ -338,6 +386,7 @@ impl Service {
         for id in to_read {
             self.spawn_transcript_read(id);
         }
+        self.sync_transcript_watches();
         self.publish();
     }
 
@@ -524,6 +573,14 @@ impl Service {
             }
         }
         self.refresh().await;
+        // A change event may have been missed (or not come yet): the first paint after a summon
+        // looks at the size and the time of every live transcript, and reads the ones that moved.
+        let live = self.live_transcripts();
+        futures_util::future::join_all(
+            live.iter()
+                .map(|(id, _)| self.read_transcript_tail(id, true)),
+        )
+        .await;
         self.list()
     }
 
@@ -538,6 +595,8 @@ impl Service {
         };
         let changed = !rows.is_empty();
         self.persist(&app, rows).await;
+        // A session that ended no longer needs its folder watch.
+        self.sync_transcript_watches();
         if changed {
             self.publish();
         }
@@ -563,42 +622,166 @@ impl Service {
     fn spawn_transcript_read(&self, id: String) {
         let service = self.clone();
         let task = spawn_named("sessions-transcript", async move {
-            service.read_transcript_tail(&id).await;
+            service.read_transcript_tail(&id, false).await;
         });
         let mut tasks = lock(&self.inner.tasks);
         tasks.retain(|task| !task.is_finished());
         tasks.push(task);
     }
 
-    async fn read_transcript_tail(&self, id: &str) {
-        let Some(path) = self.transcript_path_of(id) else {
+    /// Reads the end of one transcript and publishes when something shown changed. With
+    /// `only_if_changed` the file is not read when its size and modified time are what the last
+    /// read saw: the caller asks "did it grow?" and a quiet file costs one `metadata` call.
+    async fn read_transcript_tail(&self, id: &str, only_if_changed: bool) {
+        let Some((path, known)) = self.transcript_state_of(id) else {
             return;
         };
-        let facts = blocking::run(move || {
+        let inner = Arc::clone(&self.inner);
+        let read = blocking::run(move || {
+            // The signature is taken before the read: a file that grows during the read looks
+            // changed at the next look, so no write is ever missed.
+            let meta = std::fs::metadata(&path).ok()?;
+            let sig = FileSig {
+                len: meta.len(),
+                modified: meta.modified().ok()?,
+            };
+            if only_if_changed && known == Some(sig) {
+                return None;
+            }
+            inner.transcript_reads.fetch_add(1, Ordering::Relaxed);
             let tail = transcript::read_tail(&path, TAIL_BYTES).ok()?;
             let lines =
                 transcript::parse_lines(&tail, &["user", "assistant", "custom-title", "ai-title"]);
-            Some(transcript::facts(&lines))
+            Some((sig, transcript::facts(&lines)))
         })
         .await
         .ok()
         .flatten();
-        let Some(facts) = facts else { return };
-        if let Some(rec) = self.book().recs.get_mut(id) {
-            rec.apply_tail(facts);
+        let Some((sig, facts)) = read else { return };
+        // `stop` publishes nothing: a read that was in flight when it began ends silently.
+        if self.inner.cancel.is_cancelled() {
+            return;
         }
-        self.publish();
+        let changed = self
+            .book()
+            .recs
+            .get_mut(id)
+            .is_some_and(|rec| rec.apply_tail(facts, Some(sig)));
+        if changed {
+            self.publish();
+        }
+    }
+
+    /// The path of the transcript of a live session and what was seen of the file at the last
+    /// read. `None` for an unknown or ended session.
+    fn transcript_state_of(&self, id: &str) -> Option<(PathBuf, Option<FileSig>)> {
+        let book = self.book();
+        let rec = book.recs.get(id)?;
+        if rec.ended.is_some() {
+            return None;
+        }
+        Some((self.transcript_path_for(rec), rec.transcript_sig))
     }
 
     /// The path that a hook gave, else the one that Claude Code would use.
-    fn transcript_path_of(&self, id: &str) -> Option<PathBuf> {
+    fn transcript_path_for(&self, rec: &SessionRec) -> PathBuf {
+        rec.transcript_path
+            .clone()
+            .unwrap_or_else(|| self.inner.paths.guess_transcript(&rec.cwd, &rec.id))
+    }
+
+    /// The live sessions with the path of their transcript. A session whose working folder is not
+    /// known yet and whose path no hook gave has none (the guess would be wrong).
+    fn live_transcripts(&self) -> Vec<(String, PathBuf)> {
         let book = self.book();
-        let rec = book.recs.get(id)?;
-        Some(
-            rec.transcript_path
-                .clone()
-                .unwrap_or_else(|| self.inner.paths.guess_transcript(&rec.cwd, &rec.id)),
-        )
+        book.recs
+            .values()
+            .filter(|rec| {
+                rec.ended.is_none() && (rec.transcript_path.is_some() || !rec.cwd.is_empty())
+            })
+            .map(|rec| (rec.id.clone(), self.transcript_path_for(rec)))
+            .collect()
+    }
+
+    /// Makes the set of folder watches equal to the folders of the live sessions: one watch per
+    /// folder, none for a folder that no live session uses. A folder that does not exist yet gets
+    /// its watch at the next call (a registry change, `GET /sessions`, a hook event); nothing
+    /// polls for it. A new watch starts with one look at its sessions, because the file may have
+    /// grown before the watch existed.
+    fn sync_transcript_watches(&self) {
+        let Some(app) = self.app() else { return };
+        if self.inner.cancel.is_cancelled() {
+            return;
+        }
+        let wanted: HashSet<PathBuf> = self
+            .live_transcripts()
+            .into_iter()
+            .filter_map(|(_, path)| path.parent().map(Path::to_path_buf))
+            .collect();
+        let mut watches = lock(&self.inner.transcript_watches);
+        watches.retain(|folder, token| {
+            // A folder that was deleted leaves a watch that never speaks again: drop it, so it
+            // is made anew if the folder comes back.
+            let keep = wanted.contains(folder) && folder.is_dir();
+            if !keep {
+                token.cancel();
+            }
+            keep
+        });
+        for folder in wanted {
+            if watches.contains_key(&folder) || !folder.is_dir() {
+                continue;
+            }
+            let quiet = self.inner.transcript_timing.quiet;
+            match app.hub.watch_dir(&folder, false, quiet) {
+                Ok(watch) => {
+                    let token = self.inner.cancel.child_token();
+                    watches.insert(folder.clone(), token.clone());
+                    let task = spawn_named(
+                        "sessions-transcripts",
+                        self.clone().run_transcript_folder(folder, watch, token),
+                    );
+                    let mut tasks = lock(&self.inner.tasks);
+                    tasks.retain(|task| !task.is_finished());
+                    tasks.push(task);
+                }
+                Err(e) => {
+                    debug!(error = %e, "a transcript folder cannot be watched; it is read at each list");
+                }
+            }
+        }
+    }
+
+    /// Owns the watch of one transcript folder until its token is cancelled. After a change it
+    /// reads the sessions of the folder, then waits `gap` before it looks again: Claude writes
+    /// all the time while it works, and the list does not need more than a read every few seconds.
+    async fn run_transcript_folder(
+        self,
+        folder: PathBuf,
+        watch: DirWatch,
+        token: CancellationToken,
+    ) {
+        self.read_folder(&folder).await;
+        loop {
+            tokio::select! {
+                () = token.cancelled() => break,
+                _change = watch.changed() => {}
+            }
+            self.read_folder(&folder).await;
+            tokio::select! {
+                () = token.cancelled() => break,
+                () = tokio::time::sleep(self.inner.transcript_timing.gap) => {}
+            }
+        }
+    }
+
+    /// Reads again the transcripts of the live sessions in `folder` that changed.
+    async fn read_folder(&self, folder: &Path) {
+        for (id, path) in self.live_transcripts() {
+            if path.parent() == Some(folder) {
+                self.read_transcript_tail(&id, true).await;
+            }
+        }
     }
 
     /// `GET /sessions/{id}/transcript`.
@@ -683,6 +866,8 @@ impl Service {
         if applied.read_transcript {
             self.spawn_transcript_read(session_id.to_owned());
         }
+        // A hook may tell the path of the transcript, and `SessionEnd` ends the session.
+        self.sync_transcript_watches();
     }
 
     /// The record that an event belongs to. An event for an unknown session creates it (a session
@@ -748,6 +933,7 @@ impl Service {
             let mut book = self.book();
             let rec = self.rec_for_event(&mut book, session_id, now);
             rec.last_hook_at = now;
+            rec.hooked = true;
             if !cwd.is_empty() {
                 rec.cwd.clone_from(&cwd);
             }

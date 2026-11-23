@@ -30,7 +30,7 @@ mod transcript;
 
 pub use hook_wire::{HookEnv, HookEnvelope, HookMode};
 pub use seams::{ExitSource, ForwarderProgram, ProcInfo, ProcessProbe, WindowApi};
-pub use service::{HookHold, HookReply, Service};
+pub use service::{HookHold, HookReply, Service, TranscriptTiming};
 
 use super::{ModuleEntry, ready};
 

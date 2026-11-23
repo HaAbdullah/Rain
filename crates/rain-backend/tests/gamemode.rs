@@ -117,6 +117,83 @@ fn game_mode_states(events: &[(String, Frame)]) -> Vec<GameModeState> {
         .collect()
 }
 
+/// The countdown seconds published so far, read from the bus without any I/O (so the paused
+/// clock cannot jump while a test waits for a pipe).
+fn seconds_published(
+    frames: &mut tokio::sync::broadcast::Receiver<Arc<rain_backend::core::bus::FrameBytes>>,
+) -> Vec<u32> {
+    let mut seen = Vec::new();
+    while let Ok(frame) = frames.try_recv() {
+        if frame.topic == "gameMode" {
+            let frame: Frame = serde_json::from_str(&frame.json).expect("a frame");
+            let state: GameModeState = serde_json::from_value(frame.payload).expect("a state");
+            seen.push(state.seconds_left);
+        }
+    }
+    seen
+}
+
+/// Lets every task that is ready run, without moving the clock.
+async fn settle() {
+    for _ in 0..20 {
+        tokio::task::yield_now().await;
+    }
+}
+
+/// The driver sleeps between the seconds: it does not measure in a loop (a regression test for
+/// a driver that woke itself with every input and never slept), and each second is published
+/// when it passes. The test calls the service directly and pauses the clock, so no pipe waits on
+/// real time; this needs a single-threaded runtime.
+#[tokio::test]
+async fn the_driver_sleeps_and_publishes_one_frame_each_second() {
+    let fake = fake();
+    let b = backend(&fake, fast()).await;
+    let mut frames = b.state.bus.subscribe();
+    tokio::time::pause();
+    let service = b.state.gamemode();
+    let started = service.start(Default::default()).await.expect("start");
+    assert_eq!(started.seconds_left, 5);
+    settle().await;
+    let after_start = fake.measures.load(Ordering::SeqCst);
+    assert_eq!(seconds_published(&mut frames), [5], "the start frame");
+
+    // Half a second in: nothing is due, so nothing is published.
+    tokio::time::advance(Duration::from_millis(500)).await;
+    settle().await;
+    assert!(seconds_published(&mut frames).is_empty());
+
+    // Each second that passes gives exactly one frame, when it passes, and none between. The
+    // timer wheel of tokio rounds a deadline up to the next millisecond, hence the small slack.
+    let slack = Duration::from_millis(5);
+    let mut passed = Duration::from_millis(500);
+    for expected in [4u32, 3, 2] {
+        let reached = Duration::from_secs(u64::from(5 - expected)) + slack;
+        tokio::time::advance(reached - passed).await;
+        settle().await;
+        assert_eq!(seconds_published(&mut frames), [expected]);
+        tokio::time::advance(Duration::from_millis(900)).await;
+        settle().await;
+        assert!(
+            seconds_published(&mut frames).is_empty(),
+            "no frame before the next second"
+        );
+        passed = reached + Duration::from_millis(900);
+    }
+
+    // One measure for each wake of the driver (a few), never a loop.
+    let measured = fake.measures.load(Ordering::SeqCst) - after_start;
+    assert!(
+        measured <= 10,
+        "the driver measured {measured} times in 3.5 s of countdown"
+    );
+    service
+        .choose(rain_types::GameModeChoice::Cancel)
+        .expect("cancel");
+    // The pipe and the stop need real time.
+    tokio::time::resume();
+    b.stop().await;
+}
+
 // ---- start ----
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
