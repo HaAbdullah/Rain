@@ -1,15 +1,17 @@
 // The one service interface the UI talks to. Every method returns a Promise and
-// maps to one REST call, so the mock can be swapped for a real backend later.
+// maps to one REST call. The routes are in docs/backend/00-foundation.md section 14.4;
+// the comments below are the prototype's and are replaced stage by stage.
 // Rejections are always a RainError.
 
 import type {
-  AppEntry, CalendarEvent, ClaudeSession, CustomGameDraft, DiskScan, Drive, Game, GameLibrary,
-  GameModeChoice, GameModeState, Habit, HabitDay, ID, IdleJob, ISODate, JobRun, LaunchRun,
-  LaunchTarget, LogLine, MachineState, PermissionAnswer, PinnableType, Pool, PoolDraft, Project,
-  ScheduledJob, SearchItem, SearchType, Settings, VaultStatus,
+  ApiError, AppEntry, CalendarEvent, ClaudeSession, CustomGameDraft, DiskScan, Drive, Game,
+  GameLibrary, GameModeChoice, GameModeState, Habit, HabitDay, Health, ID, IdleJob, ISODate, JobRun,
+  LaunchRun, LaunchTarget, LogLine, MachineState, PermissionAnswer, PinnableType, Pool, PoolDraft,
+  Project, ScheduledJob, SearchItem, SearchType, Settings, SettingsPatch, VaultStatus,
 } from './types'
 
-export interface RainError { code: 'unavailable' | 'notFound' | 'failed'; message: string; source?: string }
+/** What every rejected call carries: the backend's error body (or one the bridge made in its shape). */
+export type RainError = ApiError
 
 export interface TopicPayload {
   sessions: ClaudeSession[]
@@ -18,6 +20,8 @@ export interface TopicPayload {
   launch: LaunchRun
   scan: DiskScan
   gameMode: GameModeState
+  settings: Settings
+  health: Health
 }
 export type Topic = keyof TopicPayload
 
@@ -70,7 +74,7 @@ export interface RainApi {
   getVaultStatus(): Promise<VaultStatus>                                       // GET  /vault
   listHabits(): Promise<Habit[]>                                               // GET  /habits
   listHabitDays(from: ISODate, to: ISODate): Promise<HabitDay[]>               // GET  /habit-days?from=&to=
-  listEvents(from: ISODate, to: ISODate): Promise<CalendarEvent[]>             // GET  /events?from=&to=
+  listEvents(from: ISODate, to: ISODate): Promise<CalendarEvent[]>             // GET  /calendar/events?from=&to=
   openDailyNote(date: ISODate): Promise<{ opened: boolean }>                   // POST /daily-notes/:date/open
 
   // disk
@@ -87,8 +91,9 @@ export interface RainApi {
 
   // settings
   getSettings(): Promise<Settings>                                             // GET  /settings
-  updateSettings(patch: Partial<Settings>): Promise<Settings>                  // PATCH /settings
+  updateSettings(patch: SettingsPatch): Promise<Settings>                        // PATCH /settings
+  getHealth(): Promise<Health>                                                  // GET  /health (config issues, source states)
 
-  // live updates (later: one WebSocket or SSE stream)
+  // live updates (one server-sent stream, GET /stream)
   subscribe<T extends Topic>(topic: T, cb: (payload: TopicPayload[T]) => void): () => void
 }

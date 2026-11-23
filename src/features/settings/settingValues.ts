@@ -3,29 +3,56 @@
 // case, so the types stay exact without casts.
 import type { SettingDef } from '@/actions/types'
 import { mockControl } from '@/data/mock/control'
-import type { Settings } from '@/data/types'
+import type { Settings, SettingsPatch } from '@/data/types'
 import { APP_VERSION } from './settingDefs'
 
 export type SettingValue = string | boolean
+
+/** The switches that Settings stores and the user may change. */
+export type BooleanSettingKey = 'hideOnBlur' | 'startWithWindows' | 'steamEnabled' | 'epicEnabled' | 'monitorClaude'
+
+export function isBooleanKey(key: keyof Settings | undefined): key is BooleanSettingKey {
+  return (
+    key === 'hideOnBlur' ||
+    key === 'startWithWindows' ||
+    key === 'steamEnabled' ||
+    key === 'epicEnabled' ||
+    key === 'monitorClaude'
+  )
+}
+
+/** A field that holds several folders is one text field with the folders separated by semicolons. */
+export const splitPaths = (text: string): string[] =>
+  text
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+export const joinPaths = (paths: string[]): string => paths.join('; ')
 
 /** What the row's control shows. Prototype rows have no Settings field and read the mock. */
 export function readValue(def: SettingDef, settings: Settings): SettingValue {
   switch (def.key) {
     case 'hotkey':
+    case 'dataDir':
     case 'vaultPath':
     case 'dailyNoteFormat':
+    case 'dailyNoteFolder':
       return settings[def.key]
     case 'hideOnBlur':
     case 'startWithWindows':
     case 'steamEnabled':
     case 'epicEnabled':
-    case 'calendarConnected':
+    case 'monitorClaude':
       return settings[def.key]
+    case 'calendarConnected':
+      // Read-only fact, shown as text on an info row.
+      return settings.calendarConnected ? 'Connected' : 'Not connected'
     case 'resetAfterSeconds':
     case 'gameModeCountdownSeconds':
       return String(settings[def.key])
     case 'projectRoots':
-      return settings.projectRoots.join('; ')
+    case 'gameFolders':
+      return joinPaths(settings[def.key])
     default:
       if (def.id === 'mock-scenario') return mockControl.options.scenario
       if (def.id === 'mock-latency') return mockControl.options.latency
@@ -41,43 +68,46 @@ export function readLibraryPath(def: SettingDef, settings: Settings): string | u
 }
 
 /** The path field next to a Steam or Epic switch. */
-export function libraryPathPatch(def: SettingDef, path: string): Partial<Settings> | null {
+export function libraryPathPatch(def: SettingDef, path: string): SettingsPatch | null {
   if (def.id === 'steam') return { steamPath: path }
   if (def.id === 'epic') return { epicPath: path }
   return null
 }
 
-/** The patch for a changed row, or null when the row or the value is not one that Settings stores. */
-export function patchFor(def: SettingDef, value: SettingValue): Partial<Settings> | null {
-  if (typeof value === 'boolean') {
-    switch (def.key) {
-      case 'hideOnBlur':
-        return { hideOnBlur: value }
-      case 'startWithWindows':
-        return { startWithWindows: value }
-      case 'steamEnabled':
-        return { steamEnabled: value }
-      case 'epicEnabled':
-        return { epicEnabled: value }
-      case 'calendarConnected':
-        return { calendarConnected: value }
-      default:
-        return null
-    }
+/** The patch that sets one switch. A key per case, so the patch type stays exact without casts. */
+export function togglePatch(key: BooleanSettingKey, value: boolean): SettingsPatch {
+  switch (key) {
+    case 'hideOnBlur':
+      return { hideOnBlur: value }
+    case 'startWithWindows':
+      return { startWithWindows: value }
+    case 'steamEnabled':
+      return { steamEnabled: value }
+    case 'epicEnabled':
+      return { epicEnabled: value }
+    case 'monitorClaude':
+      return { monitorClaude: value }
   }
+}
+
+/** The patch for a changed row, or null when the row or the value is not one that Settings stores. */
+export function patchFor(def: SettingDef, value: SettingValue): SettingsPatch | null {
+  if (typeof value === 'boolean') return isBooleanKey(def.key) ? togglePatch(def.key, value) : null
 
   switch (def.key) {
+    // An empty text clears the override: the backend then follows Obsidian again (or, for the data folder, uses its default).
+    case 'dataDir':
+      return { dataDir: value.trim() }
     case 'vaultPath':
       return { vaultPath: value.trim() }
     case 'dailyNoteFormat':
       return { dailyNoteFormat: value.trim() }
+    case 'dailyNoteFolder':
+      return { dailyNoteFolder: value.trim() }
     case 'projectRoots':
-      return {
-        projectRoots: value
-          .split(';')
-          .map((root) => root.trim())
-          .filter((root) => root !== ''),
-      }
+      return { projectRoots: splitPaths(value) }
+    case 'gameFolders':
+      return { gameFolders: splitPaths(value) }
     case 'resetAfterSeconds':
       if (value === '30') return { resetAfterSeconds: 30 }
       if (value === '60') return { resetAfterSeconds: 60 }
@@ -90,10 +120,4 @@ export function patchFor(def: SettingDef, value: SettingValue): Partial<Settings
     default:
       return null
   }
-}
-
-/** The label of a Button row. */
-export function buttonLabel(def: SettingDef, value: SettingValue): string {
-  if (def.key === 'calendarConnected') return value === true ? 'Disconnect' : 'Connect'
-  return 'Reset'
 }

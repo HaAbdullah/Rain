@@ -1,0 +1,7 @@
+[env]
+# ts-rs writes `u64` and `i64` as `bigint` unless told otherwise. JSON numbers are plain
+# JavaScript numbers, and every value in the API stays below 2^53 - 1, so `number` is right.
+TS_RS_LARGE_INT = "number"
+# Where `cargo test -p rain-types write_single_file` writes the TypeScript file.
+# `relative = true` resolves the path against the folder that holds `.cargo`.
+RAIN_TYPES_OUT = { value = "src/bindings/rain-types.ts", relative = true }

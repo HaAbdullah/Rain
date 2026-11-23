@@ -2,6 +2,7 @@
 // "Hidden" is only a flag; AppShell renders HiddenPlaceholder while it is set,
 // so the summon rules can be tried without Tauri (spec 2.7).
 import { readonly, ref } from 'vue'
+import { createBrowserBridge } from './browser-bridge'
 import { createSignal, type Shell } from './shell'
 
 export function createBrowserShell(): Shell {
@@ -17,6 +18,7 @@ export function createBrowserShell(): Shell {
 
   return {
     kind: 'browser',
+    bridge: createBrowserBridge(),
     hidden: readonly(hidden),
     keepOpen,
 

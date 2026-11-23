@@ -16,7 +16,7 @@ import {
 } from 'vue'
 import { api } from '@/data'
 import type { RainError, Topic, TopicPayload } from '@/data/api'
-import { errorMessage } from '@/lib/errors'
+import { toRainError } from '@/data/rest/errors'
 
 export interface Resource<T> {
   data: Ref<T | undefined>
@@ -44,13 +44,6 @@ const fetchesRunning = ref(0)
 
 /** True while any resource is fetching (the 1 px loader line under the header). */
 export const anyResourceLoading = computed(() => fetchesRunning.value > 0)
-
-function toRainError(reason: unknown): RainError {
-  if (typeof reason === 'object' && reason !== null && 'code' in reason && 'message' in reason) {
-    return reason as RainError
-  }
-  return { code: 'failed', message: errorMessage(reason, String(reason)) }
-}
 
 /** Stores a fetched or pushed value as the newest truth for the entry. */
 function accept<T>(entry: Entry<T>, value: T) {

@@ -1,5 +1,6 @@
-// TauriShell: the real window. This is the only file that imports @tauri-apps/api,
-// and it is loaded with a dynamic import so a plain browser never evaluates it.
+// TauriShell: the real window. Together with tauri-bridge.ts this is the only code that
+// imports @tauri-apps/api, and it is loaded with a dynamic import so a plain browser
+// never evaluates it.
 //
 // Split of work with src-tauri/src/lib.rs: Rust owns the global hotkey and tells
 // us what it did through two events. Hide on blur lives here, because only the
@@ -8,6 +9,7 @@ import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { readonly, ref } from 'vue'
 import { createSignal, type Shell } from './shell'
+import { createTauriBridge } from './tauri-bridge'
 
 /** Sent by Rust after it showed and focused the window (hotkey or second launch). */
 const EVENT_SUMMONED = 'rain:summoned'
@@ -57,6 +59,7 @@ export async function createTauriShell(): Promise<Shell> {
 
   return {
     kind: 'tauri',
+    bridge: createTauriBridge(),
     hidden: readonly(hidden),
     keepOpen,
 

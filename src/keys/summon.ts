@@ -14,7 +14,7 @@ import { shell } from '@/shell'
 export function useSummon(): void {
   const search = useSearch()
   const nav = useNav()
-  const settings = useResource('settings', () => api.getSettings())
+  const settings = useResource('settings', () => api.getSettings(), { live: 'settings' })
   let resetTimer: number | undefined
 
   /** After a long hide Rain starts over: Home, first row, nothing remembered. */

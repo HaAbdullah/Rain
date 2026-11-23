@@ -149,6 +149,9 @@ const listeners: { [T in Topic]: Set<Listener<T>> } = {
   launch: new Set(),
   scan: new Set(),
   gameMode: new Set(),
+  // The mock never publishes these two; the router sends them to the backend.
+  settings: new Set(),
+  health: new Set(),
 }
 
 export function subscribe<T extends Topic>(topic: T, cb: Listener<T>): () => void {

@@ -17,12 +17,14 @@ import { useSectionQuery } from '@/composables/useSearch'
 import { useSelection, type SelGroup } from '@/composables/useSelection'
 import { api } from '@/data'
 import { mockControl } from '@/data/mock/control'
-import type { Settings } from '@/data/types'
+import type { Settings, SettingsPatch } from '@/data/types'
 import { errorMessage } from '@/lib/errors'
 import { keepFocus } from '@/lib/focus'
 import { useRevealSelected } from '@/lib/reveal'
 import { matches } from '@/lib/score'
+import StatusDot from '@/components/rain/StatusDot.vue'
 import SettingRow from './SettingRow.vue'
+import { configIssueText, monitorClaudeRowState, type RowState } from './rowState'
 import { settingDefs } from './settingDefs'
 import {
   libraryPathPatch,
@@ -36,8 +38,13 @@ const SKELETON_GROUPS = [4, 6, 1] as const
 
 const notice = useNotice()
 const query = useSectionQuery('settings')
-const resource = useResource('settings', () => api.getSettings())
+const resource = useResource('settings', () => api.getSettings(), { live: 'settings' })
 const settings = computed(() => resource.data.value)
+
+// Config files the backend could not read (it keeps the last good values). A failed health
+// call adds nothing: Settings itself already shows its own error row.
+const health = useResource('health', () => api.getHealth(), { live: 'health' })
+const configIssues = computed(() => health.data.value?.configIssues ?? [])
 
 // ---- rows, grouped, filtered by label ----
 
@@ -69,11 +76,16 @@ useRevealSelected(
 
 // ---- changes ----
 
-async function save(patch: Partial<Settings> | null, label: string) {
+async function save(patch: SettingsPatch | null, label: string) {
   if (!patch) return
   try {
     await api.updateSettings(patch)
     refreshResources('settings')
+    // Life must never show the data of the old vault.
+    if ('vaultPath' in patch || 'dailyNoteFolder' in patch || 'dailyNoteFormat' in patch) {
+      refreshResources('vault', 'habits', 'habitDays')
+    }
+    if ('dataDir' in patch) notice.info('Data folder changed. Rain is restarting its service.')
   } catch (reason) {
     notice.error(errorMessage(reason, `${label} was not saved`))
   }
@@ -92,9 +104,13 @@ function change(def: SettingDef, value: SettingValue) {
   }
 }
 
-function press(def: SettingDef, current: Settings) {
+function press(def: SettingDef) {
   if (def.id === 'mock-reset') mockControl.reset()
-  else void save({ calendarConnected: !current.calendarConnected }, def.label)
+}
+
+/** What the backend says about a row's setting, if it says anything. */
+function stateOf(def: SettingDef, current: Settings): RowState | undefined {
+  return def.key === 'monitorClaude' ? monitorClaudeRowState(current.monitorClaudeState) : undefined
 }
 
 /** Why a row's setting is not working, if it is not. */
@@ -121,6 +137,15 @@ function problemOf(def: SettingDef, current: Settings): string | undefined {
         <EmptyState v-else-if="groups.length === 0" icon="settings" title="No setting matches" />
 
         <template v-else>
+          <p
+            v-for="issue in configIssues"
+            :key="`${issue.file}:${issue.line ?? ''}`"
+            class="mb-3 flex items-center gap-2 px-2 text-13 text-muted-foreground"
+            :title="issue.message"
+          >
+            <StatusDot status="failed" :label="issue.message" />
+            <span class="min-w-0 truncate">{{ configIssueText(issue) }}. Rain keeps the last good values.</span>
+          </p>
           <div v-for="(entry, g) in groups" :key="entry.id" data-group>
             <Separator v-if="g > 0" class="my-3" />
             <SectionHeader :title="entry.title ?? entry.id" data-group-header />
@@ -137,9 +162,10 @@ function problemOf(def: SettingDef, current: Settings): string | undefined {
                 :value="readValue(def, settings)"
                 :path="readLibraryPath(def, settings)"
                 :problem="problemOf(def, settings)"
+                :row-state="stateOf(def, settings)"
                 @change="change(def, $event)"
                 @change-path="save(libraryPathPatch(def, $event), def.label)"
-                @press="press(def, settings)"
+                @press="press(def)"
               />
             </div>
           </div>

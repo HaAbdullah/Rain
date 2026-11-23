@@ -1,0 +1,11 @@
+# Rain settings (made-up values for the tests).
+schema_version = 1
+
+# a comment above a key
+hide_on_blur = false          # a trailing comment that must survive
+reset_after_seconds = 300
+project_roots = ['D:\Projects', 'D:\Work']
+steam_enabled = false
+game_mode_countdown_seconds = 20
+# a key from a later stage; Rain must leave it alone
+monitor_claude = true

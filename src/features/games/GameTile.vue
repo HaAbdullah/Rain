@@ -3,13 +3,17 @@
 import { DownloadIcon } from '@lucide/vue'
 import Tile from '@/components/rain/Tile.vue'
 import RIcon from '@/components/rain/RIcon.vue'
+import { useImageFallback } from '@/composables/useImageFallback'
 import type { Game } from '@/data/types'
 import { SOURCE_ICON } from './gameSource'
 
-defineProps<{
+const props = defineProps<{
   game: Game
   selected: boolean
 }>()
+
+// A cover that cannot be loaded shows the title tile, like a game that has no cover.
+const cover = useImageFallback(() => props.game.coverUrl)
 </script>
 
 <template>
@@ -18,7 +22,7 @@ defineProps<{
       <Tile :selected="selected" :ring="game.running ? 'success' : 'none'">
         <div class="relative h-full overflow-hidden rounded-lg">
           <img
-            v-if="game.coverUrl"
+            v-if="game.coverUrl && !cover.failed.value"
             :src="game.coverUrl"
             alt=""
             loading="lazy"
@@ -26,6 +30,7 @@ defineProps<{
             draggable="false"
             class="size-full object-cover transition-opacity"
             :class="{ 'opacity-45': !game.installed }"
+            @error="cover.onError"
           >
           <div v-else class="flex size-full items-center justify-center bg-surface-2 p-3">
             <span class="line-clamp-4 text-center text-sm font-medium text-foreground">{{ game.title }}</span>

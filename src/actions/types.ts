@@ -46,6 +46,8 @@ export interface SettingDef {
   hint?: string
   kind: 'switch' | 'select' | 'path' | 'text' | 'button' | 'info'
   key?: keyof Settings
+  /** Shown in an empty field: an empty field is "not set" or "not found", not a mistake. */
+  placeholder?: string
 }
 
 export type ActionTarget =

@@ -1,14 +1,17 @@
-// Every entity the UI reads. These shapes are the contract with the future
-// REST backend, so the mock layer and the screens share exactly this file.
+// Every entity the UI reads. These shapes are the contract with the backend.
+// The types the backend already owns are generated from Rust (src/bindings/rain-types.ts)
+// and re-exported here, so screens keep importing from this one file. The types that are
+// not ported yet stay hand-written below; a stage deletes its types from here when it
+// ports them (scripts/check.mjs fails on a name that is in both places).
 
+import type { IconRef, Status } from '../bindings/rain-types'
+
+export * from '../bindings/rain-types'
+
+// Hand-written aliases: the generator turns these into plain `string`.
 export type ID = string
 export type ISODate = string        // '2026-11-21'
 export type ISODateTime = string    // '2026-11-21T09:30:00.000Z'
-export type Status = 'idle' | 'running' | 'waiting' | 'success' | 'failed'
-
-// kind 'lucide': kebab-case Lucide name; 'brand': simple-icons slug;
-// 'letter': the display name (the tile shows its initial); 'url': image URL or data URI.
-export interface IconRef { kind: 'lucide' | 'brand' | 'url' | 'letter'; value: string; tint?: string }
 
 // ---- search ----
 export type SearchType = 'app' | 'pool' | 'project' | 'game' | 'session' | 'job' | 'idleJob'
@@ -85,9 +88,3 @@ export interface WindDownItem { id: ID; label: string; icon: IconRef; kind: 'ses
   count: number; effect: 'safe' | 'interrupts'; status: 'pending' | 'stopping' | 'stopped' }
 export interface GameModeState { phase: 'off' | 'review' | 'countdown' | 'windingDown' | 'done';
   waiting: boolean; secondsLeft: number; countdownSeconds: number; items: WindDownItem[]; thenLaunchGameId?: ID }
-
-// ---- settings ----
-export interface Settings { hotkey: string; hotkeyAvailable: boolean; hideOnBlur: boolean; resetAfterSeconds: 30 | 60 | 300;
-  startWithWindows: boolean; vaultPath: string; dailyNoteFormat: string; projectRoots: string[];
-  steamEnabled: boolean; steamPath: string; epicEnabled: boolean; epicPath: string;
-  calendarConnected: boolean; gameModeCountdownSeconds: 5 | 10 | 20 | 30 }

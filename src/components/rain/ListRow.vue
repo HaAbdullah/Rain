@@ -37,7 +37,7 @@ const rowSize = computed(() => props.size ?? listSize?.value ?? 'md')
       { 'opacity-60': dimmed },
     ]"
   >
-    <RIcon v-if="icon" :icon="icon" :size="20" />
+    <RIcon v-if="icon" :icon="icon" :size="20" :label="title" />
 
     <div
       class="min-w-0 flex-1"

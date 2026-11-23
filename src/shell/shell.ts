@@ -1,10 +1,14 @@
 // The Shell is the app's only door to its window: show, hide, full screen and
 // "why may the window not hide right now". There are two implementations,
 // TauriShell (the real window) and BrowserShell (a simulated hide for `npm run dev`).
+// It also carries the Bridge, because which window we are in decides how the backend is reached.
 import type { Ref } from 'vue'
+import type { Bridge } from './bridge'
 
 export interface Shell {
   readonly kind: 'tauri' | 'browser'
+  /** How the data layer reaches the backend from this kind of window. */
+  readonly bridge: Bridge
   readonly hidden: Readonly<Ref<boolean>>
   /** F10: while true the window stays open on blur and after a launch. */
   readonly keepOpen: Ref<boolean>

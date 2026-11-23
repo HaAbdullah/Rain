@@ -3,6 +3,7 @@
 // for everything that has no icon of its own.
 import type { IconRef } from '@/data/types'
 import { computed } from 'vue'
+import { useImageFallback } from '@/composables/useImageFallback'
 import { brandIcon } from '@/lib/brand-icons'
 import { lucideIcon } from '@/lib/icon-map'
 
@@ -11,6 +12,8 @@ const props = withDefaults(
     icon: IconRef
     /** Edge length in px. */
     size?: number
+    /** The name behind the icon. A picture that fails to load becomes a letter tile of its first letter. */
+    label?: string
   }>(),
   { size: 20 },
 )
@@ -26,8 +29,16 @@ function tintFor(name: string): string {
 
 const brand = computed(() => (props.icon.kind === 'brand' ? brandIcon(props.icon.value) : undefined))
 
-// A brand slug that Rain does not ship falls back to a letter tile, like any other unknown icon.
-const kind = computed(() => (props.icon.kind === 'brand' && !brand.value ? 'letter' : props.icon.kind))
+const picture = useImageFallback(() => (props.icon.kind === 'url' ? props.icon.value : undefined))
+
+// A brand slug that Rain does not ship, and a picture that did not load, fall back to a letter tile.
+const kind = computed(() => {
+  if (props.icon.kind === 'brand' && !brand.value) return 'letter'
+  return props.icon.kind === 'url' && picture.failed.value ? 'letter' : props.icon.kind
+})
+
+/** The text the tile is made from. An address says nothing about the thing, so a picture uses its label. */
+const tileName = computed(() => (props.icon.kind === 'url' ? (props.label ?? '') : props.icon.value))
 
 const box = computed(() => ({ width: `${props.size}px`, height: `${props.size}px` }))
 
@@ -35,7 +46,7 @@ const letterStyle = computed(() => ({
   ...box.value,
   // 12 px is the smallest text size in the app.
   fontSize: `${Math.max(12, Math.round(props.size * 0.5))}px`,
-  backgroundColor: `color-mix(in srgb, ${props.icon.tint ?? tintFor(props.icon.value)} 40%, var(--surface-0))`,
+  backgroundColor: `color-mix(in srgb, ${props.icon.tint ?? tintFor(tileName.value || props.icon.value)} 40%, var(--surface-0))`,
 }))
 </script>
 
@@ -72,6 +83,7 @@ const letterStyle = computed(() => ({
     draggable="false"
     class="shrink-0 rounded-sm object-cover"
     :style="box"
+    @error="picture.onError"
   >
 
   <span
@@ -81,6 +93,6 @@ const letterStyle = computed(() => ({
     :style="letterStyle"
     aria-hidden="true"
   >
-    {{ icon.value.trim().charAt(0) }}
+    {{ tileName.trim().charAt(0) || '?' }}
   </span>
 </template>

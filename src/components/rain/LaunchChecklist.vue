@@ -10,7 +10,7 @@ defineProps<{ steps: LaunchStep[] }>()
 <template>
   <ul class="flex flex-col">
     <li v-for="(step, i) in steps" :key="i" class="flex h-8 items-center gap-3">
-      <RIcon :icon="step.icon" :size="16" />
+      <RIcon :icon="step.icon" :size="16" :label="step.label" />
       <span class="min-w-0 truncate text-sm text-foreground" :class="{ 'flex-1': !step.error }">{{ step.label }}</span>
       <span
         v-if="step.error"

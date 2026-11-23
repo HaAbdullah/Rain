@@ -4,11 +4,25 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "dev:ui": "vite --mode mock",
+    "dev:fixture": "node scripts/dev.mjs --fixture typical",
+    "backend:start": "node scripts/backend.mjs start",
+    "backend:stop": "node scripts/backend.mjs stop",
+    "backend:restart": "node scripts/backend.mjs restart",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc -b",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "types": "node scripts/types.mjs",
+    "types:check": "node scripts/types.mjs --check",
+    "types:barrel": "node scripts/barrel.mjs",
+    "test": "vitest run",
+    "test:rust": "cargo test --workspace",
+    "check": "node scripts/check.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "idle": "node scripts/idle.mjs",
+    "types:identity": "tsc -p crates/rain-types/tscheck"
   },
   "dependencies": {
     "@lucide/vue": "^1.77.0",
@@ -33,6 +47,7 @@
     "tailwindcss": "^4.3.5",
     "typescript": "~6.0.3",
     "vite": "^8.3.8",
+    "vitest": "^5.1.1",
     "vue-tsc": "^3.3.14"
   }
 }

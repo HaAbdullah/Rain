@@ -12,14 +12,19 @@ const TYPICAL: Settings = {
   hideOnBlur: true,
   resetAfterSeconds: 60,
   startWithWindows: false,
+  dataDir: 'C:\\Rain\\data',
   vaultPath: VAULT_PATH,
   dailyNoteFormat: 'YYYY-MM-DD',
+  dailyNoteFolder: 'Daily',
   projectRoots: ['C:\\Dev'],
+  gameFolders: ['C:\\Games'],
   steamEnabled: true,
   steamPath: 'C:\\Program Files (x86)\\Steam',
   epicEnabled: true,
   epicPath: 'C:\\Program Files\\Epic Games',
   calendarConnected: true,
+  monitorClaude: false,
+  monitorClaudeState: 'off',
   gameModeCountdownSeconds: DEFAULT_COUNTDOWN_SECONDS,
 }
 
@@ -32,10 +37,15 @@ export const MISSING_PATHS: ReadonlySet<string> = new Set([TYPICAL.epicPath])
 const OVERRIDES: Record<Scenario, Partial<Settings>> = {
   typical: {},
   busy: {},
-  empty: { vaultPath: '', projectRoots: [], calendarConnected: false },
+  empty: { vaultPath: '', projectRoots: [], gameFolders: [], calendarConnected: false },
   failing: { hotkeyAvailable: false },
 }
 
 export function seed(scenario: Scenario): Settings {
-  return { ...TYPICAL, projectRoots: [...TYPICAL.projectRoots], ...OVERRIDES[scenario] }
+  return {
+    ...TYPICAL,
+    projectRoots: [...TYPICAL.projectRoots],
+    gameFolders: [...TYPICAL.gameFolders],
+    ...OVERRIDES[scenario],
+  }
 }

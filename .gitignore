@@ -25,3 +25,6 @@ Thumbs.db
 # Draw.io backups
 *.bkp
 *.dtmp
+
+# Throwaway dev sandbox (scripts/backend.mjs --fixture)
+.rain-*

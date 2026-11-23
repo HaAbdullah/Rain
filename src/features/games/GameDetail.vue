@@ -7,6 +7,7 @@ import KeyHint from '@/components/rain/KeyHint.vue'
 import RelTime from '@/components/rain/RelTime.vue'
 import RIcon from '@/components/rain/RIcon.vue'
 import { Button } from '@/components/ui/button'
+import { useImageFallback } from '@/composables/useImageFallback'
 import { useScreenState } from '@/composables/useScreen'
 import type { Game } from '@/data/types'
 import { formatBytes, formatMinutes } from '@/lib/format'
@@ -14,6 +15,9 @@ import { keepFocus } from '@/lib/focus'
 import { SOURCE_ICON, SOURCE_LABEL } from './gameSource'
 
 const props = defineProps<{ game: Game }>()
+
+// A cover that cannot be loaded shows the title, like a game that has no cover.
+const cover = useImageFallback(() => props.game.coverUrl)
 
 // The same actions Enter and Ctrl+Enter run, so the buttons and the keys cannot disagree.
 const { primary, secondary } = useScreenState()
@@ -29,12 +33,13 @@ const state = computed(() => {
     <div class="flex flex-col gap-4">
       <div class="aspect-[2/3] w-[200px] overflow-hidden rounded-lg border border-border bg-surface-2">
         <img
-          v-if="game.coverUrl"
+          v-if="game.coverUrl && !cover.failed.value"
           :src="game.coverUrl"
           alt=""
           decoding="async"
           draggable="false"
           class="size-full object-cover"
+          @error="cover.onError"
         >
         <div v-else class="flex size-full items-center justify-center p-4">
           <span class="text-center text-sm font-medium text-foreground">{{ game.title }}</span>

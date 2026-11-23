@@ -1,0 +1,21 @@
+[package]
+name = "rain-pipe"
+description = "Client of the Rain backend: HTTP over a Windows named pipe, and the reader of the live stream"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rain-types = { path = "../rain-types" }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+http-body-util = { workspace = true }
+tower = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

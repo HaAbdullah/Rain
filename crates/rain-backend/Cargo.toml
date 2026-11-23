@@ -1,0 +1,53 @@
+[package]
+name = "rain-backend"
+description = "The always-on Rain backend: every feature, behind an HTTP API on a Windows named pipe"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "rain_backend"
+
+[[bin]]
+name = "rain-backend"
+path = "src/main.rs"
+
+[dependencies]
+rain-types = { path = "../rain-types" }
+# `rain-backend --stop` talks to a running backend, so this is a normal dependency (the foundation
+# table lists it as a dev-dependency, but the program itself needs it).
+rain-pipe = { path = "../rain-pipe" }
+tokio = { workspace = true, features = ["process"] }   # child processes (platform/process.rs)
+axum = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tokio-stream = { workspace = true }
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+windows-sys = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+rusqlite = { workspace = true }
+notify = { workspace = true }
+notify-debouncer-full = { workspace = true }
+windows = { workspace = true }
+winreg = { workspace = true }
+png = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# `start_paused` and `time::pause`: tests control the clock of tokio (foundation 11.4).
+tokio = { workspace = true, features = ["test-util"] }

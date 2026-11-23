@@ -257,7 +257,7 @@ const remaining = computed(() => {
           class="flex items-center justify-center gap-2 text-13 text-muted-foreground"
         >
           Then launch
-          <RIcon :icon="nextGameIcon" :size="24" />
+          <RIcon :icon="nextGameIcon" :size="24" :label="nextGame.title" />
           <span class="min-w-0 truncate text-foreground">{{ nextGame.title }}</span>
         </p>
 

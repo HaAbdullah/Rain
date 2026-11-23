@@ -16,8 +16,9 @@ import { useSearch } from '@/composables/useSearch'
 import { mockControl } from '@/data/mock/control'
 import { keepFocus } from '@/lib/focus'
 import { settingActivation } from './actions'
-import { buttonLabel, type SettingValue } from './settingValues'
+import { splitPaths, type SettingValue } from './settingValues'
 import { selectChoices } from './settingDefs'
+import type { RowState } from './rowState'
 
 const props = defineProps<{
   def: SettingDef
@@ -27,6 +28,8 @@ const props = defineProps<{
   path?: string
   /** Set when the row's setting is not working; shown as a failed glyph with this text. */
   problem?: string
+  /** What the backend says about this row's setting. Its text replaces the hint and its glyph sits before the control. */
+  rowState?: RowState
 }>()
 
 const emit = defineEmits<{
@@ -46,7 +49,7 @@ useOverlay(selectOpen)
 /** The text of the row's field: its own value for a path or text row, else the companion path. */
 const fieldValue = computed(() => (props.def.kind === 'switch' ? (props.path ?? '') : String(props.value)))
 const hasField = computed(() => props.def.kind === 'path' || props.def.kind === 'text' || props.path !== undefined)
-const hasPathGlyph = computed(() => props.def.kind === 'path' || props.path !== undefined)
+const isPathField = computed(() => props.def.kind === 'path' || props.path !== undefined)
 
 const draft = ref(fieldValue.value)
 // The text last sent. fieldValue only catches up after the save, so it cannot tell that
@@ -57,11 +60,11 @@ watch(fieldValue, (text) => {
   sent = text
 })
 
-/** Every folder of the field exists on the sample machine. An empty field never does. */
-const pathFound = computed(() => {
-  const paths = draft.value.split(';').map((part) => part.trim()).filter((part) => part !== '')
-  return paths.length > 0 && paths.every(mockControl.pathExists)
-})
+/** An empty field is "not set", not a mistake, so it has no glyph and shows its placeholder. */
+const hasPathGlyph = computed(() => isPathField.value && draft.value.trim() !== '')
+
+/** Every folder of the field exists on the sample machine. */
+const pathFound = computed(() => splitPaths(draft.value).every(mockControl.pathExists))
 
 function commitField() {
   if (draft.value === sent) return
@@ -95,7 +98,8 @@ watch(settingActivation, (activation) => {
   >
     <div class="min-w-0 flex-1">
       <p class="truncate text-sm text-foreground">{{ def.label }}</p>
-      <p v-if="def.hint" class="truncate text-xs text-muted-foreground">{{ def.hint }}</p>
+      <p v-if="rowState" class="truncate text-xs text-muted-foreground">{{ rowState.text }}</p>
+      <p v-else-if="def.hint" class="truncate text-xs text-muted-foreground">{{ def.hint }}</p>
     </div>
 
     <div class="flex shrink-0 items-center gap-2" @mousedown="keepFocus">
@@ -103,6 +107,7 @@ watch(settingActivation, (activation) => {
         <Input
           :model-value="draft"
           :aria-label="def.label"
+          :placeholder="def.placeholder"
           :class="def.kind === 'text' ? 'w-40' : 'w-72'"
           :spellcheck="false"
           class="font-mono text-xs md:text-xs"
@@ -117,6 +122,8 @@ watch(settingActivation, (activation) => {
           />
         </span>
       </template>
+
+      <StatusDot v-if="rowState" :status="rowState.status" :label="rowState.text" />
 
       <Switch
         v-if="def.kind === 'switch'"
@@ -143,7 +150,7 @@ watch(settingActivation, (activation) => {
       </Select>
 
       <Button v-else-if="def.kind === 'button'" variant="outline" tabindex="-1" @click="emit('press')">
-        {{ buttonLabel(def, value) }}
+        Reset
       </Button>
 
       <template v-else-if="def.kind === 'info'">
@@ -151,7 +158,7 @@ watch(settingActivation, (activation) => {
         <KeyHint v-if="def.key === 'hotkey'" :keys="String(value)" />
         <template v-else>
           <span class="text-13 text-muted-foreground">{{ value }}</span>
-          <Badge variant="secondary" class="text-muted-foreground">Mock data</Badge>
+          <Badge v-if="def.id === 'about'" variant="secondary" class="text-muted-foreground">Mock data</Badge>
         </template>
       </template>
     </div>

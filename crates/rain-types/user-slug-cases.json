@@ -1,0 +1,73 @@
+{
+  "_comment": "Pairs of a Windows user name and the slug that rain_types::env::user_slug (Rust) and userSlug in vite/pipe-proxy.ts (TypeScript) must both give. Each side has a test that reads this file (foundation 2.7).",
+  "cases": [
+    {
+      "name": "Ada Lovelace",
+      "slug": "ada-lovelace"
+    },
+    {
+      "name": "a.b_c",
+      "slug": "a-b-c"
+    },
+    {
+      "name": "user42",
+      "slug": "user42"
+    },
+    {
+      "name": "ABC",
+      "slug": "abc"
+    },
+    {
+      "name": "Zoë",
+      "slug": "zo-"
+    },
+    {
+      "name": "名前",
+      "slug": "--"
+    },
+    {
+      "name": "😀",
+      "slug": "-"
+    },
+    {
+      "name": "İstanbul",
+      "slug": "i-stanbul"
+    },
+    {
+      "name": "Kelvin",
+      "slug": "kelvin"
+    },
+    {
+      "name": "O'Brien",
+      "slug": "o-brien"
+    },
+    {
+      "name": "ΑΣ",
+      "slug": "--"
+    },
+    {
+      "name": "Ünïcode Üser",
+      "slug": "-n-code--ser"
+    },
+    {
+      "name": "DOMAIN\\Jane",
+      "slug": "domain-jane"
+    },
+    {
+      "name": "  lead",
+      "slug": "--lead"
+    },
+    {
+      "name": "",
+      "slug": ""
+    },
+    {
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "slug": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "name": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "slug": "--------------------------------"
+    }
+  ]
+}

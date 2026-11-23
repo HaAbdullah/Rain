@@ -17,6 +17,7 @@ export const settingsSlice: Pick<RainApi, 'getSettings' | 'updateSettings'> = {
     Object.assign(state.settings, patch)
     // Copied so the mock never keeps hold of the caller's (possibly reactive) array.
     state.settings.projectRoots = [...state.settings.projectRoots]
+    state.settings.gameFolders = [...state.settings.gameFolders]
     return clone(state.settings)
   },
 }

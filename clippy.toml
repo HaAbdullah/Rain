@@ -1,0 +1,13 @@
+# Lints that keep the backend cheap when idle (docs/backend/00-foundation.md section 11.5).
+# `allow-invalid` on the tokio entries: a crate that does not use tokio (rain-types, rain-hook) would
+# otherwise warn that the function does not exist.
+disallowed-methods = [
+  { path = "tokio::time::interval", reason = "no polling timers: see docs/backend/00-foundation.md 11.5", allow-invalid = true },
+  { path = "tokio::time::interval_at", reason = "same", allow-invalid = true },
+  { path = "std::thread::sleep", reason = "blocks a thread; use tokio::time::sleep or an event" },
+  { path = "std::process::Command::new", reason = "the backend must not start processes yet; stage 2 adds platform::process::hidden_command (no console window, no handle leaks)" },
+]
+
+# `unwrap` and `expect` are fine in tests: a panic is the failure message.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true

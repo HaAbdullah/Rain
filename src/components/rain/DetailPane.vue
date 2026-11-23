@@ -16,7 +16,7 @@ defineProps<{
 <template>
   <section class="flex h-full min-h-0 flex-col bg-surface-1">
     <header class="flex shrink-0 items-center gap-3 px-4 pt-4 pb-3">
-      <RIcon v-if="icon" :icon="icon" :size="20" />
+      <RIcon v-if="icon" :icon="icon" :size="20" :label="title" />
       <h2 class="selectable min-w-0 flex-1 truncate text-base font-semibold text-foreground">{{ title }}</h2>
       <StatusDot v-if="status" :status="status" />
     </header>

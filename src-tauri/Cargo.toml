@@ -1,21 +1,39 @@
 [package]
 name = "rain"
-version = "0.1.0"
+version.workspace = true
 description = "Rain desktop shell: the window that hosts the frontend"
-license = "MIT"
-repository = "https://github.com/HaAbdullah/Rain"
-edition = "2024"
-rust-version = "1.90"
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 name = "rain_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2" }
+tauri-build = { workspace = true }
 
 [dependencies]
-tauri = { version = "2" }
-tauri-plugin-global-shortcut = "2"
-tauri-plugin-single-instance = "2"
-tauri-plugin-window-state = "2"
+tauri = { workspace = true }
+tauri-plugin-global-shortcut = { workspace = true }
+tauri-plugin-single-instance = { workspace = true }
+tauri-plugin-window-state = { workspace = true }
+rain-types = { path = "../crates/rain-types" }
+rain-pipe = { path = "../crates/rain-pipe" }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+hyper = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+
+[dev-dependencies]
+futures-util = { workspace = true }
+http-body-util = { workspace = true }
+hyper-util = { workspace = true }
+tempfile = { workspace = true }
