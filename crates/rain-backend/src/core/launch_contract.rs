@@ -53,6 +53,10 @@ pub struct Started {
     /// The creation time of the process as a Windows FILETIME. With the pid it identifies the
     /// process even after the pid is reused.
     pub creation_time: Option<u64>,
+    /// `Spawn` only: the backend runs inside a job object that forbids breakaway, so the new
+    /// program is inside that job too and may end together with the backend. False for a program
+    /// that is free of the backend (and for every other kind of request).
+    pub in_job: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,21 +73,6 @@ pub struct OpenError {
 
 pub trait Opener: Send + Sync {
     fn open(&self, request: OpenRequest) -> BoxFuture<'_, Result<Started, OpenError>>;
-}
-
-/// The opener of a backend in which the launcher is not built yet: every start fails.
-pub struct NotBuiltOpener;
-
-impl Opener for NotBuiltOpener {
-    fn open(&self, _request: OpenRequest) -> BoxFuture<'_, Result<Started, OpenError>> {
-        Box::pin(async {
-            Err(OpenError {
-                ui_text: "Failed to start",
-                code: None,
-                log_reason: "no opener is installed yet".to_owned(),
-            })
-        })
-    }
 }
 
 // ---- search ----
@@ -199,6 +188,7 @@ mod tests {
                     kind: IconKind::Letter,
                     value: "K".into(),
                     tint: None,
+                    fallback: None,
                 },
                 status: None,
                 score: 0,
@@ -214,17 +204,5 @@ mod tests {
     fn knows_follows_item_for_unless_the_owner_says_otherwise() {
         assert!(OneItem.knows("known"));
         assert!(!OneItem.knows("gone"));
-    }
-
-    #[tokio::test]
-    async fn the_opener_of_a_backend_without_a_launcher_fails_every_start() {
-        let request = OpenRequest::ShellExec {
-            file: "x".into(),
-            params: None,
-            dir: None,
-        };
-        let error = NotBuiltOpener.open(request).await.unwrap_err();
-        assert_eq!(error.ui_text, "Failed to start");
-        assert_eq!(error.code, None);
     }
 }

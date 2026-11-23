@@ -4,7 +4,7 @@
 import { appActions, poolActions } from '@/features/apps/actions'
 import { diskNodeActions, driveActions } from '@/features/disk/actions'
 import { gameActions } from '@/features/games/actions'
-import { dayActions } from '@/features/life/actions'
+import { habitActions, habitDayActions } from '@/features/life/actions'
 import { projectActions } from '@/features/projects/actions'
 import { settingActions } from '@/features/settings/actions'
 import { idleJobActions, jobActions, sessionActions } from '@/features/workflows/actions'
@@ -20,7 +20,8 @@ const providers: { [K in ItemType]: ActionProvider<TargetOf<K>> } = {
   job: jobActions,
   idleJob: idleJobActions,
   command: commandActions,
-  day: dayActions,
+  habit: habitActions,
+  habitDay: habitDayActions,
   drive: driveActions,
   diskNode: diskNodeActions,
   setting: settingActions,

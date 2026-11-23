@@ -17,7 +17,8 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
-    BHID_EnumItems, FOLDERID_AppsFolder, IEnumShellItems, IShellItem, IShellItem2, IShellLinkW,
+    AO_NONE, ApplicationActivationManager, BHID_EnumItems, FOLDERID_AppsFolder,
+    IApplicationActivationManager, IEnumShellItems, IShellItem, IShellItem2, IShellLinkW,
     KF_FLAG_DEFAULT, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW,
     SHGetKnownFolderItem, SHOpenFolderAndSelectItems, SHParseDisplayName, SIGDN_NORMALDISPLAY,
     ShellExecuteExW, ShellLink,
@@ -105,6 +106,22 @@ fn failure_code(h_inst_app: usize, hresult: i32) -> u32 {
         h_inst_app as u32
     } else {
         (hresult as u32) & 0xFFFF
+    }
+}
+
+/// Starts a packaged app by its AUMID with `IApplicationActivationManager` (160 to 260 ms) and
+/// returns the process id. `args` is the argument text the app receives (`None` for none). Runs
+/// on the COM thread. An app that is already running is activated and its id returned.
+pub fn activate_application(aumid: &str, args: Option<&str>) -> Result<u32, ComError> {
+    let aumid = wide(aumid);
+    let args = args.map(wide);
+    // SAFETY: the manager is created and used on this COM thread only; both strings are
+    // NUL-terminated and outlive the call (an absent argument text is a null pointer).
+    unsafe {
+        let manager: IApplicationActivationManager =
+            CoCreateInstance(&ApplicationActivationManager, None, CLSCTX_INPROC_SERVER)?;
+        let arguments = args.as_ref().map_or(PCWSTR::null(), |a| PCWSTR(a.as_ptr()));
+        Ok(manager.ActivateApplication(PCWSTR(aumid.as_ptr()), arguments, AO_NONE)?)
     }
 }
 

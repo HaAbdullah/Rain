@@ -11,6 +11,11 @@ export interface LogRequest {
   selectedRunId?: ID
   /** Called with the selected run's id, or with nothing when there is no run list. */
   load: (runId?: ID) => Promise<LogLine[]>
+  /**
+   * True while the log of this run is still being written. When it is given, the dialog loads the
+   * log again every 3 seconds while this answers true (and while it is open and visible).
+   */
+  follow?: (runId?: ID) => Promise<boolean>
 }
 
 const isOpen = ref(false)

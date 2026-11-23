@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createFakeBridge, FAKE_MEDIA_ORIGIN, type FakeBridge } from './fake-bridge'
+import { createFakeBridge, FAKE_MEDIA_ORIGIN, type FakeBridge } from './fake-bridge.testing'
 import { createStream } from './stream'
 
 function frame(topic: string, payload: unknown, seq = 1) {
@@ -175,5 +175,75 @@ describe('stream client: state', () => {
     expect(stream.state.value).toBe('up')
     bridge.setState('down')
     expect(stream.state.value).toBe('down')
+  })
+})
+
+describe('stream client: late game mode states (section 06 6.10)', () => {
+  const state = (rev: number) => ({ phase: 'countdown', rev })
+
+  /** A stream with one gameMode listener that records what it was given. */
+  function listening() {
+    const { bridge, stream } = setup()
+    const seen: unknown[] = []
+    stream.subscribe('gameMode', (payload) => seen.push(payload))
+    return { bridge, stream, seen }
+  }
+
+  it('gives a returned state to the listeners at once and returns it', () => {
+    const { stream, seen } = listening()
+    const given = state(2)
+    expect(stream.deliver('gameMode', given as never)).toBe(given)
+    expect(seen).toEqual([given])
+  })
+
+  it('drops a pushed frame that is not newer than a returned state', () => {
+    const { bridge, stream, seen } = listening()
+    stream.deliver('gameMode', state(5) as never)
+    bridge.push(frame('gameMode', state(5)))
+    bridge.push(frame('gameMode', state(4)))
+    bridge.push(frame('gameMode', state(6)))
+    expect(seen).toEqual([state(5), state(6)])
+  })
+
+  it('drops a returned state that a frame has already overtaken, but still returns it', () => {
+    const { bridge, stream, seen } = listening()
+    bridge.push(frame('gameMode', state(7)))
+    const late = state(6)
+    expect(stream.deliver('gameMode', late as never)).toBe(late)
+    expect(seen).toEqual([state(7)])
+  })
+
+  it('note raises the mark without delivering anything', () => {
+    const { bridge, stream, seen } = listening()
+    stream.note('gameMode', state(9) as never)
+    bridge.push(frame('gameMode', state(8)))
+    expect(seen).toEqual([])
+  })
+
+  it('starts again at 1 when the backend is a new process', () => {
+    const { bridge, seen } = listening()
+    hello(bridge, 'start-1')
+    bridge.push(frame('gameMode', state(40)))
+    hello(bridge, 'start-2')
+    bridge.push(frame('gameMode', state(1)))
+    expect(seen).toEqual([state(40), state(1)])
+  })
+
+  it('keeps the mark over a reconnect to the same process', () => {
+    const { bridge, seen } = listening()
+    hello(bridge, 'start-1')
+    bridge.push(frame('gameMode', state(40)))
+    hello(bridge, 'start-1')
+    bridge.push(frame('gameMode', state(3)))
+    expect(seen).toEqual([state(40)])
+  })
+
+  it('never drops other topics', () => {
+    const { bridge, stream } = setup()
+    const seen: unknown[] = []
+    stream.subscribe('settings', (payload) => seen.push(payload))
+    bridge.push(frame('settings', { rev: 1 }))
+    bridge.push(frame('settings', { rev: 1 }))
+    expect(seen).toHaveLength(2)
   })
 })

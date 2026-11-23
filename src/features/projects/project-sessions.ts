@@ -10,9 +10,7 @@ const STALE_AFTER_MS = 60_000
 const URGENCY: StatusKind[] = ['waiting', 'running', 'stale', 'failed', 'success', 'idle']
 
 export function sessionsOfProject(project: Project, sessions: ClaudeSession[]): ClaudeSession[] {
-  return sessions.filter(
-    (session) => session.projectId === project.id || project.sessionIds.includes(session.id),
-  )
+  return sessions.filter((session) => session.projectId === project.id)
 }
 
 export function sessionStatus(session: ClaudeSession, now: number): StatusKind {

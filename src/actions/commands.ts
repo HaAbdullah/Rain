@@ -1,11 +1,10 @@
 // Commands: things to run that are not items (spec 6.4). The launcher scores
 // them with lib/score.ts and merges them into the result list, so "sett" finds
-// Settings and "busy" finds the mock scenario.
+// Settings.
 import { useCheatSheet } from '@/composables/useCheatSheet'
-import { mockControl } from '@/data/mock/control'
-import { poolEditor } from '@/features/apps/actions'
+import { poolEditor, rescanApps } from '@/features/apps/actions'
 import { scanDrive } from '@/features/disk/actions'
-import { openTodaysNote } from '@/features/life/actions'
+import { habitEditor, openTodaysNote } from '@/features/life/actions'
 import { routes, type RouteName } from '@/nav/routes'
 import { toggleKeepOpen } from './common'
 import type { ActionContext, ActionProvider, TargetOf } from './types'
@@ -28,7 +27,7 @@ const ROUTE_KEYWORDS: Record<RouteName, string[]> = {
   projects: ['code', 'dev', 'repositories'],
   games: ['library', 'steam', 'epic', 'play'],
   workflows: ['claude', 'sessions', 'jobs', 'idle', 'cron'],
-  life: ['habits', 'calendar', 'agenda', 'vault'],
+  life: ['habits', 'streak', 'vault', 'daily note'],
   disk: ['storage', 'space', 'treemap', 'drives'],
   gameMode: ['wind down', 'close everything', 'shut down', 'quit'],
   settings: ['preferences', 'options', 'configuration'],
@@ -42,26 +41,6 @@ const goCommands: CommandDef[] = routes.map((def) => ({
   keywords: ROUTE_KEYWORDS[def.name],
   keys: def.combo,
   run: ({ nav }) => nav.go(def.name),
-}))
-
-type Scenario = Parameters<typeof mockControl.setScenario>[0]
-
-const SCENARIOS: { id: Scenario; title: string }[] = [
-  { id: 'typical', title: 'Typical' },
-  { id: 'empty', title: 'Empty' },
-  { id: 'busy', title: 'Busy' },
-  { id: 'failing', title: 'Failing' },
-]
-
-const scenarioCommands: CommandDef[] = SCENARIOS.map(({ id, title }) => ({
-  id: `scenario-${id}`,
-  title: `Mock scenario: ${title}`,
-  icon: 'flask-conical',
-  keywords: ['prototype', 'sample data'],
-  run({ notice }) {
-    mockControl.setScenario(id)
-    notice.info(`Mock scenario: ${title}`)
-  },
 }))
 
 export const commands: CommandDef[] = [
@@ -99,6 +78,24 @@ export const commands: CommandDef[] = [
     },
   },
   {
+    id: 'rescan-apps',
+    title: 'Rescan apps',
+    icon: 'refresh-cw',
+    keywords: ['apps', 'installed', 'refresh', 'new app'],
+    run: (ctx) => rescanApps(ctx),
+  },
+  {
+    id: 'new-habit',
+    title: 'New habit',
+    icon: 'square-check',
+    keywords: ['habit', 'life', 'create', 'checkbox'],
+    run({ nav }) {
+      // The dialog is mounted by the Life screen.
+      nav.go('life')
+      habitEditor.create()
+    },
+  },
+  {
     id: 'cheat-sheet',
     title: 'Shortcut sheet',
     icon: 'keyboard',
@@ -121,27 +118,6 @@ export const commands: CommandDef[] = [
     keywords: ['fullscreen', 'maximise', 'maximize', 'big', 'window'],
     keys: 'F11',
     run: ({ shell }) => shell.toggleFullscreen(),
-  },
-  {
-    id: 'simulate-permission',
-    title: 'Simulate permission request',
-    icon: 'hand',
-    keywords: ['prototype', 'claude', 'waiting', 'approve'],
-    run({ notice }) {
-      mockControl.simulatePermissionRequest()
-      notice.info('A session now waits on you')
-    },
-  },
-  ...scenarioCommands,
-  {
-    id: 'reset-mock',
-    title: 'Reset mock data',
-    icon: 'rotate-ccw',
-    keywords: ['prototype', 'sample data', 'start over'],
-    run({ notice }) {
-      mockControl.reset()
-      notice.info('Mock data reset')
-    },
   },
 ]
 

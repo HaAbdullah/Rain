@@ -12,7 +12,7 @@ import type {
   DiskNode,
   Drive,
   Game,
-  HabitDay,
+  HabitSummary,
   ID,
   IdleJob,
   Pool,
@@ -20,6 +20,7 @@ import type {
   ScheduledJob,
   Settings,
 } from '@/data/types'
+import type { HabitDayItem } from '@/features/life/types'
 import type { useNav } from '@/nav/useNav'
 import type { Shell } from '@/shell'
 import type { CommandDef } from './commands'
@@ -33,7 +34,8 @@ export type ItemType =
   | 'job'
   | 'idleJob'
   | 'command'
-  | 'day'
+  | 'habit'
+  | 'habitDay'
   | 'drive'
   | 'diskNode'
   | 'setting'
@@ -44,7 +46,7 @@ export interface SettingDef {
   group: string
   label: string
   hint?: string
-  kind: 'switch' | 'select' | 'path' | 'text' | 'button' | 'info'
+  kind: 'switch' | 'select' | 'path' | 'text' | 'info'
   key?: keyof Settings
   /** Shown in an empty field: an empty field is "not set" or "not found", not a mistake. */
   placeholder?: string
@@ -59,7 +61,8 @@ export type ActionTarget =
   | { type: 'job'; id: ID; item: ScheduledJob }
   | { type: 'idleJob'; id: ID; item: IdleJob }
   | { type: 'command'; id: ID; item: CommandDef }
-  | { type: 'day'; id: ID; item: HabitDay }
+  | { type: 'habit'; id: ID; item: HabitSummary }
+  | { type: 'habitDay'; id: ID; item: HabitDayItem }
   | { type: 'drive'; id: ID; item: Drive }
   | { type: 'diskNode'; id: ID; item: DiskNode }
   | { type: 'setting'; id: ID; item: SettingDef }

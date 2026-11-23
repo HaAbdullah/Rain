@@ -16,7 +16,6 @@ import { useScreen } from '@/composables/useScreen'
 import { useSectionQuery } from '@/composables/useSearch'
 import { useSelection, type SelGroup } from '@/composables/useSelection'
 import { api } from '@/data'
-import { mockControl } from '@/data/mock/control'
 import type { Settings, SettingsPatch } from '@/data/types'
 import { errorMessage } from '@/lib/errors'
 import { keepFocus } from '@/lib/focus'
@@ -24,7 +23,7 @@ import { useRevealSelected } from '@/lib/reveal'
 import { matches } from '@/lib/score'
 import StatusDot from '@/components/rain/StatusDot.vue'
 import SettingRow from './SettingRow.vue'
-import { configIssueText, monitorClaudeRowState, type RowState } from './rowState'
+import { configIssueText, monitorClaudeRowState, SOURCE_OF_ROW, sourceRowState, type RowState } from './rowState'
 import { settingDefs } from './settingDefs'
 import {
   libraryPathPatch,
@@ -83,7 +82,7 @@ async function save(patch: SettingsPatch | null, label: string) {
     refreshResources('settings')
     // Life must never show the data of the old vault.
     if ('vaultPath' in patch || 'dailyNoteFolder' in patch || 'dailyNoteFormat' in patch) {
-      refreshResources('vault', 'habits', 'habitDays')
+      refreshResources('vault', 'habits', 'habitDays', 'habitStats')
     }
     if ('dataDir' in patch) notice.info('Data folder changed. Rain is restarting its service.')
   } catch (reason) {
@@ -92,25 +91,15 @@ async function save(patch: SettingsPatch | null, label: string) {
 }
 
 function change(def: SettingDef, value: SettingValue) {
-  if (def.id === 'mock-scenario') {
-    // The select only offers valid scenarios.
-    if (value === 'typical' || value === 'empty' || value === 'busy' || value === 'failing') {
-      mockControl.setScenario(value)
-    }
-  } else if (def.id === 'mock-latency') {
-    mockControl.setLatency(value === true)
-  } else {
-    void save(patchFor(def, value), def.label)
-  }
-}
-
-function press(def: SettingDef) {
-  if (def.id === 'mock-reset') mockControl.reset()
+  void save(patchFor(def, value), def.label)
 }
 
 /** What the backend says about a row's setting, if it says anything. */
 function stateOf(def: SettingDef, current: Settings): RowState | undefined {
-  return def.key === 'monitorClaude' ? monitorClaudeRowState(current.monitorClaudeState) : undefined
+  if (def.key === 'monitorClaude') return monitorClaudeRowState(current.monitorClaudeState)
+  // A source row says in the backend's words why its source is off or failed.
+  const source = SOURCE_OF_ROW[def.id]
+  return source ? sourceRowState(health.data.value?.sources.find((entry) => entry.name === source)) : undefined
 }
 
 /** Why a row's setting is not working, if it is not. */
@@ -123,9 +112,10 @@ function problemOf(def: SettingDef, current: Settings): string | undefined {
   <ScreenFrame>
     <div ref="column" class="p-6" @mousedown="keepFocus">
       <div class="mx-auto w-full max-w-160">
-        <ErrorRow v-if="resource.error.value" message="Settings unavailable" @retry="resource.reload" />
+        <!-- A failed refetch keeps the rows it already has: the error shows above them, not instead of them. -->
+        <ErrorRow v-if="resource.error.value" class="mb-3" message="Settings unavailable" :detail="resource.error.value.message" @retry="resource.reload" />
 
-        <div v-else-if="!settings" class="flex flex-col gap-6" aria-hidden="true">
+        <div v-if="!settings" class="flex flex-col gap-6" aria-hidden="true">
           <template v-if="resource.showSkeleton.value">
             <div v-for="(rows, g) in SKELETON_GROUPS" :key="g" class="flex flex-col gap-1">
               <Skeleton class="mb-1 h-4 w-20" />
@@ -165,7 +155,6 @@ function problemOf(def: SettingDef, current: Settings): string | undefined {
                 :row-state="stateOf(def, settings)"
                 @change="change(def, $event)"
                 @change-path="save(libraryPathPatch(def, $event), def.label)"
-                @press="press(def)"
               />
             </div>
           </div>

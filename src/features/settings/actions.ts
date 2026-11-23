@@ -66,7 +66,6 @@ const CHANGE_LABEL: Record<SettingDef['kind'], string> = {
   select: 'Change',
   path: 'Edit',
   text: 'Edit',
-  button: 'Run',
   info: 'Show hint',
 }
 

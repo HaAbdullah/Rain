@@ -10,11 +10,13 @@ import ErrorRow from '@/components/rain/ErrorRow.vue'
 import ItemGrid from '@/components/rain/ItemGrid.vue'
 import ScreenFrame from '@/components/rain/ScreenFrame.vue'
 import SectionHeader from '@/components/rain/SectionHeader.vue'
+import SourceNote from '@/components/rain/SourceNote.vue'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useActionPanel } from '@/composables/useActionPanel'
 import { useLaunch } from '@/composables/useLaunch'
 import { useNow } from '@/composables/useNow'
 import { useResource } from '@/composables/useResource'
+import { useSourceNotes } from '@/composables/useSourceNotes'
 import { useScreen } from '@/composables/useScreen'
 import { useSectionQuery } from '@/composables/useSearch'
 import { useSelection, type SelGroup } from '@/composables/useSelection'
@@ -22,6 +24,7 @@ import { api } from '@/data'
 import type { Project } from '@/data/types'
 import { matches } from '@/lib/score'
 import { useNav } from '@/nav/useNav'
+import { byLastOpened } from './project-order'
 import { leadStatus, sessionsOfProject } from './project-sessions'
 import ProjectCard from './ProjectCard.vue'
 import ProjectDetail from './ProjectDetail.vue'
@@ -38,7 +41,9 @@ const query = useSectionQuery('projects')
 const { runs } = useLaunch()
 const now = useNow()
 const panel = useActionPanel()
-const projects = useResource('projects', () => api.listProjects())
+const projects = useResource('projects', () => api.listProjects(), { live: 'projects' })
+// Git facts may be missing (git not found); the list itself still works.
+const notes = useSourceNotes('git', 'projects')
 const sessions = useResource('sessions', () => api.listSessions(), { live: 'sessions' })
 
 const visible = computed(() =>
@@ -54,7 +59,7 @@ const groups = computed<SelGroup<Project>[]>(() => {
     .slice(0, ACTIVE_COUNT)
   const others = visible.value
     .filter((project) => !active.includes(project))
-    .sort((a, b) => Date.parse(b.lastOpenedAt) - Date.parse(a.lastOpenedAt))
+    .sort(byLastOpened)
   return [
     { id: 'active', title: 'Most active', count: active.length, items: active, columns: ACTIVE_COLUMNS },
     { id: 'all', title: 'All projects', count: others.length, items: others, columns: allColumns.value },
@@ -93,7 +98,11 @@ const noMatch = computed(() => projects.data.value !== undefined && !isEmpty.val
 <template>
   <ScreenFrame pane="md">
     <div v-if="projects.error.value" class="px-4 pt-4">
-      <ErrorRow message="Projects unavailable" @retry="projects.reload()" />
+      <ErrorRow message="Projects unavailable" :detail="projects.error.value.message" @retry="projects.reload()" />
+    </div>
+
+    <div v-if="notes.length > 0" class="px-4 pt-2">
+      <SourceNote v-for="source in notes" :key="source.name" :source="source" />
     </div>
 
     <div v-if="projects.showSkeleton.value" class="flex flex-col gap-4 p-4" aria-hidden="true">
@@ -114,7 +123,7 @@ const noMatch = computed(() => projects.data.value !== undefined && !isEmpty.val
     <EmptyState
       v-else-if="isEmpty"
       icon="folder-git-2"
-      title="No projects yet"
+      title="No projects found"
       hint="Add a project folder in Settings"
       action-label="Open settings"
       @action="nav.go('settings')"

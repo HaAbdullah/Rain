@@ -40,7 +40,14 @@ const ICON_BY_CATEGORY: Record<FileCategory, string> = {
 }
 
 function iconOf(node: DiskNode) {
-  const name = node.kind === 'dir' ? 'folder' : ICON_BY_CATEGORY[node.category ?? 'other']
+  const name =
+    node.kind === 'other'
+      ? 'ellipsis'
+      : node.denied
+        ? 'lock'
+        : node.kind === 'dir'
+          ? 'folder'
+          : ICON_BY_CATEGORY[node.category ?? 'other']
   return { kind: 'lucide', value: name } as const
 }
 </script>
@@ -61,7 +68,7 @@ function iconOf(node: DiskNode) {
         <RIcon :icon="iconOf(item.node)" :size="16" class="shrink-0 text-muted-foreground" />
         <span class="min-w-0 flex-1 truncate text-sm text-foreground">{{ item.node.name }}</span>
         <span class="w-16 shrink-0 text-right font-mono text-xs text-muted-foreground">
-          {{ formatBytes(item.node.sizeBytes) }}
+          {{ item.node.denied ? '—' : formatBytes(item.node.sizeBytes) }}
         </span>
         <Meter :value="shareOf(item.node, folder)" :width="48" />
       </div>

@@ -1,0 +1,25 @@
+# Idle jobs of the typical test folder (made-up names). The enabled one waits for a whole day of
+# quiet, so no test ever finds the PC idle long enough to start it.
+schema_version = 1
+
+[[idle_job]]
+id = "idle-cpu-burner"
+name = "Burn the CPU"
+enabled = true
+resource = "cpu"
+idle_after_minutes = 1440
+command = "ping"
+args = ["-n", "20", "127.0.0.1"]
+rerun = "daily"
+
+# Switched off.
+[[idle_job]]
+id = "idle-gpu-wait"
+name = "Wait on the GPU"
+enabled = false
+resource = "gpu"
+idle_after_minutes = 10
+command = "ping"
+args = ["-n", "20", "127.0.0.1"]
+rerun = "weekly"
+expected_minutes = 30

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 // The frame (spec 3.1): rail, header, the active screen and the overlays.
-// It also starts the keymap and pauses the mock's timers while the window is hidden.
-import { computed, defineAsyncComponent, watch, type Component } from 'vue'
+// It also starts the keymap and the recap notice of the last game mode.
+import { computed, defineAsyncComponent, type Component } from 'vue'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { isOverlayOpen } from '@/composables/useOverlay'
+import { useGameModeRecap } from '@/composables/useGameModeRecap'
 import { useSearch } from '@/composables/useSearch'
-import { mockControl } from '@/data/mock/control'
 import { useKeymap } from '@/keys/useKeymap'
 import { routeByName, type RouteName } from '@/nav/routes'
 import { useNav } from '@/nav/useNav'
@@ -37,7 +37,7 @@ function screenFor(name: RouteName): Component {
 }
 const screen = computed(() => screenFor(nav.displayed.value))
 
-watch(hidden, (isHidden) => mockControl.setPaused(isHidden), { immediate: true })
+useGameModeRecap()
 
 /** A click on empty space puts the caret back in the search field (spec 3.8). */
 function returnFocus(event: MouseEvent) {

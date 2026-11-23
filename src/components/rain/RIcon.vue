@@ -38,7 +38,7 @@ const kind = computed(() => {
 })
 
 /** The text the tile is made from. An address says nothing about the thing, so a picture uses its label. */
-const tileName = computed(() => (props.icon.kind === 'url' ? (props.label ?? '') : props.icon.value))
+const tileName = computed(() => (props.icon.kind === 'url' ? (props.icon.fallback ?? props.label ?? '') : props.icon.value))
 
 const box = computed(() => ({ width: `${props.size}px`, height: `${props.size}px` }))
 

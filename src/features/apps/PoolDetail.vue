@@ -59,7 +59,8 @@ async function retryFailed() {
     const failed = props.pool.members.filter((_, i) => current.steps[i]?.status === 'failed')
     let allStarted = true
     for (const member of failed) {
-      const result = await launch({ type: 'app', id: member.appId }, appById.value.get(member.appId)?.name)
+      // The member's own arguments go along: a retry must start the app the way the pool does.
+      const result = await launch({ type: 'app', id: member.appId, args: member.args }, appById.value.get(member.appId)?.name)
       if (result.status !== 'success') allStarted = false
     }
     // Everything is running now, so the pool's failed run is forgotten (pane and row dot).

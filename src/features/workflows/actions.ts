@@ -5,7 +5,9 @@ import { copyAction, hideAfterSuccess } from '@/actions/common'
 import type { ActionContext, ActionProvider, RainAction, TargetOf } from '@/actions/types'
 import { reactive } from 'vue'
 import { refreshResources } from '@/composables/useResource'
-import type { ClaudeSession, ID, IdleJob, PermissionAnswer, ScheduledJob } from '@/data/types'
+import type { ClaudeSession, ID, IdleJob, PermissionAnswer, PermissionAnswerResult, ScheduledJob } from '@/data/types'
+import { answerNotice } from './answerText'
+import { focusLabel } from './sessions/sessionInfo'
 
 type WorkflowsSub = 'sessions' | 'jobs' | 'idle'
 
@@ -22,22 +24,16 @@ function showInWorkflows(sub: WorkflowsSub, id: ID): RainAction {
 
 // ---- sessions ----
 
-function transcript(session: ClaudeSession): RainAction {
+function transcript(session: ClaudeSession, slot: RainAction['slot'] = 'more'): RainAction {
   return {
     id: 'transcript',
     label: 'Transcript',
     icon: 'scroll-text',
-    slot: 'more',
+    slot,
     keys: 'Ctrl+KeyL',
     run: ({ api, openLog }) =>
       openLog({ title: session.title, load: () => api.getSessionTranscript(session.id) }),
   }
-}
-
-const ANSWERED: Record<PermissionAnswer, string> = {
-  once: 'Allowed',
-  always: 'Always allowed',
-  deny: 'Denied',
 }
 
 /** Sessions whose answer is on its way. The list view moves its selection on at once. */
@@ -57,10 +53,14 @@ async function toggleOnce(id: ID, task: () => Promise<void>) {
 }
 
 async function answer(session: ClaudeSession, choice: PermissionAnswer, ctx: ActionContext) {
-  if (answering.has(session.id)) return
+  // The id of the request that is on screen: an answer for another one is refused by the backend,
+  // so a request that changed between the render and the key press is never approved blind.
+  const request = session.request
+  if (!request || answering.has(session.id)) return
   answering.add(session.id)
+  let result: PermissionAnswerResult
   try {
-    await ctx.api.answerPermission(session.id, choice)
+    result = await ctx.api.answerPermission(session.id, request.id, choice)
   } finally {
     answering.delete(session.id)
   }
@@ -70,10 +70,10 @@ async function answer(session: ClaudeSession, choice: PermissionAnswer, ctx: Act
     .listSessions()
     .then((sessions) => sessions.filter((other) => other.status === 'waiting').length)
     .catch(() => 0)
-  ctx.notice.success(left > 0 ? `${ANSWERED[choice]}, ${left} waiting` : ANSWERED[choice])
+  ctx.notice.success(answerNotice(result, left, choice))
 }
 
-/** Only for a session that waits on you. "Always allow" has no chord on purpose (spec 1.8). */
+/** Only for a request that can still be answered from Rain. "Always allow" has no chord on purpose (spec 1.8). */
 function permissionActions(session: ClaudeSession): RainAction[] {
   return [
     {
@@ -124,21 +124,33 @@ function stopSession(session: ClaudeSession): RainAction {
   }
 }
 
-function openFolderInEditor(session: ClaudeSession): RainAction {
+/** Only for a session whose folder is a known project: the backend opens projects, not loose folders. */
+function openFolderInEditor(projectId: ID): RainAction {
   return {
     id: 'editor',
     label: 'Open folder in editor',
     icon: 'code-xml',
     slot: 'secondary',
     async run(ctx) {
-      const { projectId } = session
-      if (projectId) {
-        await ctx.launch({ type: 'project', id: projectId, mode: 'editorOnly' })
+      await ctx.launch({ type: 'project', id: projectId, mode: 'editorOnly' })
+    },
+  }
+}
+
+/** Brings the window of the session forward. `none` is not an error: Rain stays and says so. */
+function focusSession(session: ClaudeSession): RainAction {
+  return {
+    id: 'focus',
+    label: focusLabel(session.host),
+    icon: 'square-terminal',
+    slot: 'primary',
+    async run(ctx) {
+      const { focused } = await ctx.api.focusSession(session.id)
+      if (focused === 'none') {
+        ctx.notice.info('Could not find the window for this session')
         return
       }
-      // A folder that is not a known project: RainApi has no endpoint for it yet,
-      // so the prototype only reports it.
-      ctx.notice.info(`Opened ${session.cwd} in the editor`)
+      await hideAfterSuccess(ctx)
     },
   }
 }
@@ -146,23 +158,15 @@ function openFolderInEditor(session: ClaudeSession): RainAction {
 export const sessionActions: ActionProvider<TargetOf<'session'>> = ({ item: session }, { where }) => {
   if (where === 'home') return [showInWorkflows('sessions', session.id), transcript(session)]
 
-  const isLive = session.status === 'running' || session.status === 'waiting'
+  // An ended session has no window to focus, so Enter opens its transcript instead.
+  const canStop = session.alive && session.host === 'terminal'
   return [
-    {
-      id: 'focus',
-      label: 'Focus terminal',
-      icon: 'square-terminal',
-      slot: 'primary',
-      async run(ctx) {
-        await ctx.api.focusSession(session.id)
-        await hideAfterSuccess(ctx)
-      },
-    },
-    openFolderInEditor(session),
-    ...(session.status === 'waiting' ? permissionActions(session) : []),
-    transcript(session),
+    session.alive ? focusSession(session) : transcript(session, 'primary'),
+    ...(session.projectId ? [openFolderInEditor(session.projectId)] : []),
+    ...(session.request?.answerable === true ? permissionActions(session) : []),
+    ...(session.alive ? [transcript(session)] : []),
     copyAction('folder path', session.cwd),
-    ...(isLive ? [stopSession(session)] : []),
+    ...(canStop ? [stopSession(session)] : []),
   ]
 }
 
@@ -177,6 +181,12 @@ function openJobLog(job: ScheduledJob, { api, openLog }: ActionContext) {
     runs,
     selectedRunId: shown?.id,
     load: (runId) => (runId ? api.getRunLog(runId) : Promise.resolve([])),
+    // A run in progress is followed: the log is loaded again while the backend says it runs.
+    follow: async (runId) =>
+      runId !== undefined &&
+      (await api.listJobs()).some(
+        (j) => j.id === job.id && j.recentRuns.some((r) => r.id === runId && r.status === 'running'),
+      ),
   })
 }
 
@@ -246,7 +256,13 @@ function openIdleLog(job: IdleJob, slot: RainAction['slot'], label: string): Rai
     icon: 'scroll-text',
     slot,
     keys: 'Ctrl+KeyL',
-    run: ({ api, openLog }) => openLog({ title: job.name, load: () => api.getIdleJobLog(job.id) }),
+    run: ({ api, openLog }) =>
+      openLog({
+        title: job.name,
+        load: () => api.getIdleJobLog(job.id),
+        // The log of a run in progress is followed.
+        follow: async () => (await api.listIdleJobs()).some((j) => j.id === job.id && j.state === 'running'),
+      }),
   }
 }
 

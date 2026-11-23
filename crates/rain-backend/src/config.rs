@@ -201,7 +201,9 @@ impl Config {
         let sandbox = sandbox_for(
             debug_build,
             vars.sandbox.as_deref(),
-            vars.data_dir.is_some(),
+            // A moved local folder is as much a sign of a test run as a moved data folder: the
+            // logs, the database and the hook copy must never leave the real folders by accident.
+            vars.data_dir.is_some() || vars.local_dir.is_some(),
             vars.pipe.is_some(),
         );
         let pipe_name = pipe_name_for(vars.pipe.as_deref(), &vars.user_name, sandbox)?;
@@ -241,7 +243,9 @@ impl Config {
         })
     }
 
-    /// A configuration for a test: the given pipe and folders, sandbox on, default limits.
+    /// A configuration for a test: the given pipe and folders, sandbox on, default limits. The
+    /// Claude folder is a folder of its own inside the local folder (it does not exist), so that
+    /// no test ever reads or changes the real one.
     pub fn for_test(pipe_name: &str, data_dir: PathBuf, local_dir: PathBuf) -> Self {
         Self {
             pipe_name: pipe_name.to_owned(),
@@ -249,7 +253,7 @@ impl Config {
             default_data_dir: data_dir.clone(),
             data_dir_from_env: false,
             startup_issues: Vec::new(),
-            claude_dir: None,
+            claude_dir: Some(local_dir.join("claude")),
             data_dir,
             local_dir,
             sandbox: true,
@@ -351,6 +355,19 @@ mod tests {
         assert_eq!(config.pipe_name, "rain-test-1");
         assert_eq!(config.data_dir, PathBuf::from(r"D:\tmp\data"));
         assert_eq!(config.local_dir, PathBuf::from(r"D:\tmp\data.local"));
+    }
+
+    #[test]
+    fn a_moved_local_folder_alone_also_makes_a_run_a_sandbox() {
+        let vars = EnvVars {
+            local_dir: Some(PathBuf::from(r"D:	mp\local")),
+            ..vars()
+        };
+        let config = Config::from_vars(&vars, false).unwrap();
+        assert!(
+            config.sandbox,
+            "a release build must not mix real and test folders"
+        );
     }
 
     #[test]

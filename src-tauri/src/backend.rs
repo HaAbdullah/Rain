@@ -43,6 +43,8 @@ const SHUTDOWN_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// How often to look whether the pipe of a stopping backend has disappeared.
 const PIPE_GONE_POLL: Duration = Duration::from_millis(100);
+/// How often `answers` asks again after a `transport` failure (a pipe that is closing).
+const TRANSPORT_RETRIES: u32 = 5;
 
 // Process creation flags (foundation section 2.3). `DETACHED_PROCESS` and `CREATE_NO_WINDOW`
 // exclude each other, so only the first is used.
@@ -627,7 +629,20 @@ impl Backend {
     /// Asks the pipe whether the backend answers. `Ok(None)` means silence; an error means that
     /// something else is wrong (another program owns the pipe name, access denied).
     async fn answers(&self) -> Result<Option<Ping>, ApiError> {
-        match self.ping().await {
+        // A backend that has just been killed leaves a half-closed pipe for some milliseconds; a
+        // ping into it fails with `transport`, which is neither silence nor a foreign program.
+        // Ask again a few times: the pipe is gone or answers again before the last try.
+        let mut answer = self.ping().await;
+        for _ in 0..TRANSPORT_RETRIES {
+            match &answer {
+                Err(error) if error.reason.as_deref() == Some("transport") => {
+                    tokio::time::sleep(PIPE_GONE_POLL).await;
+                    answer = self.ping().await;
+                }
+                _ => break,
+            }
+        }
+        match answer {
             Ok(ping) if ping.app == BACKEND_APP_NAME => Ok(Some(ping)),
             Ok(_) => Err(shell_error(
                 ErrorCode::Unavailable,

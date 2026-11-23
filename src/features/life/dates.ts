@@ -42,11 +42,6 @@ export function weekdayRow(iso: ISODate): number {
   return (parseISODate(iso).getDay() + 6) % 7
 }
 
-export function isWeekend(iso: ISODate): boolean {
-  const day = parseISODate(iso).getDay()
-  return day === 0 || day === 6
-}
-
 export function clampDate(iso: ISODate, min: ISODate, max: ISODate): ISODate {
   // ISO dates compare correctly as text.
   if (iso < min) return min

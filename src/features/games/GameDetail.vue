@@ -23,8 +23,13 @@ const cover = useImageFallback(() => props.game.coverUrl)
 const { primary, secondary } = useScreenState()
 
 const state = computed(() => {
-  if (props.game.running) return 'Running'
-  return props.game.installed ? 'Installed' : 'Not installed'
+  const { game } = props
+  if (game.running) return 'Running'
+  if (game.source === 'custom') {
+    if (!game.installed) return 'Program file missing'
+    return game.exePath === undefined ? 'No program file' : 'Installed'
+  }
+  return game.installed ? 'Installed' : 'Not installed'
 })
 </script>
 

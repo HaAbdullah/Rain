@@ -77,10 +77,10 @@ fn unsafe_outside_platform(sources: &[Source]) -> Vec<String> {
 // ---- rule 2: the user-level Claude settings file (section 13.3, rule 2) ----
 
 /// The only file that may name the settings file, and so write it.
-const CLAUDE_SETTINGS_FILE: &str = "sessions/hooks_install.rs";
+const CLAUDE_SETTINGS_FILE: &str = "modules/sessions/hooks_install.rs";
 /// This file may name the `.claude` folder (it only reads session files there), but not the
 /// settings file.
-const CLAUDE_PATHS_FILE: &str = "sessions/claude_paths.rs";
+const CLAUDE_PATHS_FILE: &str = "modules/sessions/claude_paths.rs";
 
 fn claude_settings_outside_installer(sources: &[Source]) -> Vec<String> {
     sources
@@ -143,6 +143,103 @@ fn habit_function_used_outside_its_tick(sources: &[Source]) -> Vec<String> {
             code_lines(&source.text)
                 .filter(|(_, line)| line.contains("set_habit_property"))
                 .map(|(number, _)| format!("{}:{number} uses set_habit_property", source.path))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+// The rules of the life design (section 04 6.1) that go beyond the three above. Together they keep
+// the vault write in one file that is easy to read and to audit.
+
+/// Calls that only `vault_write.rs` may make inside `modules/life/`.
+const LIFE_WRITE_CALLS: [&str; 10] = [
+    "fs::write",
+    "File::create",
+    "OpenOptions",
+    "fs::rename",
+    "fs::remove_file",
+    "fs::remove_dir",
+    "fs::create_dir",
+    "fs::copy",
+    "set_permissions",
+    "set_modified",
+];
+
+fn life_writes_outside_the_write_file(sources: &[Source]) -> Vec<String> {
+    sources
+        .iter()
+        .filter(|s| s.path.starts_with("modules/life/") && s.path != VAULT_WRITE_FILE)
+        .flat_map(|source| {
+            code_lines(&source.text)
+                .filter(|(_, line)| LIFE_WRITE_CALLS.iter().any(|call| line.contains(call)))
+                .map(|(number, _)| format!("{}:{number} writes near the vault", source.path))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// The text functions of `frontmatter.rs` are pure: no disk access, so they cannot write.
+fn frontmatter_touches_the_disk(sources: &[Source]) -> Vec<String> {
+    sources
+        .iter()
+        .filter(|s| s.path == "modules/life/frontmatter.rs")
+        .flat_map(|source| {
+            code_lines(&source.text)
+                .filter(|(_, line)| {
+                    line.contains("fs::")
+                        || line.contains("std::fs")
+                        || line.contains("std::io")
+                        || has_word(line, "File")
+                })
+                .map(|(number, _)| format!("{}:{number} touches the disk", source.path))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// The write file has its own temporary file code: it does not use the shared store or the
+/// blocking helper (the route calls it from inside `blocking::run`).
+fn write_file_uses_shared_code(sources: &[Source]) -> Vec<String> {
+    sources
+        .iter()
+        .filter(|s| s.path == VAULT_WRITE_FILE)
+        .flat_map(|source| {
+            code_lines(&source.text)
+                .filter(|(_, line)| {
+                    line.contains("crate::store") || line.contains("core::blocking")
+                })
+                .map(|(number, _)| format!("{}:{number} uses shared code", source.path))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// Obsidian links that may create a note or read the vault are never used. The one link Rain
+/// uses, `obsidian://open`, is built in `daily.rs` only, after the note was seen to exist.
+const OBSIDIAN_LINK_FILE: &str = "modules/life/daily.rs";
+const OBSIDIAN_FORBIDDEN: [&str; 4] = [
+    "obsidian://new",
+    "obsidian://daily",
+    "obsidian://search",
+    "obsidian://hook-get-address",
+];
+
+fn obsidian_links_that_may_not_exist(sources: &[Source]) -> Vec<String> {
+    sources
+        .iter()
+        .flat_map(|source| {
+            // Not `code_lines`: it cuts a line at `//`, and a link contains one. A line that is
+            // a comment as a whole is skipped instead.
+            source
+                .text
+                .lines()
+                .enumerate()
+                .filter(|(_, line)| !line.trim_start().starts_with("//"))
+                .filter(|(_, line)| {
+                    OBSIDIAN_FORBIDDEN.iter().any(|link| line.contains(link))
+                        || (source.path != OBSIDIAN_LINK_FILE && line.contains("obsidian://open"))
+                })
+                .map(|(index, _)| format!("{}:{} uses an Obsidian link", source.path, index + 1))
                 .collect::<Vec<_>>()
         })
         .collect()
@@ -285,6 +382,10 @@ fn the_backend_source_follows_the_rules() {
     found.extend(claude_settings_outside_installer(&sources));
     found.extend(vault_writes_outside_the_one_function(&sources));
     found.extend(habit_function_used_outside_its_tick(&sources));
+    found.extend(life_writes_outside_the_write_file(&sources));
+    found.extend(frontmatter_touches_the_disk(&sources));
+    found.extend(write_file_uses_shared_code(&sources));
+    found.extend(obsidian_links_that_may_not_exist(&sources));
     found.extend(secrets_in_log_calls(&sources));
     found.extend(game_mode_ending_things_itself(&sources));
     assert!(
@@ -403,6 +504,83 @@ fn the_habit_function_may_be_named_only_in_the_tick_and_its_own_file() {
         habit_function_used_outside_its_tick(&source("modules/life/service.rs", code)).is_empty()
     );
     assert!(habit_function_used_outside_its_tick(&source(VAULT_WRITE_FILE, code)).is_empty());
+}
+
+#[test]
+fn the_life_module_may_not_write_anywhere_but_its_write_file() {
+    let code = "std::fs::copy(a, b)?;";
+    assert_eq!(
+        life_writes_outside_the_write_file(&source("modules/life/store.rs", code)).len(),
+        1
+    );
+    assert!(life_writes_outside_the_write_file(&source(VAULT_WRITE_FILE, code)).is_empty());
+    assert!(life_writes_outside_the_write_file(&source("modules/games/x.rs", code)).is_empty());
+    // A comment that names a call is fine.
+    let comment = "// never fs::write here";
+    assert!(life_writes_outside_the_write_file(&source("modules/life/x.rs", comment)).is_empty());
+}
+
+#[test]
+fn the_frontmatter_file_may_not_touch_the_disk() {
+    for code in [
+        "use std::fs;",
+        "let f = std::fs::File::open(p);",
+        "use std::io::Read;",
+        "let x: File;",
+    ] {
+        assert_eq!(
+            frontmatter_touches_the_disk(&source("modules/life/frontmatter.rs", code)).len(),
+            1,
+            "{code}"
+        );
+    }
+    assert!(
+        frontmatter_touches_the_disk(&source("modules/life/frontmatter.rs", "let profile = 1;"))
+            .is_empty()
+    );
+    assert!(
+        frontmatter_touches_the_disk(&source("modules/life/index.rs", "use std::fs;")).is_empty()
+    );
+}
+
+#[test]
+fn the_write_file_may_not_use_the_shared_store_or_the_blocking_helper() {
+    for code in [
+        "use crate::store::toml_file;",
+        "crate::core::blocking::run(f)",
+    ] {
+        assert_eq!(
+            write_file_uses_shared_code(&source(VAULT_WRITE_FILE, code)).len(),
+            1,
+            "{code}"
+        );
+    }
+    assert!(
+        write_file_uses_shared_code(&source("modules/life/service.rs", "use crate::store::x;"))
+            .is_empty()
+    );
+}
+
+#[test]
+fn only_the_open_link_of_the_daily_file_is_allowed() {
+    let open = r#"format!("obsidian://open?vault={id}")"#;
+    assert!(obsidian_links_that_may_not_exist(&source(OBSIDIAN_LINK_FILE, open)).is_empty());
+    assert_eq!(
+        obsidian_links_that_may_not_exist(&source("modules/life/service.rs", open)).len(),
+        1
+    );
+    for link in [
+        "obsidian://new?vault=a",
+        "obsidian://daily",
+        "obsidian://search?query=x",
+    ] {
+        let code = format!("let l = \"{link}\";");
+        assert_eq!(
+            obsidian_links_that_may_not_exist(&source(OBSIDIAN_LINK_FILE, &code)).len(),
+            1,
+            "{link}"
+        );
+    }
 }
 
 #[test]

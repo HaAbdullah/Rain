@@ -11,7 +11,7 @@ use std::time::UNIX_EPOCH;
 use super::bus::EventBus;
 use super::clock::{Clock, SystemClock};
 use super::health::Health;
-use super::launch_contract::{NotBuiltOpener, Opener};
+use super::launch_contract::Opener;
 use super::media::MediaRegistry;
 use super::secrets::{MemorySecrets, Secrets};
 use super::shell_facts::ShellFactsCell;
@@ -140,11 +140,12 @@ impl AppState {
     // ---- the one launch seam ----
 
     /// The one way a program is started (foundation 11.6). A test's fake, else the real opener
-    /// that the launcher installed, else an opener that fails every start.
+    /// that the launcher installed in its `init`. Asking before either exists is a programming
+    /// error and panics, like an empty module slot.
     pub fn opener(&self) -> Arc<dyn Opener> {
         self.opener
             .get()
-            .unwrap_or_else(|| Arc::new(NotBuiltOpener))
+            .expect("no opener: the launcher module installs one in its init")
     }
 
     /// The launcher's `init` installs the real opener here. It does nothing when a test has
@@ -438,9 +439,10 @@ mod tests {
     #[test]
     #[should_panic(expected = "initialised twice")]
     fn a_slot_cannot_be_filled_twice() {
-        let slots = Slots::default();
-        slots.gamemode.set(gamemode::Service);
-        slots.gamemode.set(gamemode::Service);
+        // Every module service now has real fields, so the test fills a slot of a plain value.
+        let slot = Slot::<u8>::new("example");
+        slot.set(1);
+        slot.set(2);
     }
 
     trait Part: Send + Sync {
@@ -501,9 +503,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_opener_is_the_replacement_then_the_installed_default_then_a_failing_one() {
-        assert_eq!(tag_of(&state()).await, "Failed to start");
-
+    async fn the_opener_is_the_replacement_then_the_installed_default() {
         let state = state();
         state.install_default_opener(Arc::new(TaggedOpener("default")));
         assert_eq!(tag_of(&state).await, "default");
@@ -514,6 +514,12 @@ mod tests {
             .build();
         replaced.install_default_opener(Arc::new(TaggedOpener("default")));
         assert_eq!(tag_of(&replaced).await, "fake", "a test's fake wins");
+    }
+
+    #[test]
+    #[should_panic(expected = "no opener")]
+    fn asking_for_the_opener_before_one_is_installed_is_a_bug() {
+        let _ = state().opener();
     }
 
     #[test]

@@ -17,8 +17,13 @@ export function useSummon(): void {
   const settings = useResource('settings', () => api.getSettings(), { live: 'settings' })
   let resetTimer: number | undefined
 
+  const mode = useResource('gameMode', () => api.getGameMode(), { live: 'gameMode' })
+  /** While game mode runs, going Home would unmount its screen and cancel it (section 06 6.10). */
+  const gameModeRunning = () => ['review', 'countdown', 'windingDown'].includes(mode.data.value?.phase ?? 'off')
+
   /** After a long hide Rain starts over: Home, first row, nothing remembered. */
   function resetToHome() {
+    if (gameModeRunning()) return
     nav.go('home')
     resetViewState()
     resetResources()

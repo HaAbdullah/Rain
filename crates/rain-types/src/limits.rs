@@ -119,6 +119,11 @@ pub const SCAN_WALK_THREADS: usize = 8;
 pub const SCAN_OPEN_FOLDER_CHILDREN: usize = 200;
 pub const SCAN_KEEP_FILES_PER_DIR: usize = 64;
 pub const SCAN_MAX_DEPTH: usize = 256;
+/// A scan reports its counters this often while they change; the table keeps this many scan
+/// records; the walk threads run at below-normal priority while the flag is true.
+pub const SCAN_PROGRESS_TICK: Duration = Duration::from_millis(250);
+pub const SCAN_RECORDS_KEPT: usize = 8;
+pub const SCAN_BELOW_NORMAL: bool = true;
 /// `POST /paths/check`: time one path may take, paths probed at once, paths in one request, and
 /// the longest path text.
 pub const PATH_PROBE_TIMEOUT: Duration = Duration::from_secs(2);

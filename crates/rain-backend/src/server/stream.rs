@@ -9,12 +9,13 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use futures_util::{Stream, StreamExt, stream};
 use rain_types::{Hello, Lifecycle, LifecycleKind, Resync, ResyncReason, StopReason};
 use serde::Serialize;
-use tokio_stream::wrappers::BroadcastStream;
-use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use tokio::sync::broadcast::Receiver;
+use tokio::sync::broadcast::error::{RecvError, TryRecvError};
 
 use crate::API_VERSION;
 use crate::core::bus::{FrameBytes, envelope_json};
 use crate::core::state::AppState;
+use std::sync::Arc;
 
 /// How long a browser waits before it reconnects (the SSE `retry` field).
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
@@ -36,22 +37,13 @@ pub async fn stream(
     // Subscribe BEFORE the head frames are built: nothing published after this line is missed.
     let receiver = state.bus.subscribe();
     let guard = state.shutdown.stream_guard();
-    let stop = state.shutdown.token().clone();
     let keepalive = state.config.limits.sse_keepalive;
 
     let head = stream::iter([
         hello_event(&state),
         resync_event(&state, ResyncReason::Connect, None),
     ]);
-    let live = {
-        let state = state.clone();
-        BroadcastStream::new(receiver).map(move |item| match item {
-            Ok(frame) => topic_event(&frame),
-            Err(BroadcastStreamRecvError::Lagged(missed)) => {
-                resync_event(&state, ResyncReason::Lagged, Some(missed))
-            }
-        })
-    };
+    let live = live_events(state.clone(), receiver);
     // The guard tells the stop that the last frame is ready. It is released when that frame is
     // produced (or earlier, together with the stream, when the client leaves); hyper writes the
     // frame a moment later, and the stop waits for that write in step 4, when `serve` drains the
@@ -62,12 +54,62 @@ pub async fn stream(
         event
     });
 
-    Sse::new(
-        head.chain(live.take_until(stop.cancelled_owned()))
-            .chain(tail)
-            .map(Ok),
-    )
-    .keep_alive(KeepAlive::new().interval(keepalive).text("ka"))
+    Sse::new(head.chain(live).chain(tail).map(Ok))
+        .keep_alive(KeepAlive::new().interval(keepalive).text("ka"))
+}
+
+/// The frames of the bus, as events, until the stop token is cancelled.
+///
+/// A stop does not drop what was already published: when the token fires, the frames that wait in
+/// this client's buffer are still written (the last frame of a game mode wind-down, `done`, is
+/// published a moment before the stop), and only then does the stream end. `try_recv` returns
+/// `Empty` exactly when the buffer holds nothing more, so the drain is short and cannot wait.
+fn live_events(state: AppState, receiver: Receiver<Arc<FrameBytes>>) -> impl Stream<Item = Event> {
+    let stop = state.shutdown.token().clone();
+    stream::unfold((receiver, false), move |(mut receiver, mut stopping)| {
+        let (state, stop) = (state.clone(), stop.clone());
+        async move {
+            loop {
+                if !stopping {
+                    // `biased`: when the stop and a frame are both ready, the stop is seen first
+                    // and the rest of the buffer is drained below, in order.
+                    tokio::select! {
+                        biased;
+                        () = stop.cancelled() => {
+                            stopping = true;
+                            continue;
+                        }
+                        item = receiver.recv() => match item {
+                            Ok(frame) => return Some((frame_event(&state, &frame), (receiver, stopping))),
+                            Err(RecvError::Lagged(missed)) => {
+                                let event = resync_event(&state, ResyncReason::Lagged, Some(missed));
+                                return Some((event, (receiver, stopping)));
+                            }
+                            Err(RecvError::Closed) => return None,
+                        },
+                    }
+                }
+                return match receiver.try_recv() {
+                    Ok(frame) => Some((frame_event(&state, &frame), (receiver, stopping))),
+                    Err(TryRecvError::Lagged(missed)) => {
+                        let event = resync_event(&state, ResyncReason::Lagged, Some(missed));
+                        Some((event, (receiver, stopping)))
+                    }
+                    Err(TryRecvError::Empty | TryRecvError::Closed) => None,
+                };
+            }
+        }
+    })
+}
+
+/// The event of a frame the bus published. A frame that was too big for the stream is replaced by
+/// a `resync`: the client refetches what it shows.
+fn frame_event(state: &AppState, frame: &FrameBytes) -> Event {
+    if frame.too_big {
+        resync_event(state, ResyncReason::Lagged, None)
+    } else {
+        topic_event(frame)
+    }
 }
 
 /// Builds an event from the frame of a topic that the bus published.

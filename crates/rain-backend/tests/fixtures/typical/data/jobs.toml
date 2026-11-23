@@ -1,0 +1,55 @@
+# Scheduled jobs of the typical test folder (made-up names). Every schedule here is "1 January
+# 00:00", so no job is due while a test runs: they run only when a test starts them.
+schema_version = 1
+
+# A job that works.
+[[job]]
+id = "job-echo"
+name = "Say hello"
+kind = "cron"
+schedule = "0 0 1 1 *"
+enabled = true            # a trailing comment that must survive
+command = "cmd"
+args = ["/c", "echo hi"]
+
+# A job that fails with exit code 3.
+[[job]]
+id = "job-fail"
+name = "Always fails"
+kind = "cron"
+schedule = "0 0 1 1 *"
+enabled = false
+command = "cmd"
+args = ["/c", "exit 3"]
+
+# A Claude job. The program is a name that does not exist, so a test can never start a real one.
+[[job]]
+id = "job-claude"
+name = "Morning notes"
+kind = "claude"
+schedule = "0 6 * * *"
+enabled = false
+skill = "my-skill"
+claude_program = "rain-test-no-claude.exe"
+allowed_tools = ["Skill", "Read"]
+
+# --- a switched off job between comments ---
+[[job]]
+name = "Weekly tidy"      # no id: the id comes from the name
+kind = "cron"
+schedule = "30 9 * * 1"
+enabled = false
+label = "Mondays, nine thirty"
+command = "cmd"
+args = ["/c", "echo tidy"]
+# --- end ---
+
+# Waits about 90 seconds (ping), so that a test (or the game mode screen) has a run in progress.
+[[job]]
+id = "job-demo-wait"
+name = "Demo wait"
+kind = "cron"
+schedule = "0 0 1 1 *"
+enabled = true
+command = "ping"
+args = ["-n", "90", "127.0.0.1"]

@@ -2,7 +2,6 @@
 //! Foundation sections 3.4 and 4.5.
 
 use axum::Router;
-use axum::error_handling::HandleErrorLayer;
 use axum::extract::DefaultBodyLimit;
 use axum::middleware::{from_fn, from_fn_with_state};
 use rain_types::limits::API_PREFIX;
@@ -29,8 +28,7 @@ pub fn build(state: AppState, extra: Router<AppState>) -> Router {
         .layer(from_fn(layers::observe))
         .layer(CatchPanicLayer::custom(panic_response))
         .layer(from_fn_with_state(state.clone(), layers::check_request))
-        .layer(HandleErrorLayer::new(layers::handle_timeout))
-        .timeout(state.config.limits.request_timeout)
+        .layer(from_fn_with_state(state.clone(), layers::limit_time))
         .layer(DefaultBodyLimit::max(state.config.limits.body_limit));
 
     Router::new()

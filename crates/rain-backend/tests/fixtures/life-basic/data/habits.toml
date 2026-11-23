@@ -1,0 +1,25 @@
+# Made-up habits for the Life tests.
+schema_version = 1
+
+[[habit]]
+id = "gym"
+name = "Gym"
+icon = "dumbbell"
+property = "gym"
+cadence = "weekly"
+times = 3
+
+[[habit]]
+id = "read"
+name = "Read"
+icon = "book-open"
+property = "read"
+cadence = "daily"
+
+[[habit]]
+id = "review"
+name = "Review"
+icon = "pen"
+property = "review"
+cadence = "monthly"
+times = 2

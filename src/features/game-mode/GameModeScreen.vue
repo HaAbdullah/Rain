@@ -17,7 +17,6 @@ import { useResource } from '@/composables/useResource'
 import { useScreen } from '@/composables/useScreen'
 import { useSearch } from '@/composables/useSearch'
 import { api } from '@/data'
-import { mockControl } from '@/data/mock/control'
 import type { GameModeChoice, IconRef } from '@/data/types'
 import { errorMessage } from '@/lib/errors'
 import { keepFocus } from '@/lib/focus'
@@ -97,18 +96,8 @@ function choose(
   slot: 'primary' | 'secondary',
   choice: GameModeChoice,
 ): RainAction {
-  return { id, label, icon, slot, run: ({ api: rainApi }) => void rainApi.resolveGameMode(choice) }
-}
-
-const restart: RainAction = {
-  id: 'restart',
-  label: 'Restart prototype',
-  icon: 'rotate-ccw',
-  slot: 'primary',
-  run({ nav: rainNav }) {
-    mockControl.reset()
-    rainNav.go('home')
-  },
+  // The action awaits, so a refusal of the backend becomes a notice through runAction.
+  return { id, label, icon, slot, run: async ({ api: rainApi }) => { await rainApi.resolveGameMode(choice) } }
 }
 
 const actions = computed<RainAction[]>(() => {
@@ -122,8 +111,6 @@ const actions = computed<RainAction[]>(() => {
       ]
     case 'countdown':
       return [choose('close-now', 'Close now', 'power', 'primary', 'closeNow')]
-    case 'done':
-      return [restart]
     default:
       return []
   }
@@ -148,6 +135,20 @@ const interruptCount = computed(
 function things(count: number): string {
   return count === 1 ? '1 thing' : `${count} things`
 }
+
+/** Open Claude sessions are never stopped; the done screen says that they are still running. */
+const leftRunning = computed(() => state.value?.items.find((item) => item.effect === 'leftRunning')?.count ?? 0)
+const doneHint = computed(() =>
+  leftRunning.value > 0
+    ? 'Your Claude sessions are still running. Open Rain again from the Start menu.'
+    : 'Open Rain again from the Start menu.',
+)
+const reviewHint = computed(() => {
+  if (state.value?.waiting) return 'Rain goes on as soon as they are done.'
+  return state.value?.waitTimedOut
+    ? 'They did not finish in 3 minutes. Stopping them now loses unfinished work.'
+    : 'Stopping them now loses unfinished work.'
+})
 
 const heading = computed(() => {
   if (phase.value === 'review') {
@@ -181,7 +182,7 @@ const remaining = computed(() => {
 <template>
   <ScreenFrame>
     <div class="mx-auto my-auto flex w-full max-w-120 flex-col gap-6 px-4 py-8">
-      <ErrorRow v-if="mode.error.value" message="Game mode unavailable" @retry="mode.reload" />
+      <ErrorRow v-if="mode.error.value" message="Game mode unavailable" :detail="mode.error.value.message" @retry="mode.reload" />
 
       <div v-else-if="!state" class="flex flex-col items-center gap-6" aria-hidden="true">
         <template v-if="mode.showSkeleton.value">
@@ -197,7 +198,7 @@ const remaining = computed(() => {
         v-else-if="phase === 'off'"
         icon="circle-power"
         title="Game mode is off"
-        hint="It closes Claude sessions, scheduled jobs and idle jobs, then the Rain window."
+        hint="It stops Rain's jobs and closes the Rain window. Your Claude sessions keep running."
         action-label="Start game mode"
         @action="start"
       />
@@ -219,12 +220,8 @@ const remaining = computed(() => {
           </p>
           <p v-else class="text-xl font-semibold text-foreground">{{ heading }}</p>
 
-          <p v-if="phase === 'done'" class="max-w-sm text-13 text-muted-foreground">
-            Nothing is left running. Open Rain again from the Start menu.
-          </p>
-          <p v-else-if="phase === 'review'" class="max-w-sm text-13 text-muted-foreground">
-            {{ state.waiting ? 'Rain goes on as soon as they are done.' : 'Stopping them now loses unfinished work.' }}
-          </p>
+          <p v-if="phase === 'done'" class="max-w-sm text-13 text-muted-foreground">{{ doneHint }}</p>
+          <p v-else-if="phase === 'review'" class="max-w-sm text-13 text-muted-foreground">{{ reviewHint }}</p>
         </div>
 
         <!-- Drawn here by width: the shared Progress slides its indicator with a transform (spec 5.5). -->
@@ -259,6 +256,9 @@ const remaining = computed(() => {
           Then launch
           <RIcon :icon="nextGameIcon" :size="24" :label="nextGame.title" />
           <span class="min-w-0 truncate text-foreground">{{ nextGame.title }}</span>
+        </p>
+        <p v-if="state.launchError" class="text-center text-13 text-status-failed">
+          The game did not start: {{ state.launchError }}
         </p>
 
         <div v-if="actions.length > 0 || canCancel" class="flex flex-wrap items-center justify-center gap-2">

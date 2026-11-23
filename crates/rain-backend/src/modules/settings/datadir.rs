@@ -2,7 +2,7 @@
 //!
 //! Re-point, never move. When the new folder already holds Rain files, Rain reads them as they
 //! are. When it holds none and the old folder has some, Rain copies them (never overwriting,
-//! never deleting the old ones). The reasons: the owner keeps the folder in a private git
+//! never deleting the old ones). The reasons: the folder may be kept in a private git
 //! repository, so a silent move would damage it; and someone who sets a new folder early would
 //! otherwise lose the few settings he already changed.
 //!

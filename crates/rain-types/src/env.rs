@@ -64,7 +64,8 @@ pub fn user_slug(user_name: &str) -> String {
 /// Decides whether a run is a sandbox (foundation section 2.7).
 ///
 /// `RAIN_SANDBOX=0` forces real mode and `1` forces sandbox mode. Otherwise a run is a sandbox
-/// when it is a debug build, or when `RAIN_DATA_DIR` or `RAIN_PIPE` is set.
+/// when it is a debug build, or when `RAIN_DATA_DIR`, `RAIN_LOCAL_DIR` or `RAIN_PIPE` is set
+/// (the caller passes the first two as one flag, `data_dir_set`).
 pub fn sandbox_for(
     debug_build: bool,
     sandbox_var: Option<&str>,
@@ -130,7 +131,7 @@ pub fn sandbox() -> bool {
     sandbox_for(
         cfg!(debug_assertions),
         env::var(ENV_SANDBOX).ok().as_deref(),
-        env::var_os(ENV_DATA_DIR).is_some(),
+        env::var_os(ENV_DATA_DIR).is_some() || env::var_os(ENV_LOCAL_DIR).is_some(),
         env::var_os(ENV_PIPE).is_some(),
     )
 }

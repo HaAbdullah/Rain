@@ -1,15 +1,15 @@
 # Rain UI prototype: final specification
 
-Status: final for the UI-only prototype. Date: 2026-11-21.
+Status: the frontend design contract. The UI was first built as a prototype on mock data (2026-11-21); the data layer is now the real backend (`docs/backend/`).
 
 > **Amendments after the first test with the owner (2026-11-21). They win over the text below.**
 > - The bottom action bar (section 3.6) is removed. The frame is the rail, the header and the content area. Results of actions show in a small notice pill at the bottom of the window, only while there is something to say. Enter, Ctrl+Enter and Ctrl+K work as described; their labels are in the Ctrl+K panel and on the buttons in detail panes. Screens no longer provide a `summary`.
 > - F11 and a header button toggle true full screen (the window covers the taskbar), not maximise. Double-clicking the header still maximises.
-> - The icon package is `@lucide/vue`; `RainApi.search` takes `SearchType[]`; `mockControl` has `onReseed` and `pathExists`; `useSelection` has `resetOn`; `useSearch` has `disabled`.
+> - The icon package is `@lucide/vue`; `RainApi.search` takes `SearchType[]`; path fields in Settings ask `api.checkPaths`; `useSelection` has `resetOn`; `useSearch` has `disabled`.
 
 Base concept: **home-first** (winner on the daily-use and clarity lenses), built on **workspace-first's single show/hide window** (winner on buildability), with palette-first's safety rules, flat result list and fixed detail pane grafted in.
 
-Stack (fixed): Vue 3 + TypeScript + Vite, Tailwind CSS v4, shadcn-vue (Reka UI), Lucide icons, Tauri 2 on Windows 11 (WebView2). No backend. Every screen reads a typed mock layer.
+Stack (fixed): Vue 3 + TypeScript + Vite, Tailwind CSS v4, shadcn-vue (Reka UI), Lucide icons, Tauri 2 on Windows 11 (WebView2). The backend is a separate Rust process (`docs/backend/00-foundation.md`). Every screen reads it through `RainApi`.
 
 ---
 
@@ -23,13 +23,13 @@ Stack (fixed): Vue 3 + TypeScript + Vite, Tailwind CSS v4, shadcn-vue (Reka UI),
 6. **Focus rests in the search field; selection is state, not DOM focus.** It is implemented once (`useSelection`, `ItemList`, `ItemGrid`). Dialogs, popovers and Settings controls use native Reka focus and hand it back on close.
 7. **Enter never approves, deletes or stops anything.** Enter = primary, Ctrl+Enter = secondary, Ctrl+K = everything else. The action bar always names both.
 8. **Permissions have their own chords:** Ctrl+Y allow once, Ctrl+D deny, only in Workflows where the exact command is on screen. "Always allow" has no chord (button or Ctrl+K only).
-9. **One fixed detail pane** in Apps, Projects, Games, Workflows and Life. No pane toggle, no pushed panes, no splitters.
-10. **Esc ladder is three steps:** close overlay, clear query, hide. Shift+Esc hides at once. Ctrl+1 goes Home.
+9. **One fixed detail pane** in Apps, Projects, Games and Workflows. No pane toggle, no pushed panes, no splitters.
+10. **Esc ladder is four steps:** close overlay, leave a sub-view, clear query, hide. Shift+Esc hides at once. Ctrl+1 goes Home.
 11. **Tab means one thing:** next sub-view (the strip under the header). Ctrl+Up/Down means next group.
 12. **Game mode is gated.** If something would be interrupted, the countdown does not start until "Wait" or "Stop anyway" is chosen. Otherwise it starts at once.
 13. **System fonts, one dark theme, no toast library, no router, no state library.** Added packages: `d3-hierarchy`, `simple-icons` only.
 14. **Idle cost:** only the active screen is mounted, Disk is a lazy chunk, all intervals and the spinner stop while hidden, and after 60 s hidden Rain resets to Home.
-15. **Mock layer has scenarios** (Typical, Empty, Busy, Failing), simulated latency, and one failing item per section in Typical, all behind one `RainApi` interface that maps 1:1 to REST later.
+15. **One data interface.** Every screen reads `RainApi`, which maps 1:1 to the backend's REST routes. States such as empty or failing are produced by starting the backend on a fixture data folder or by stopping it, not by a switch in the app.
 
 ### Where the judges disagreed, and the call
 
@@ -40,11 +40,11 @@ Stack (fixed): Vue 3 + TypeScript + Vite, Tailwind CSS v4, shadcn-vue (Reka UI),
 | Home: spatial board vs list | List plus a glance panel | Removes the "two navigation models" strain and the most bespoke component, keeps "summon answers six of ten tasks". |
 | Compact summon setting | Cut | It reintroduces resizing a frameless window; if wanted later it is a second window, not a resize. |
 | Standard/Wide pair vs one resizable size | One remembered size, F11 = native maximise | Stock plugin, no custom sizes, and Disk still gets a big canvas with one key. |
-| Game-mode gate (2 for, 1 against) | Keep the gate, cut Retry/Skip/Force | Prevents the most expensive mistake; the mock stays a four-phase machine. |
+| Game-mode gate (2 for, 1 against) | Keep the gate, cut Retry/Skip/Force | Prevents the most expensive mistake; game mode is a four-phase machine. |
 | Rail labels setting | Cut | One rail width for the prototype; the header names the section and tooltips name the icons. |
 | Hold-Ctrl digit overlay on the rail | Cut | A key-state timer that misfires on every summon because Ctrl is already held. |
 | "Always allow" chord | No chord | A permanent grant must not sit one modifier away from the routine approve. |
-| Today panel on Home (buildability wanted it gone) | Keep, read-only, no continue-playing cover | It is why habits and agenda cost one press; it reuses list endpoints, no aggregate endpoint. |
+| Today panel on Home (buildability wanted it gone) | Keep, read-only, no continue-playing cover | It is why habits cost one press; it reuses list endpoints, no aggregate endpoint. |
 | Right-click menu | Right-click opens the same ActionPanel | Mouse users reach every action without a second action surface. |
 | Icon package | `@lucide/vue` | npm reports `lucide-vue-next` deprecated; verify at install, ship one icon package only. |
 | Alt digits on rows | Shown only while Alt is held | Keeps rows text-light; listed as an owner question. |
@@ -97,8 +97,9 @@ If registration fails (another app owns the chord), Rain logs it and still start
 One step per press, fixed order:
 
 1. Close the open overlay (action panel, dialog, shortcut sheet, select), or leave a focused Settings field.
-2. Clear a non-empty query.
-3. Hide the window.
+2. Leave a sub-view of the screen (Life: the open habit goes back to the list).
+3. Clear a non-empty query.
+4. Hide the window.
 
 Exceptions: on the Game mode screen Esc cancels game mode and returns to the previous screen. Shift+Esc hides at once from any state.
 
@@ -121,7 +122,7 @@ Exceptions: on the Game mode screen Esc cancels game mode and returns to the pre
 
 ### 2.6 While hidden
 
-- `<html data-hidden>` is set. CSS pauses the spinner; `useNow`, the mock tickers and every interval stop.
+- `<html data-hidden>` is set. CSS pauses the spinner; `useNow` and every interval of the page stop. The backend keeps running, and so does game mode: hiding the window never cancels it.
 - Two one-shot timers are allowed: reset to Home after `resetAfterSeconds`, and drop the disk tree 5 minutes after leaving Disk.
 - Only the active screen is mounted (`<component :is>`, no KeepAlive).
 
@@ -185,7 +186,7 @@ No vue-router. `src/nav/routes.ts` holds the table; `useNav()` holds `route: { n
 | `/projects` | `projects` | Projects | `folder-git-2` | Ctrl+3 | top | none |
 | `/games` | `games` | Games | `gamepad-2` | Ctrl+4 | top | `all`, `steam`, `epic`, `custom`, `installed` |
 | `/workflows/:sub` | `workflows` | Workflows | `workflow` | Ctrl+5 | top | `sessions`, `jobs`, `idle` |
-| `/life/:sub` | `life` | Life | `calendar-check` | Ctrl+6 | top | `month`, `year` |
+| `/life` | `life` | Life | `calendar-check` | Ctrl+6 | top | none |
 | `/disk` | `disk` | Disk | `hard-drive` | Ctrl+7 | top | none |
 | `/game-mode` | `gameMode` | Game mode | `circle-power` | Ctrl+G | bottom | none |
 | `/settings` | `settings` | Settings | `settings` | Ctrl+, | bottom | none |
@@ -259,8 +260,8 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 4. **Ctrl+digit goes to a section** in rail order. Alt+digit runs the Nth row on Home.
 5. **Ctrl+letter has one meaning everywhere** (table below). A chord that does not apply to the selected item does nothing and is not listed in Ctrl+K.
 6. **Function keys act on the window** (F1 help, F10 keep open, F11 maximise).
-7. **Tab is the next sub-view. Ctrl+Up/Down is the next group. PageUp/PageDown is a page** (a page of rows, or a month/year in Life).
-8. **Esc goes back, three steps at most.**
+7. **Tab is the next sub-view. Ctrl+Up/Down is the next group. PageUp/PageDown is a page** (a page of rows, or a year in an open habit).
+8. **Esc goes back, four steps at most.** (The sub-view step exists only on Life.)
 9. Left/Right move the selection in grids and belong to the caret in lists. Home/End always belong to the caret.
 10. One table (`src/keys/keymap.ts`) binds the keys, fills the tooltips and generates the shortcut sheet.
 
@@ -269,7 +270,7 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 | Group | Key | Action | Applies when |
 |---|---|---|---|
 | OS | Ctrl+` | Summon / hide | Always (global hotkey) |
-| Window | Esc | Back: overlay, query, hide | Always |
+| Window | Esc | Back: overlay, open habit, query, hide | Always |
 | Window | Shift+Esc | Hide now | Always |
 | Window | F1 or Ctrl+/ | Shortcut sheet | Always |
 | Window | F10 | Keep open on/off | Always |
@@ -280,15 +281,15 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 | Go | Tab / Shift+Tab | Next / previous sub-view | Screen has a `ViewStrip` |
 | Move | Up / Down | Move selection | Always |
 | Move | Left / Right | Move selection | Grid screens |
-| Move | PageUp / PageDown | Page up / down; previous / next month or year in Life | Always |
-| Move | Ctrl+Up / Ctrl+Down | Previous / next group (habit in Life Year) | Grouped screens |
-| Move | Backspace (empty query) | Step out: Disk folder up, else remove chip | Always |
+| Move | PageUp / PageDown | Page up / down; a year in the open habit | Always |
+| Move | Ctrl+Up / Ctrl+Down | Previous / next group (Life: Daily, Weekly, Monthly) | Grouped screens |
+| Move | Backspace (empty query) | Step out: Disk folder up, close the open habit, else remove chip | Always |
 | Act | Enter | Primary action | Item selected |
 | Act | Ctrl+Enter | Secondary action | Item has one |
 | Act | Ctrl+K | Action panel | Item selected |
 | Act | Alt+1 .. Alt+9 | Run the Nth numbered row | Home list |
 | Act | Ctrl+P | Pin / unpin to Home | app, pool, project, game |
-| Act | Ctrl+N | New: pool (Apps), custom game (Games) | Apps, Games |
+| Act | Ctrl+N | New: pool (Apps), custom game (Games), habit (Life) | Apps, Games, Life |
 | Act | Ctrl+R | Run now / rescan / re-read | job, idle job, Disk, Life; otherwise reload the screen's data |
 | Act | Ctrl+L | Log or transcript | session, job, idle job (also from Home rows) |
 | Act | Ctrl+Y | Allow once | Workflows > Sessions, waiting session selected |
@@ -300,17 +301,20 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 
 | Item | Where | Enter | Ctrl+Enter | More in Ctrl+K |
 |---|---|---|---|---|
-| App | anywhere | Launch | Open file location | Pin, Copy path |
+| App | anywhere | Launch | Open file location (only for an app that has a file; a Store app has none) | Pin, Copy path (only for an app that has a file) |
 | Pool | anywhere | Launch all | Edit pool | Pin, Duplicate, Delete (confirm) |
-| Project | anywhere | Open dev environment (Focus if open; Locate if missing) | Open in editor only | Pin, Terminal here, New Claude session here, Reveal in Explorer, Copy path |
-| Game | anywhere | Play (Install if not installed) | Play in game mode | Pin, Open store page, Hide from library |
-| Session | Workflows | Focus terminal | Open folder in editor | Allow once, Always allow, Deny (waiting only), Transcript, Stop session (confirm), Copy folder path |
+| Project | anywhere | Open dev environment (Focus if its editor window is open; Locate if the folder is missing) | Open in editor only | Pin, Terminal here (a Windows Terminal tab in the folder), New Claude session here (a tab that runs `claude`), Reveal in Explorer, Copy path |
+| Game | anywhere | Play; Choose program (a local game that has no usable program file); Show in library (in the Hidden view) | Play in game mode | Pin, Show in Explorer, Edit game (local games), Hide from library, Remove from library (games you added) |
+| Session | Workflows | Focus (terminal, or the Claude app) / Transcript when ended | Open folder in editor | Allow once, Always allow, Deny (only while the request can be answered from Rain), Transcript, Stop session (confirm; live terminal sessions only), Copy folder path |
 | Job | Workflows | Open runs and log | Enable / disable | Run now, Copy cron |
 | Idle job | Workflows | Open log | Enable / disable | Run now (ignore idle) |
 | Session, job, idle job | Home | Show in Workflows | (none) | Transcript / log, Run now |
-| Day cell | Life | Open that day's note | Open today's note | Re-read vault |
+| Habit | Life list | Tick / untick today | Open habit | Edit habit, Open today's note, Re-read vault, Delete habit (confirm) |
+| Habit day | Life, open habit | Tick / untick that day (last 31 days) | Open that day's note | Open today's note, Edit habit, Re-read vault |
 | Drive | Disk | Scan | (none) | (none) |
 | Disk node | Disk | Open folder (folders only) | Reveal in Explorer | Rescan, Copy path |
+
+An `other` row has no actions.
 | Setting | Settings | Change (toggle, open, or edit) | Reset to default | (none) |
 | Command | Home | Run | (none) | (none) |
 
@@ -679,7 +683,7 @@ useActionPanel(); useLogDialog(); useConfirm()
 useLaunch(): { runs: Ref<Record<ID, LaunchRun>>; launch(target: LaunchTarget): Promise<LaunchRun> }  // holds the window open, hides on success, notices on failure
 ```
 
-Resource keys (shared cache): `apps`, `pools`, `projects`, `games`, `sessions`, `jobs`, `idleJobs`, `machine`, `habits`, `habitDays:<from>:<to>`, `events:<from>:<to>`, `vault`, `drives`, `settings`, `pinned`, `recent`.
+Resource keys (shared cache): `apps`, `pools`, `projects`, `games`, `sessions`, `jobs`, `idleJobs`, `machine`, `habits`, `habitDays:open`, `habitStats:open`, `vault`, `drives`, `settings`, `pinned`, `recent`.
 
 ### 6.3 Shell interface
 
@@ -704,13 +708,14 @@ export const shell: Shell                       // src/shell/index.ts picks Taur
 ```ts
 // src/actions/types.ts
 export type ItemType = 'app' | 'pool' | 'project' | 'game' | 'session' | 'job' | 'idleJob' | 'command'
-                     | 'day' | 'drive' | 'diskNode' | 'setting'
+                     | 'habit' | 'habitDay' | 'drive' | 'diskNode' | 'setting'
 export type ActionTarget =
   | { type: 'app'; id: ID; item: AppEntry }       | { type: 'pool'; id: ID; item: Pool }
   | { type: 'project'; id: ID; item: Project }    | { type: 'game'; id: ID; item: Game }
   | { type: 'session'; id: ID; item: ClaudeSession } | { type: 'job'; id: ID; item: ScheduledJob }
   | { type: 'idleJob'; id: ID; item: IdleJob }    | { type: 'command'; id: ID; item: CommandDef }
-  | { type: 'day'; id: ID; item: HabitDay }       | { type: 'drive'; id: ID; item: Drive }
+  | { type: 'habit'; id: ID; item: HabitSummary } | { type: 'habitDay'; id: ID; item: HabitDayItem }
+  | { type: 'drive'; id: ID; item: Drive }
   | { type: 'diskNode'; id: ID; item: DiskNode }  | { type: 'setting'; id: ID; item: SettingDef }
 export interface ActionContext {
   where: 'home' | 'section'
@@ -735,7 +740,7 @@ export function actionsFor(target: ActionTarget, ctx: ActionContext): RainAction
 
 Each feature folder owns one `actions.ts` exporting its `ActionProvider`s. `registry.ts` imports them by fixed path and is not edited after the foundation phase.
 
-`CommandDef { id: string; title: string; icon: string; keywords: string[]; keys?: string; run(ctx: ActionContext): void }`, defined in `src/actions/commands.ts`: Go to each of the 9 routes, Game mode, Open today's note, Scan drive C:, New pool, Shortcut sheet, Keep open, and the prototype commands (Simulate permission request, Mock scenario: Typical / Empty / Busy / Failing, Reset mock data). Commands are scored client-side with `lib/score.ts` and merged into the result list.
+`CommandDef { id: string; title: string; icon: string; keywords: string[]; keys?: string; run(ctx: ActionContext): void }`, defined in `src/actions/commands.ts`: Go to each of the 9 routes, Game mode, Open today's note, Scan drive C:, New pool, Shortcut sheet, and Keep open. Commands are scored client-side with `lib/score.ts` and merged into the result list.
 
 ---
 
@@ -769,18 +774,17 @@ Layout: `ScreenFrame pane="md"`. Main 884 px: `ItemList` (`clickRuns`), 8 px pad
 - Action bar summary: the item's one-line detail (path, schedule, playtime).
 
 **With a query (no chip): one flat ranked list.**
-- Sources: `api.search(query)` plus commands scored locally, merged by `score`, top 50. No groups, no type filter. The first row is selected. Alt+1..9 number the first nine rows.
+- Sources: `api.search(query)` plus commands scored locally, merged by `score`, top 50. The backend ranks apps, pools, projects, games, sessions, jobs and idle jobs with the same scorer as `lib/score.ts` (a keyword match counts 60 percent of a title match). No groups, no type filter. The first row is selected. Alt+1..9 number the first nine rows.
 - Subtitle only when two titles collide (project path, game source).
 - No match: `EmptyState` `search-x` "No match", no button.
 - A failed source appears as one `ErrorRow` at the end ("Steam library unavailable", Retry).
 
-**Launching from Home:** the row's `StatusDot` runs, the action bar shows "Launching Web dev 2/3", Rain hides on success. On failure the row shows failed and the notice names the step ("Capture tool: executable not found"); Enter retries.
+**Launching from Home:** the row's `StatusDot` runs, the action bar shows "Launching Web dev 2/3", Rain hides on success. On failure the row shows failed and the notice names the step ("Capture tool: executable not found"); Enter retries. The window stays open while any step runs. If the final state is lost (for example the stream reconnects) the screen asks `getLaunch` every 3 seconds after the first 5.
 
-**TodayPanel** (`features/home/TodayPanel.vue`), 16 px padding, three blocks divided by `Separator`:
+**TodayPanel** (`features/home/TodayPanel.vue`), 16 px padding, two blocks divided by `Separator`:
 1. Header: "Today" 16/600 and the date "Sat 21 Nov" 12 px muted.
-2. Habits: one row of 28x28 tiles, one per habit (max 7). Done: icon `--foreground` on `--heat-3`. Not yet: icon `--muted-foreground` on `--surface-2`. Skip: a dash. Tooltip: name and value. Click goes to Life.
-3. Agenda: next 4 events from now. Row 32 px: 3 px calendar colour bar, time (12 px mono), title (13 px). The current event has a `--hover` fill. Calendar not connected: one line "Calendar not connected" linking to Settings.
-4. Bottom: `Button variant="outline"` "Today's note" with `notebook-pen` and `KeyHint` Ctrl T.
+2. Habits: one row of 28x28 tiles, one per habit (max 7). Done: icon `--foreground` on `--heat-3`. Not yet: icon `--muted-foreground` on `--surface-2`. Tooltip: name and "done" or "not yet". Click goes to Life. Under the tiles "3 of 5 done today" (12 px muted). No habits: "No habits yet. Add one in Life", linking to Life. Home never ticks a habit.
+3. Bottom: `Button variant="outline"` "Today's note" with `notebook-pen` and `KeyHint` Ctrl T.
 
 Keys: section 4.3. Home has no chip, no sub-views.
 
@@ -792,23 +796,26 @@ Layout: `ScreenFrame pane="md"`. Main: `ItemList` with two groups, "Pools" then 
 - App row: `RIcon`, name, trailing 12 px `StatusDot success` when running, pin glyph when pinned.
 - `PoolDetail`: name, "Last launched" `RelTime`, members as 40 px rows (app icon, name, args in mono muted, delay as "+2 s" when set). `actions` slot: `Button` "Launch all" + `KeyHint` Enter, `Button variant="ghost"` "Edit" + `KeyHint` Ctrl Enter.
   - While launching, the member list is replaced by `LaunchChecklist`. A partial failure stays until the next launch or a selection change, with a "Retry failed" button.
-- `AppDetail`: 32 px icon, name, `PathText` exe path, running state, "In pools" (names). Buttons: Launch, Open file location.
+- `AppDetail`: 32 px icon, name, `PathText` of the file (or the line "Store app" for an app without a file), running state, "In pools" (names). Buttons: Launch, and Open file location when the app has a file.
 - `PoolEditorDialog` (`features/apps/PoolEditorDialog.vue`, `Dialog` 480 px): name `Input`, then a `Command` with `CommandInput` and one `CommandItem` + `Checkbox` per app, checked members first. Footer: Cancel, Save (Ctrl+Enter). Opened by Ctrl+N (new) and "Edit pool".
 - Delete pool: Ctrl+K, then `ConfirmDialog`.
-- Empty: no pools shows one dashed 40 px row "New pool" + `KeyHint` Ctrl N in the Pools group. No apps at all: `EmptyState` `layout-grid` "No apps found", button "Open settings".
-- Filtering (chip): matches app and pool names and keywords.
+- Empty: no pools shows one dashed 40 px row "New pool" + `KeyHint` Ctrl N in the Pools group. No apps at all: `EmptyState` `layout-grid` "No apps found", hint "Rain lists the apps that Windows shows in the Start menu.", button "Scan again" (asks the backend to read the app list again; the command "Rescan apps" does the same from Home).
+- Filtering (chip): matches app and pool names and keywords. Keywords come from the user's `app-ids.toml`, the file name of the program, and a small built-in list of common words ("browser", "editor").
+- A pool's apps can have command-line arguments and a delay; they are set in `pools.toml` and shown in the detail pane (the editor keeps them).
+- App icons are the icons Windows shows for the app; when one cannot be loaded the row shows a letter tile.
 
 ### 7.3 Projects (`features/projects/ProjectsScreen.vue`)
 
 Layout: `ScreenFrame pane="md"`. Main (852 px inside 16 px padding): two `ItemGrid` groups in one selection.
 
 - Group "Most active": 3 fixed columns, cards `aspect-ratio: 16 / 9` (about 276x155). Top 3 by `activityScore`.
-- Group "All projects": 5 fixed columns, cards 88 px high (about 161 wide), ordered by `lastOpenedAt` descending.
+- Group "All projects": 5 fixed columns, cards 88 px high (about 161 wide), ordered by `lastOpenedAt` descending. Projects that were never opened from Rain come after those, ordered by activity, then name, and their card shows no time.
 - Large card (`ProjectCard size="lg"`, in a `Tile`, 12 px padding): letter tile 32 + name 16/600; `git-branch` 12 px + branch in mono 12 px; `RelTime short` top-right; one `IconStack` (environment tools); commit strip of 14 bars along the bottom (plain elements, 24 px max height, `--heat-2`, today's bar `--heat-4`); `StatusDot` top-right corner when a Claude session lives there (the session's status).
 - Small card (`size="sm"`): letter tile 24 + name 14/500 on line one; branch mono 12 px + `RelTime short` on line two.
-- Open project: 8 px `--status-success` dot after the name; Enter reads "Focus".
+- Open project: an editor window of the project is open (found by its window title). 8 px `--status-success` dot after the name; Enter reads "Focus" and brings the editor forward without starting anything else.
+- A project is a git repository directly inside a folder of Settings > Project folders. Folders without `.git` are not projects.
 - Missing folder: card at 50% opacity with `folder-x`; Enter reads "Locate" and goes to Settings.
-- Pane `ProjectDetail`: name, `PathText`, branch, "3 changed files", the environment as rows (`EnvStep`: icon, label, command or URL in mono), sessions here (`StatusDot` + title, click goes to Workflows). Buttons: "Open" + Enter, "Editor only" + Ctrl Enter. During a launch the environment rows become `LaunchChecklist`.
+- Pane `ProjectDetail`: name, `PathText`, branch, "3 changed files" (only when git answered; without git the line is absent), the environment as rows (`EnvStep`: icon, label, command or URL in mono), sessions here (`StatusDot` + title, click goes to Workflows). Buttons: "Open" + Enter, "Editor only" + Ctrl Enter. During a launch the environment rows become `LaunchChecklist`.
 - Empty: `EmptyState` `folder-git-2` "No projects yet", hint "Add a project folder in Settings", button "Open settings".
 - Arrows move in 2D; Up from the first small row goes to the large card above the same column position (column index scaled 5 to 3).
 
@@ -816,14 +823,15 @@ Layout: `ScreenFrame pane="md"`. Main (852 px inside 16 px padding): two `ItemGr
 
 Layout: `ScreenFrame pane="md"` with a strip.
 
-- Strip (`ViewStrip`): All (`library`), Steam (brand), Epic (brand), Custom (`box`), Installed (`hard-drive-download`), each with a count. A source that failed to load shows `warn` (a `triangle-alert` 12 px in `--status-waiting`). Tab cycles.
-- Main: `ItemGrid` `minCol=132`, gap 12 (6 columns at default size). Groups: "Recent" (the last-played games that fit one row, by the live column count), then "Library" A to Z. Hidden games are left out.
+- Strip: All, Steam, Epic, Local (`box`), Installed, and Hidden (`eye-off`, only while a game is hidden), each with a count. A source that is not installed or switched off has no tab. A source that failed to load shows `warn` (a `triangle-alert` 12 px in `--status-waiting`) and its message (for example "Game folder not found: D:\Games") in an `ErrorRow` with Retry; the other sources still show. Tab cycles.
+- "Local" holds the games Rain finds in the folders of Settings > Game folders (every direct subfolder is one game; the title is the folder name; the program file is guessed) and the games added by hand.
+- Main: `ItemGrid` `minCol=132`, gap 12 (6 columns at default size). Groups: "Recent" (the last-played games that fit one row, by the live column count), then "Library" A to Z. Hidden games are left out of every tab except Hidden; in Hidden, Enter shows the game again.
 - Tile (`GameTile`): cover `aspect-ratio: 2 / 3`, radius 8, `object-fit: cover`, `loading="lazy" decoding="async"`; source badge 20 px bottom-left on a `--surface-1` disc; title on one 12 px line under the cover, truncated.
-  - Not installed: cover at 45% opacity with a centred `download` 20 px.
+  - A local game whose program file is gone is dimmed (cover at 45% opacity) and its Enter reads "Choose program". Steam and Epic games are listed only while installed.
   - Running: `Tile ring="success"`.
   - No art: `--surface-2` tile with the title centred, 14/500.
-- Pane `GameDetail`: cover 200 px wide, title 16/600, source, last played `RelTime`, playtime "42 h", size "38 GB", installed state. Buttons: "Play" (or "Install") + Enter, "Play in game mode" + Ctrl Enter.
-- `CustomGameDialog` (Ctrl+N): name, exe path, cover path `Input`s. Mock only stores it.
+- Pane `GameDetail`: cover 200 px wide, title 16/600, source, last played `RelTime`, playtime "42 h", size "38 GB", installed state. Buttons: "Play" (or "Choose program") + Enter, "Play in game mode" + Ctrl Enter.
+- `CustomGameDialog` (Ctrl+N: Add a game; Ctrl+K "Edit game": the same dialog): name, program file, cover image path. A guessed program file says so.
 - Source error: `ErrorRow` above the grid ("Epic library unavailable", Retry). The other sources still show.
 - Empty: `EmptyState` `gamepad-2` "No games found", button "Open settings".
 - "Play in game mode" calls `api.startGameMode({ thenLaunchGameId })` and goes to `/game-mode`.
@@ -834,18 +842,17 @@ Layout: `ScreenFrame pane="wide"` with a strip. Strip: Sessions (`bot`), Jobs (`
 
 **(a) Sessions (`sessions/SessionsView.vue`)**
 
-- `ItemList rowSize="lg"`, groups in fixed order that never collapse and are omitted when empty: Waiting on you, Failed, Working, Done, Idle.
+- `ItemList rowSize="lg"`, groups in fixed order, never collapsed, left out when empty: Waiting on you (an open permission request exists), Failed (the last turn ended with an API error, or the session's program vanished while it worked), Working, Done (the session has ended normally), Idle (alive and waiting for your next prompt). A finished turn of a live session is Idle, not Done.
 - On open, the first waiting session is selected, otherwise the first row.
 - Row: `StatusDot` 16; title 14 px; line two: folder name + branch in mono 12 px (middle-truncated); trailing `RelTime short` of `lastActivityAt`.
   - Waiting: line two is the request on one line in `--foreground` ("Bash: npm install"), and the row has a 2 px `--status-waiting` bar on its left edge.
   - Stale (running and silent for 60 s or more): `StatusDot stale`, tooltip "No activity for 3 m".
-- Pane `SessionDetail`: title; `PathText` cwd; branch, model, started `RelTime`, tokens ("48k"); last message (13 px, 3 lines max); then:
-  - **Request card** (waiting only): `Badge` with the tool, the exact command or diff in a mono block on `--surface-0` (max height 220, scrolls, `.selectable`), and three buttons in a row: "Allow once" (primary) + `KeyHint` Ctrl Y, "Always allow" (outline, no keycap), "Deny" (ghost) + `KeyHint` Ctrl D.
-  - Last 8 events, one line each: time (mono 12 px), kind icon 12 px, text (13 px, truncated).
-  - `actions` slot: "Focus terminal" + Enter, "Transcript" + `KeyHint` Ctrl L.
+- Pane `SessionDetail`: title; path; branch, model, started, Context ("36k": the size of the context of the last request); last message; then the request card (below); the last 8 events; buttons "Focus terminal" (or "Focus Claude app" for a desktop session) with Enter, and "Transcript" with Ctrl L. An ended session has no focus button; Enter opens the transcript.
+- **Request card**: tool badge, the exact command or diff, and while the request can still be answered from Rain (about 20 seconds after it arrived): "Allow once" with Ctrl Y, "Always allow" (for this session only; the notice names the rule, for example "Always allowed Bash(npm install) for this session"), "Deny" with Ctrl D. After that the card shows one muted line, "Answer this in the terminal" ("in the Claude app" for a desktop session), and the session stays in Waiting on you until it is answered there.
 - After an answer the selection moves to the next waiting session and a notice reads "Allowed, 1 waiting". Five blocked sessions take five Ctrl+Y presses, each with its command on screen.
-- Stop session: Ctrl+K, then `ConfirmDialog`.
-- Empty: `EmptyState` `bot` "No sessions", hint "Sessions started in a terminal appear here". No button.
+- Enter on a live session brings its window forward and hides Rain; when no window can be found the notice reads "Could not find the window for this session" and Rain stays.
+- Stop session: Ctrl+K, then `ConfirmDialog`. Offered only for a live terminal session. Sessions inside the Claude desktop app cannot be stopped from Rain.
+- Empty: `EmptyState` `bot` "No sessions", hint "Sessions started in a terminal appear here".
 
 Why this beats the default app: waiting sessions are always first and also on Home; they are answered in place; the next one is selected automatically; groups never collapse; silent sessions are marked stale instead of showing a stuck spinner; the rail and the header show the count on every screen.
 
@@ -853,47 +860,41 @@ Why this beats the default app: waiting sessions are always first and also on Ho
 
 - `ItemList` with one untitled group and a 28 px column header row (12 px muted): Name, Schedule, Next, Last 10.
 - Order: last run failed, then running, then by `nextRunAt`; disabled jobs last.
-- Row (grid `24px minmax(0,1fr) 168px 88px 104px 24px`): `StatusDot` (running, else last result, else idle); name + kind icon 12 px (`clock` cron, `bot` Claude); `scheduleLabel` 13 px muted ("Daily 06:00"); next run `RelTime` ("in 9 h"); run strip: the last 10 runs as 8x8 px squares, 2 px gap, radius 2 (success `--status-success`, failed `--status-failed`, running `--status-running`, none `--surface-2`); `circle-pause` when disabled. Disabled rows are at 60% opacity.
+- Row (grid `24px minmax(0,1fr) 168px 88px 104px 24px`): `StatusDot` (running, else last result, else idle); name + kind icon 12 px (`clock` cron, `bot` Claude); `scheduleLabel` 13 px muted ("Every day at 06:00"); next run `RelTime` ("in 9 h"); run strip: the last 10 runs as 8x8 px squares, 2 px gap, radius 2 (success `--status-success`, failed `--status-failed`, running `--status-running`, none `--surface-2`); `circle-pause` when disabled. Disabled rows are at 60% opacity.
 - Pane `JobDetail`: name, cron in mono, schedule label, "Enabled" `Switch` (click, or Ctrl+Enter), next run, then the last 20 runs as 32 px rows (status square, start time, duration, exit code). Buttons: "Runs and log" + Enter, "Run now" + `KeyHint` Ctrl R.
 - Enter opens `LogDialog` with the job's runs on the left and the most recent failed run selected (else the latest). The log loads on demand with `api.getRunLog(runId)`.
-- Run now: the row shows running for the mock duration, then a new run is added.
-- Empty: `EmptyState` `calendar-clock` "No scheduled jobs".
+- Run now starts the job at once, also when it is switched off. The row shows running while the real run goes on, then the new run appears. The log dialog follows a running run: it reloads every 3 seconds while that run is the selected one and the window is visible.
+- Schedule labels are written from the cron text ("Every day at 06:00", "Weekdays at 09:30", "Every 15 minutes"); a job may set its own label in `jobs.toml`.
+- Empty: `EmptyState` `calendar-clock` "No scheduled jobs", hint "Jobs are defined in jobs.toml in your data folder".
 
 **(c) Idle (`idle/IdleView.vue`)**
 
 - A 40 px status line above the list: `monitor` icon + "PC active. Idle jobs start after 10 min idle." (13 px muted) from `MachineState`.
 - `ItemList rowSize="lg"`. Row: `StatusDot` (state); name; line two: state in words + ETA ("Running, 12 min left", "Queued", "Paused"); trailing resource icon (`cpu` or `gpu`) and a `Progress` 160 px wide.
 - Pane `IdleJobDetail`: name, trigger ("After 10 min idle"), resource, last run, `Progress`, "Enabled" `Switch`. Buttons: "Log" + Enter, "Run now" + `KeyHint` Ctrl R.
-- Empty: `EmptyState` `cpu` "No idle jobs".
+- Empty: `EmptyState` `cpu` "No idle jobs", hint "Idle jobs are defined in idle-jobs.toml in your data folder".
+- A job starts after its idle time, is frozen when you use the PC (state Paused) and continues after the same time of quiet. "Run now (ignore idle)" starts it at once and it is not frozen.
 
 ### 7.6 Life (`features/life/LifeScreen.vue`)
 
-Layout: `ScreenFrame pane="md"` with a strip. Rain only reads; there is no editing anywhere on this screen.
+Layout: `ScreenFrame pane="none"`, no strip. Rain reads your vault and writes exactly one thing: when you tick a habit, it sets that one property in that day's daily note and changes nothing else. There is no calendar and no agenda on this screen.
 
-- Strip: Month (`calendar`), Year (`calendar-range`). `end` slot: `chevron-left`, period label ("November 2026" or "2026", 13 px), `chevron-right`, "Today" ghost button, and a `lock` icon whose tooltip reads "Rain reads your vault and never writes to it".
-- **Month view (`MonthHeatmap.vue`):** one row per habit. Grid `132px repeat(<days>, minmax(0, 20px)) 40px 40px`, gap 3: habit icon 16 + name 13 px; one square cell per day; streak ("5"); completion ("82%"). A header row shows day numbers (12 px, `--text-3`, every day; weekends in `--muted-foreground`).
-- **Year view (`YearHeatmap.vue`):** habit chips above the grid (`ToggleGroup type="single"`: "All" + one chip per habit with icon and name, 12 px). Grid: 53 week columns x 7 rows, `grid-auto-flow: column`, 12 px cells, 3 px gap (820 px wide with the weekday labels). Month labels above, M / W / F labels on the left, 12 px `--text-3`. "All" colours by completion ratio.
-- Cells (radius 3):
-  - Value: `--heat-1..4` (boolean true = `--heat-3`; numbers scaled by `value / target`, clamped; four steps).
-  - Miss (note exists, not done): `--heat-0`.
-  - Skip: `--heat-0` with a centred 6x2 px dash in `--text-3`.
-  - No note that day: transparent with a 1 px `--selected` border (hollow).
-  - Today: 1 px `--foreground` outline. Selected: 2 px `--ring` outline.
-  - Future days are not drawn.
-- Cursor: arrows move the day cell in 2D (Month: Up/Down change habit, Left/Right change day and roll into the next month). PageUp/PageDown: previous / next month or year. Ctrl+Up/Down in Year: previous / next habit chip. The cursor starts on today.
-- Action bar summary reads out the cell: "Tue 3 Nov, Reading 30 min, streak 5". Nothing depends on hover.
-- Typing with the chip filters habits by name (Month: rows; Year: selects the best match).
-- Pane `DayPanel`: the selected date 16/600; each habit's value as a row (icon, name, value or "skipped" or a dash); "No note for this day" when `noteExists` is false; `Button variant="outline"` "Today's note" + `KeyHint` Ctrl T; `Separator`; `Agenda` (read-only): groups Today and Tomorrow, rows 40 px (3 px colour bar, time 12 px mono, title 13 px, location 12 px muted), current event with `--hover` fill.
-- Enter on a day with no note shows the notice "No note for this day". Rain never creates one.
-- States: vault not found: the main area is `EmptyState` `calendar-check` "Choose your vault", button "Open settings"; the agenda still shows. Calendar not connected: `EmptyState` inside the agenda only ("Connect calendar"). A habit whose property is missing from the notes: its Month row shows `triangle-alert` 12 px and the tooltip "Property 'meditate' not found in notes".
+- **List.** `ItemList` with three groups, "Daily", "Weekly", "Monthly" (group header with a count; empty groups are not drawn). One row per habit, 40 px: habit icon 20, name 14 px, for weekly and monthly "2 / 3" (13 px; `--foreground` when the target is reached, else `--muted-foreground`), the heat strip, today's `Checkbox`. The strips are right aligned so the checkboxes form one column.
+- **Heat strip.** Daily: the last 70 days, one 10 px cell per day, gap 2, today last with a 1 px `--foreground` outline. Weekly: the last 12 weeks, one 14 px cell per week (Monday to Sunday), gap 3. Monthly: the last 12 months, one 14 px cell per month. Cells (radius 3): done `--heat-3`; partial (some ticks, fewer than the target; weekly and monthly only) `--heat-1`; miss `--heat-0`; no note that day (daily only) transparent with a 1 px `--selected` border. The current period has the 1 px outline. Cells shrink with the window.
+- **Keys.** Enter ticks or unticks today. Ctrl+Enter opens the habit's full view. Ctrl+K: Edit habit, Open today's note, Re-read vault, Delete habit (confirm). Ctrl+N: new habit. Ctrl+R: re-read the vault. Typing with the chip filters habits by name. Left and Right belong to the caret. Mouse: the checkbox ticks, a click on the row opens the full view, a right click opens the action panel.
+- **Full view (a sub-view of Life, not a route).** Header: back button (`arrow-left`, tooltip "Back" + `Esc`), icon, name, "Weekly, 3 times", today's `Checkbox`, edit button (`pencil`). Under it a row of figures (label 12 px `--text-3`, value 20 px): Streak, Best (in days, weeks or months), Rate, This week, This month, This year. Then the year grid for one habit: 53 week columns x 7 rows, 12 px cells, gap 3, month labels above, M / W / F on the left; done `--heat-3`, not done `--heat-0`, no note hollow; future days are not drawn; days older than 31 days at 50% opacity; today has the 1 px outline and the selected day the 2 px `--ring` outline. Beside the year label two chevron buttons change the year. Under the grid one read-out line: "Sun 22 Nov: done", "not done" or "no note".
+- **Full view keys.** Left/Right: one week. Up/Down: one day. PageUp/PageDown: one year. Enter: tick or untick the selected day, only within the last 31 days (an older day shows the notice "That day is too old for Rain to change. Open its note instead."). Ctrl+Enter: open that day's note. Esc or Backspace on an empty query: back to the list; the list keeps its selection.
+- **New / edit habit dialog.** Name, Property (the checkbox property in the daily note; filled from the name; chips "gym - 6 days" for checkbox properties already found in the notes), Icon (a grid of 28), How often (Daily, Weekly, Monthly), Times (weekly and monthly only: "times a week" / "times a month"). Cancel, and Save + `KeyHint` Ctrl Enter. Same dialog rules as the pool editor.
+- **States.** Vault not set: `EmptyState` `calendar-check` "Choose your vault", button "Open settings". Vault path wrong: "Vault not found", "Nothing at {path}. Check the path in Settings." No habits: "No habits yet", "A habit is a checkbox property at the top of your daily note.", button "New habit" + `KeyHint` Ctrl N. A problem with the daily notes (folder or format): one muted line above the list with the sentence and "Open settings". Ticking switched off (development build): one muted line "Ticking is switched off in this development build." and disabled checkboxes. A tick that fails shows an error notice with the reason ("The property 'gym' in that note is not a checkbox, so Rain left the note alone.").
+- **Writing rules (for the reader of the spec).** A tick sets `property: true` in the note of that day. If the property exists the `true`/`false` word is replaced and nothing else changes. If it is missing one line is added at the end of the properties. If the note has no properties, a block is added at the top. If the note does not exist it is created and holds only that property (the Obsidian template is not applied). Unticking writes `false` when the property exists and does nothing otherwise. Rain never creates a folder, never changes a property that is not true/false, and refuses instead of guessing.
 
 ### 7.7 Disk (`features/disk/DiskScreen.vue`, loaded with `defineAsyncComponent`)
 
 `d3-hierarchy` is imported only inside this folder. Nothing is read until a scan is started.
 
 - **Before a scan:** a centred 560 px column, `ItemList rowSize="lg"` of drives. Row: `hard-drive` 20, "C: System" 14 px, line two "412 GB of 931 GB used", trailing `Progress` 160 px. Enter = Scan.
-- **Scanning:** the same column shows the drive row, a `Progress` (determinate), "184,203 files" and a ghost button "Cancel scan" + `KeyHint` Ctrl Enter. Cancel is an explicit action; Esc keeps its meaning. Hide on blur is held.
-- **Result:** `ScreenFrame pane="none"` with a strip holding a `Breadcrumb` (drive, then folders; click to jump) and, in `end`, total size.
+- **Scanning:** the same column shows the drive row, a `Progress` (determinate), "184,203 files" and a ghost button "Cancel scan" + `KeyHint` Ctrl Enter. Cancel is an explicit action; Esc keeps its meaning. Hide on blur is held. The scan runs in the backend and goes on if the window is hidden or closed.
+- **Result:** `ScreenFrame pane="none"` with a strip holding a `Breadcrumb` (drive, then folders; click to jump) and, in `end`, total size. The tree is a budgeted tree: about 2000 nodes, the largest 200 entries of the root and the largest 12 of every folder below it. What is not listed is one row per folder, `ellipsis` icon, "other (1,204 items)", with its size and share. An `other` row has no actions (Enter, Ctrl+Enter and the Ctrl+K panel do nothing on it). Its block in the map is in the "Other" colour.
   - Left, 360 px, right border: `ItemList` of the current folder's children by size. Row 32 px: `folder` or file-category icon 16, name, size (12 px mono), `Meter` 48 px (share of the parent).
   - Right: `TreemapCanvas.vue`, one `<canvas>` filling the space (864x640 at default size), background `--surface-0`. Layout: `d3.treemap()` squarified, padding 1, depth cap 4 below the current folder. Rectangles under 2 px are not drawn. Rectangles of at least 80x24 px carry a 12 px label. Fill = file category colour; folders are drawn as 1 px `--border-strong` frames.
   - Legend: a 24 px row under the map, 8 swatches (10x10, radius 2) with 12 px labels.
@@ -902,26 +903,31 @@ Layout: `ScreenFrame pane="md"` with a strip. Rain only reads; there is no editi
 - Keys: Enter opens the selected folder; Backspace on an empty query goes up; Ctrl+Enter reveals in Explorer; Ctrl+R rescans. Typing with the chip filters the list.
 - Summary: full path, size, share ("C:\Dev\node_modules, 4.1 GB, 12% of Dev").
 - No delete in the prototype.
-- Scan failed: `ErrorRow` under the drive ("Access denied", Retry).
-- The tree is kept in a module-level cache for 5 minutes after leaving Disk (one-shot timer), then dropped.
+- Opening a folder (Enter, double-click, breadcrumb) fetches that folder whole from the backend when the folder is not complete yet; the list appears when it is whole. A rare failure shows as a notice ("This scan is too old. Scan the drive again.").
+- **Not accessible:** folders Windows did not let Rain read are counted. With the root open, the strip shows a `lock` icon and the count before the total size; the tooltip reads "N folders that Windows did not let Rain read. Their size is not in the total." A folder like that is a row with a `lock` icon and "—" for the size; opening it shows the empty state `lock` "Not accessible". The total of the scan is what Rain measured (logical size, as Explorer's "Size"); it does not have to equal "used" in the drive row.
+- **Drive row:** line one is "C: Local Disk" when the volume has no label. Only fixed local drives are listed.
+- **Scan failed:** `ErrorRow` under the drive with the backend's short text ("Drive C: could not be read"), Retry.
+- Reveal shows the item selected in Explorer and then hides Rain, unless Keep open is on.
+- The tree is kept in a module-level cache for 5 minutes after leaving Disk (one-shot timer), then dropped on the client and in the backend.
 
 ### 7.8 Game mode (`features/game-mode/GameModeScreen.vue`)
 
-Takes the content area; a centred 480 px column. Ctrl+G (or the rail icon, or "Play in game mode") goes here and calls `api.startGameMode()`. The search field is disabled while the phase is `review`, `countdown` or `windingDown`. Hide on blur is held. Leaving the screen with Ctrl+digit cancels, with the notice "Game mode cancelled".
+Takes the content area; a centred 480 px column. Ctrl+G (or the rail icon, or "Play in game mode") goes here and calls `api.startGameMode()`. The search field is disabled while the phase is `review`, `countdown` or `windingDown`. Hide on blur is held. Leaving the screen with Ctrl+digit cancels, with the notice "Game mode cancelled". Going Home by the 'return to Home' timer never cancels game mode (it does nothing while game mode runs). Shift+Esc hides the window and game mode goes on.
 
-State is `GameModeState` from `subscribe('gameMode')`; the screen holds no timer of its own.
+State is `GameModeState` from `subscribe('gameMode')`; the screen holds no timer of its own. What game mode stops is real: Rain's scheduled jobs and idle jobs that are running, then the background service and the Rain window. The user's open Claude sessions are never stopped; they are listed as "left running".
 
 | Phase | Shows | Enter | Ctrl+Enter | Esc |
 |---|---|---|---|---|
 | `review` (only when at least one item has `effect: 'interrupts'`) | `circle-power` 32, "2 things will be interrupted" (20 px), the checklist, buttons | Wait for them | Stop anyway | Cancel |
-| `review` with `waiting: true` | Same, heading "Waiting for 2 things to finish", spinner on those rows | (none) | Stop anyway | Cancel |
-| `countdown` | "Closing in" + number (`text-countdown`) + "s", a draining `Progress`, the checklist | Close now | (none) | Cancel |
-| `windingDown` | "Winding down", each row goes pending, stopping (`StatusDot running`), stopped (`StatusDot success`) | (none) | (none) | (none) |
-| `done` | "Rain is off" (20 px), hint "Nothing is left running. Open Rain again from the Start menu.", button "Restart prototype" | Restart prototype | (none) | (none) |
+| `review` with `waiting: true` | same, heading "Waiting for 2 things to finish", spinner on those rows; after 3 minutes it returns to `review` with the line "They did not finish in 3 minutes." | (none) | Stop anyway | Cancel |
+| `countdown` | "Closing in" + number (`text-countdown`) + "s", a draining bar, the checklist | Close now | (none) | Cancel |
+| `windingDown` | "Winding down"; each row goes pending, stopping (`StatusDot running`), stopped (`StatusDot success`); a left-running row has no dot | (none) | (none) | (none) |
+| `done` | "Rain is off" (20 px) and one line: "Open Rain again from the Start menu." (with "Your Claude sessions are still running." first when some are open); no button. The window closes about 3 seconds after the service has stopped. | (none) | (none) | (none) |
 
-- Checklist row (40 px): icon, label, count, `Badge` "safe" (muted) or "interrupts" (`--status-waiting` tint), `StatusDot` during wind-down. Items: Claude sessions, scheduled jobs, idle jobs, background service, Rain window.
-- With nothing to interrupt, `review` is skipped and the countdown starts at once.
-- Started from a game: a last line "Then launch <title>" with the cover at 24 px.
+- Checklist row (40 px): icon, label, count, `Badge` "safe" (muted), "interrupts" (`--status-waiting` tint) or "left running" (muted), `StatusDot` during wind-down. Items: Claude sessions, scheduled jobs, idle jobs, background service, Rain window.
+- With nothing to interrupt, `review` is skipped and the countdown starts at once. `review` that nobody answers for 10 minutes cancels itself.
+- Started from a game: a last line "Then launch <title>" with the cover at 24 px. If the game could not be started, a line "The game did not start: <reason>" appears under it.
+- On the first load after game mode, one notice tells what it did ("Game mode stopped 2 jobs. 3 Claude sessions kept running."). When the backend marks the recap with `launchedInJob` (the game was started by a service that runs inside a Windows job), the notice ends with "The game may close with Rain."
 - Buttons are real `Button`s with their `KeyHint`; the screen passes them to the action bar through `primaryOverride`.
 - Countdown length comes from `settings.gameModeCountdownSeconds` (default 10).
 
@@ -931,284 +937,43 @@ Layout: `ScreenFrame pane="none"`, one 640 px column, 24 px padding, scrolls. No
 
 | Group | Row | Control |
 |---|---|---|
-| General | Summon hotkey | `KeyHint` Ctrl ` (read-only), hint "Takes this chord from other apps while Rain runs" |
+| General | Summon hotkey | `KeyHint` Ctrl ` (read-only), hint "Takes this chord from other apps while Rain runs"; a failed dot when another app holds the chord |
 | General | Hide when focus is lost | `Switch` |
 | General | Return to Home after | `Select`: 30 s, 60 s, 5 min |
-| General | Start with Windows | `Switch` |
-| Sources | Obsidian vault | path `Input` + found (`circle-check`) or missing (`circle-x`) glyph |
-| Sources | Daily note format | `Input` (default `YYYY-MM-DD`) |
+| General | Start with Windows | `Switch` (off by default; on starts Rain hidden at logon) |
+| General | Data folder | path `Input` + glyph; changing it restarts the background service |
+| Sources | Obsidian vault | path `Input` + glyph (follows Obsidian when it has one vault) |
+| Sources | Daily notes folder | `Input`, folder inside the vault (follows Obsidian until changed) |
+| Sources | Daily note format | `Input` (follows Obsidian until changed) |
 | Sources | Project folders | path `Input` (semicolon-separated) + glyph |
+| Sources | Game folders | path `Input` (semicolon-separated) + glyph |
 | Sources | Steam library | `Switch` + path `Input` + glyph |
 | Sources | Epic library | `Switch` + path `Input` + glyph |
-| Sources | Google Calendar | `Button` "Connect" / "Disconnect" (mock toggles it) |
+| Sources | Calendar | text "Not connected" (no connect flow yet) |
+| Sources | Monitor Claude sessions | `Switch`; a status dot and line when on; Ctrl+Enter repairs |
 | Game mode | Countdown | `Select`: 5, 10, 20, 30 s |
-| Prototype | Mock scenario | `Select`: Typical, Empty, Busy, Failing |
-| Prototype | Simulated latency | `Switch` |
-| Prototype | Reset mock data | `Button` |
-| About | Rain | version text + `Badge` "Mock data" |
+| About | Rain | version text (from `package.json`) |
 
-Group headers are `SectionHeader`s with a `Separator` above. `SettingDef { id: string; group: string; label: string; hint?: string; kind: 'switch' | 'select' | 'path' | 'text' | 'button' | 'info'; key?: keyof Settings }`.
+Group headers are `SectionHeader`s with a `Separator` above. The glyph is found (`circle-check`) or missing (`circle-x`); it is drawn 300 ms after typing, from the backend (`api.checkPaths`), and an empty field has no glyph (its placeholder says "Not set" or "Not found"). No glyph shows while the answer is pending or when the backend does not answer. A source row (vault, Game folders, Steam, Epic) replaces its hint with the backend's own text when its source is off or failed. A config file that could not be read adds one line under the screen's start, with the file name and line. `SettingDef { id: string; group: string; label: string; hint?: string; placeholder?: string; kind: 'switch' | 'select' | 'path' | 'text' | 'info'; key?: keyof Settings }`.
 
 ---
 
-## 8. Mock data layer
+## 8. Data layer
 
-### 8.1 Files
+The app reads one interface, `RainApi` in `src/data/api.ts`, implemented by `src/data/rest/` over the bridge of the shell (Tauri command or Vite proxy). Types are generated from the Rust crate `rain-types` into `src/bindings/rain-types.ts`; `src/data/types.ts` re-exports them. The routes, bodies, errors and topics are defined in `docs/backend/00-foundation.md` (sections 4 to 9) and in the feature sections `01` to `06`. There is no sample data in the app. To see a state, start the backend on a fixture data folder (`npm run dev:fixture`) or stop it (`npm run backend:stop`).
 
-```
-src/data/
-  types.ts            all interfaces below
-  api.ts              RainApi, Topic, TopicPayload, RainError
-  index.ts            export const api: RainApi = createMockApi()   (later: createRestApi(baseUrl))
-  mock/
-    index.ts          createMockApi(): assembles the slices below into one RainApi
-    engine.ts         delay(), fail(), emit()/subscribe bus, seeded PRNG (mulberry32), ago()/fromNow(), setPaused()
-    control.ts        prototype-only controls (not part of RainApi)
-    search.ts         scorer over all seeded items
-    covers.ts         generated abstract SVG covers (data URIs) from a title hash; no real artwork
-    logs.ts           generated LogLine[] per run or session
-    seed/
-      apps.ts  projects.ts  games.ts  workflows.ts  life.ts  disk.ts  gameMode.ts  settings.ts
-```
+How a screen shows the state of its data:
 
-Each seed file exports `seed(scenario: Scenario): <Entities>`. Seeds use `ago()` so relative times stay plausible on any day; habit days and the disk tree come from the seeded PRNG so they are the same on every load. IDs are stable strings (`app-vscode`, `pool-web-dev`, `proj-weather-station`).
-
-```ts
-// src/data/mock/control.ts
-export type Scenario = 'typical' | 'empty' | 'busy' | 'failing'
-export interface PrototypeOptions { scenario: Scenario; latency: boolean }
-export const mockControl: {
-  options: Readonly<PrototypeOptions>            // reactive, persisted in localStorage('rain.prototype')
-  setScenario(s: Scenario): void                 // reseeds, then resetResources()
-  setLatency(on: boolean): void
-  simulatePermissionRequest(): void              // moves one working session to waiting
-  reset(): void
-  setPaused(paused: boolean): void               // AppShell calls this with shell.hidden
-}
-```
-
-Timing with latency on: list and get calls 150 to 400 ms; `search` 0 to 30 ms; each launch step 400 to 900 ms; a scan takes 4 s with progress every 200 ms; game-mode tick 1 s; each wind-down item 500 ms. With latency off: 0 ms for lists, the rest unchanged. While visible, every 20 s one working session gets a new event. All mock tickers stop when paused.
-
-### 8.2 Service interface
-
-Every method returns a Promise and maps to one REST call. Rejections are `RainError`.
-
-```ts
-// src/data/api.ts
-export interface RainError { code: 'unavailable' | 'notFound' | 'failed'; message: string; source?: string }
-
-export interface TopicPayload {
-  sessions: ClaudeSession[]
-  jobs: ScheduledJob[]
-  idleJobs: IdleJob[]
-  launch: LaunchRun
-  scan: DiskScan
-  gameMode: GameModeState
-}
-export type Topic = keyof TopicPayload
-
-export interface RainApi {
-  // search and pins
-  search(query: string, types?: ItemType[]): Promise<SearchItem[]>            // GET  /search?q=&types=
-  listPinned(): Promise<SearchItem[]>                                          // GET  /pinned
-  listRecent(limit: number): Promise<SearchItem[]>                             // GET  /recent?limit=
-  setPinned(type: PinnableType, id: ID, pinned: boolean): Promise<void>        // PUT  /pinned/:type/:id
-
-  // apps and pools
-  listApps(): Promise<AppEntry[]>                                              // GET  /apps
-  listPools(): Promise<Pool[]>                                                 // GET  /pools
-  savePool(draft: PoolDraft): Promise<Pool>                                    // POST /pools | PUT /pools/:id
-  deletePool(id: ID): Promise<void>                                            // DELETE /pools/:id
-
-  // launching (apps, pools, projects, games)
-  launch(target: LaunchTarget): Promise<LaunchRun>                             // POST /launches
-  getLaunch(id: ID): Promise<LaunchRun>                                        // GET  /launches/:id
-
-  // projects and games
-  listProjects(): Promise<Project[]>                                           // GET  /projects
-  listGames(): Promise<GameLibrary>                                            // GET  /games
-  saveCustomGame(draft: CustomGameDraft): Promise<Game>                        // POST /games
-  setGameHidden(id: ID, hidden: boolean): Promise<void>                        // PATCH /games/:id
-
-  // Claude sessions
-  listSessions(): Promise<ClaudeSession[]>                                     // GET  /sessions
-  answerPermission(sessionId: ID, answer: PermissionAnswer): Promise<ClaudeSession> // POST /sessions/:id/permission
-  focusSession(id: ID): Promise<void>                                          // POST /sessions/:id/focus
-  stopSession(id: ID): Promise<void>                                           // POST /sessions/:id/stop
-  getSessionTranscript(id: ID): Promise<LogLine[]>                             // GET  /sessions/:id/transcript
-
-  // scheduled jobs
-  listJobs(): Promise<ScheduledJob[]>                                          // GET  /jobs
-  setJobEnabled(id: ID, enabled: boolean): Promise<ScheduledJob>               // PATCH /jobs/:id
-  runJob(id: ID): Promise<JobRun>                                              // POST /jobs/:id/runs
-  getRunLog(runId: ID): Promise<LogLine[]>                                     // GET  /runs/:id/log
-
-  // idle jobs
-  listIdleJobs(): Promise<IdleJob[]>                                           // GET  /idle-jobs
-  setIdleJobEnabled(id: ID, enabled: boolean): Promise<IdleJob>                // PATCH /idle-jobs/:id
-  runIdleJob(id: ID): Promise<IdleJob>                                         // POST /idle-jobs/:id/run
-  getIdleJobLog(id: ID): Promise<LogLine[]>                                    // GET  /idle-jobs/:id/log
-  getMachineState(): Promise<MachineState>                                     // GET  /machine
-
-  // life (read-only)
-  getVaultStatus(): Promise<VaultStatus>                                       // GET  /vault
-  listHabits(): Promise<Habit[]>                                               // GET  /habits
-  listHabitDays(from: ISODate, to: ISODate): Promise<HabitDay[]>               // GET  /habit-days?from=&to=
-  listEvents(from: ISODate, to: ISODate): Promise<CalendarEvent[]>             // GET  /events?from=&to=
-  openDailyNote(date: ISODate): Promise<{ opened: boolean }>                   // POST /daily-notes/:date/open
-
-  // disk
-  listDrives(): Promise<Drive[]>                                               // GET  /drives
-  startScan(driveId: ID): Promise<DiskScan>                                    // POST /scans
-  getScan(id: ID): Promise<DiskScan>                                           // GET  /scans/:id
-  cancelScan(id: ID): Promise<void>                                            // DELETE /scans/:id
-  revealPath(path: string): Promise<void>                                      // POST /shell/reveal
-
-  // game mode
-  getGameMode(): Promise<GameModeState>                                        // GET  /game-mode
-  startGameMode(opts?: { thenLaunchGameId?: ID }): Promise<GameModeState>      // POST /game-mode
-  resolveGameMode(choice: GameModeChoice): Promise<GameModeState>              // POST /game-mode/choice
-
-  // settings
-  getSettings(): Promise<Settings>                                             // GET  /settings
-  updateSettings(patch: Partial<Settings>): Promise<Settings>                  // PATCH /settings
-
-  // live updates (later: one WebSocket or SSE stream)
-  subscribe<T extends Topic>(topic: T, cb: (payload: TopicPayload[T]) => void): () => void
-}
-```
-
-### 8.3 Types
-
-```ts
-// src/data/types.ts
-export type ID = string
-export type ISODate = string        // '2026-11-21'
-export type ISODateTime = string    // '2026-11-21T09:30:00.000Z'
-export type Status = 'idle' | 'running' | 'waiting' | 'success' | 'failed'
-
-export interface IconRef { kind: 'lucide' | 'brand' | 'url' | 'letter'; value: string; tint?: string }
-
-// ---- search ----
-export type SearchType = 'app' | 'pool' | 'project' | 'game' | 'session' | 'job' | 'idleJob'
-export type PinnableType = 'app' | 'pool' | 'project' | 'game'
-export interface SearchItem { type: SearchType; id: ID; title: string; subtitle?: string; icon: IconRef; status?: Status; score: number }
-
-// ---- apps and pools ----
-export interface AppEntry { id: ID; name: string; icon: IconRef; exePath: string; keywords: string[];
-  pinned: boolean; running: boolean; lastLaunchedAt?: ISODateTime }
-export interface PoolMember { appId: ID; args?: string; delayMs?: number }
-export interface Pool { id: ID; name: string; icon: IconRef; members: PoolMember[]; pinned: boolean; lastLaunchedAt?: ISODateTime }
-export interface PoolDraft { id?: ID; name: string; members: PoolMember[] }
-
-// ---- launching ----
-export interface LaunchTarget { type: 'app' | 'pool' | 'project' | 'game'; id: ID; mode?: 'full' | 'editorOnly' }
-export interface LaunchStep { label: string; icon: IconRef; status: Status; error?: string }
-export interface LaunchRun { id: ID; target: LaunchTarget; status: 'running' | 'success' | 'failed'; steps: LaunchStep[] }
-
-// ---- projects ----
-export interface EnvStep { kind: 'editor' | 'terminal' | 'browser' | 'claude' | 'app'; label: string; icon: IconRef;
-  appId?: ID; command?: string; url?: string }
-export interface Project { id: ID; name: string; path: string; icon: IconRef; branch: string; dirtyFiles: number;
-  commits14d: number[]; lastOpenedAt: ISODateTime; activityScore: number; environment: EnvStep[];
-  sessionIds: ID[]; open: boolean; pinned: boolean; missing: boolean }
-
-// ---- games ----
-export type GameSource = 'steam' | 'epic' | 'custom'
-export interface Game { id: ID; title: string; source: GameSource; coverUrl?: string; installed: boolean; running: boolean;
-  sizeBytes?: number; playtimeMinutes: number; lastPlayedAt?: ISODateTime; pinned: boolean; hidden: boolean }
-export interface GameLibrary { games: Game[]; failedSources: GameSource[] }
-export interface CustomGameDraft { title: string; exePath: string; coverPath?: string }
-
-// ---- Claude sessions ----
-export type PermissionAnswer = 'once' | 'always' | 'deny'
-export interface PermissionRequest { id: ID; tool: string; summary: string; detail: string; requestedAt: ISODateTime }
-//   summary: one line for rows ('npm install'); detail: the exact command or diff for the pane
-export interface SessionEvent { at: ISODateTime; kind: 'prompt' | 'tool' | 'edit' | 'message' | 'permission' | 'error'; text: string }
-export interface ClaudeSession { id: ID; title: string; cwd: string; projectId?: ID; branch?: string; model: string;
-  status: Status; startedAt: ISODateTime; lastActivityAt: ISODateTime; tokens: number; lastMessage: string;
-  request?: PermissionRequest; recent: SessionEvent[] }
-//   status: running = working, waiting = waiting on you, success = done, idle, failed
-//   stale is derived in the UI: status === 'running' && now - lastActivityAt >= 60 s
-
-// ---- scheduled and idle jobs ----
-export interface JobRun { id: ID; jobId: ID; status: Status; startedAt: ISODateTime; durationMs?: number; exitCode?: number }
-export interface LogLine { ts: ISODateTime; level: 'info' | 'warn' | 'error'; text: string }
-export interface ScheduledJob { id: ID; name: string; kind: 'cron' | 'claude'; cron: string; scheduleLabel: string;
-  enabled: boolean; running: boolean; nextRunAt?: ISODateTime; recentRuns: JobRun[] }   // newest first, at most 20
-export interface IdleJob { id: ID; name: string; enabled: boolean; state: 'queued' | 'running' | 'paused' | 'success' | 'failed';
-  progress: number; resource: 'cpu' | 'gpu'; idleAfterMinutes: number; etaMinutes?: number; lastRunAt?: ISODateTime }
-export interface MachineState { userActive: boolean; idleMinutes: number }
-
-// ---- life ----
-export interface Habit { id: ID; name: string; icon: IconRef; property: string; kind: 'boolean' | 'number'; target?: number; unit?: string }
-export type HabitValue = boolean | number | 'skip' | null          // null = note exists, property not set
-export interface HabitDay { date: ISODate; noteExists: boolean; values: Record<ID, HabitValue> }   // one row per daily note
-export interface VaultStatus { connected: boolean; path?: string; missingProperties: string[] }
-export interface CalendarEvent { id: ID; title: string; start: ISODateTime; end: ISODateTime; allDay: boolean;
-  calendar: string; color: string; location?: string }
-
-// ---- disk ----
-export type FileCategory = 'video' | 'image' | 'audio' | 'archive' | 'code' | 'document' | 'app' | 'other'
-export interface Drive { id: ID; letter: string; label: string; totalBytes: number; usedBytes: number }
-export interface DiskNode { name: string; path: string; sizeBytes: number; kind: 'dir' | 'file'; category?: FileCategory; children?: DiskNode[] }
-export interface DiskScan { id: ID; driveId: ID; status: 'scanning' | 'done' | 'failed' | 'cancelled';
-  progress: number; filesSeen: number; error?: string; root?: DiskNode }
-
-// ---- game mode ----
-export type GameModeChoice = 'wait' | 'stopAnyway' | 'closeNow' | 'cancel'
-export interface WindDownItem { id: ID; label: string; icon: IconRef; kind: 'session' | 'job' | 'idleJob' | 'service' | 'window';
-  count: number; effect: 'safe' | 'interrupts'; status: 'pending' | 'stopping' | 'stopped' }
-export interface GameModeState { phase: 'off' | 'review' | 'countdown' | 'windingDown' | 'done';
-  waiting: boolean; secondsLeft: number; countdownSeconds: number; items: WindDownItem[]; thenLaunchGameId?: ID }
-
-// ---- settings ----
-export interface Settings { hotkey: string; hotkeyAvailable: boolean; hideOnBlur: boolean; resetAfterSeconds: 30 | 60 | 300;
-  startWithWindows: boolean; vaultPath: string; dailyNoteFormat: string; projectRoots: string[];
-  steamEnabled: boolean; steamPath: string; epicEnabled: boolean; epicPath: string;
-  calendarConnected: boolean; gameModeCountdownSeconds: 5 | 10 | 20 | 30 }
-```
-
-### 8.4 Sample data amounts
-
-All sample data is generic: common application names, invented project names under `C:\Dev\`, invented game titles with generated covers, a vault at `D:\Vault`, no person's name, account or real path.
-
-| Entity | Typical | Busy | Empty | Notes for Typical |
-|---|---|---|---|---|
-| Apps | 24 | 150 | 0 | 6 running, 4 pinned; Microsoft apps use letter tiles |
-| Pools | 4 | 9 | 0 | 3 pinned ("Web dev", "Writing", "Streaming"); 2 to 4 members; one with args and a delay |
-| Projects | 11 | 40 | 0 | 3 clearly most active, 2 open, 1 missing folder, 3 with a live session |
-| Games | 28 | 180 | 0 | Steam 16, Epic 8, custom 4; 20 installed; 2 without cover; 6 played in the last week |
-| Claude sessions | 7 | 14 (5 waiting) | 0 | 2 waiting (one Bash command, one file edit diff), 2 working (1 stale), 1 done, 1 idle, 1 failed; 8 events each |
-| Scheduled jobs | 8 | 30 | 0 | 5 cron, 3 Claude; 1 last-run failed, 1 running, 1 disabled; 20 runs each; logs of 30 to 60 lines generated on demand |
-| Idle jobs | 3 | 8 | 0 | 1 queued, 1 paused at 40%, 1 failed |
-| Habits | 5 | 7 | 0 (vault not connected) | 3 boolean, 2 numeric with targets; one with a missing property |
-| Habit days | 400 | 400 | 0 | Trailing 400 days; about 6% of days without a note; about 3% skips |
-| Calendar events | 9 over 3 days | 20 | 0 (not connected) | 2 calendars, 1 all-day, 1 in progress now |
-| Drives | 2 | 3 | 2 | C: scans fine; D: always fails with "Access denied" |
-| Disk tree | about 1,500 nodes, depth up to 6 | about 8,000 | n/a | Generated; all 8 categories present |
-| Wind-down items | 5 | 5 | 5 (all safe) | 2 with `interrupts`, so `review` appears |
-| Commands | about 22 | same | same | Defined in `actions/commands.ts`, not in the mock |
-
-One failing item per section in Typical (no setting needed to reach an error state):
-
-| Section | Failing item |
-|---|---|
-| Home | A failed job in "Needs you"; launching the "Streaming" pool fails on one member |
-| Apps | Pool "Streaming": member "Capture tool" fails with "Executable not found" |
-| Projects | "old-blog": folder missing |
-| Games | Epic source fails on the first load; Retry succeeds |
-| Workflows | Session "Migrate database schema" failed; job "Nightly backup" exit 1; idle job "Thumbnail cache" failed |
-| Life | Habit "Meditate": property not found in notes |
-| Disk | Drive D: scan fails at 40% |
-| Game mode | Two items interrupt, so the gate shows |
-| Settings | Epic path shows the missing glyph |
-
-Scenario "Failing": `listGames`, `listJobs` and `listEvents` reject with `unavailable`; the vault is not connected; every launch fails on its second step; every scan fails. Retry does not fix them.
+- **Loading:** a skeleton, drawn only when the answer takes longer than a moment (`useResource.showSkeleton`).
+- **Empty:** an `EmptyState` that says what is missing and, where there is one, the way to fix it ("No projects found", "Open settings").
+- **Error:** an `ErrorRow` with a short name and the backend's own message, and a Retry button.
+- **A source that is off or failed** (Steam, Epic, game folders, the vault, the Claude registry, git): a quiet line with the backend's text (`SourceNote`, `useSourceNotes`), never an error row and never a spinner.
 
 ---
 
 ## 9. File and folder structure, and work split
+
+> **Historical: the build plan of the prototype.** It is kept to show how the first screens were split. The tree and the tables below name files that no longer exist (the mock layer); the real layout is the folder `src` itself and `docs/backend/00-foundation.md` section 8.
 
 ### 9.1 Tree
 
@@ -1234,7 +999,7 @@ src/
                 DetailPane.vue ViewStrip.vue ItemList.vue ItemGrid.vue ListRow.vue Tile.vue SectionHeader.vue
                 EmptyState.vue ErrorRow.vue KeyHint.vue StatusDot.vue RIcon.vue IconStack.vue
                 LaunchChecklist.vue Meter.vue RelTime.vue PathText.vue
-  data/         section 8.1
+  data/         api.ts  types.ts  index.ts  rest/ (client, stream, errors, media)
   features/
     home/       HomeScreen.vue  TodayPanel.vue  ResultRow.vue  actions.ts (none; uses the others)
     apps/       AppsScreen.vue  PoolDetail.vue  AppDetail.vue  PoolEditorDialog.vue  actions.ts
@@ -1244,8 +1009,8 @@ src/
                 sessions/ SessionsView.vue SessionRow.vue SessionDetail.vue RequestCard.vue
                 jobs/     JobsView.vue JobRow.vue JobDetail.vue RunStrip.vue
                 idle/     IdleView.vue IdleRow.vue IdleJobDetail.vue
-    life/       LifeScreen.vue  MonthHeatmap.vue  YearHeatmap.vue  HeatCell.vue  DayPanel.vue  Agenda.vue
-                useDayCursor.ts  actions.ts
+    life/       LifeScreen.vue  HabitRow.vue  HabitStrip.vue  HabitView.vue  HabitYear.vue  HabitEditorDialog.vue  HeatCell.vue
+                useOpenHabit.ts  rows.ts  yearGrid.ts  habitForm.ts  actions.ts
     disk/       DiskScreen.vue  DriveList.vue  FolderList.vue  TreemapCanvas.vue  treemap.ts  diskCache.ts  actions.ts
     game-mode/  GameModeScreen.vue  WindDownRow.vue
     settings/   SettingsScreen.vue  SettingRow.vue  settingDefs.ts  actions.ts
@@ -1262,7 +1027,7 @@ Dependencies: `vue`, `@lucide/vue`, `reka-ui`, `@vueuse/core`, `class-variance-a
 In this order:
 
 1. Project scaffold, Tailwind v4, `tokens.css`, shadcn-vue init, generate the components in 6.1, apply the edits in 5.6.
-2. `data/types.ts`, `data/api.ts`, the whole `data/mock/` folder including every seed file at the amounts in 8.4, `mock/control.ts`.
+2. `data/types.ts`, `data/api.ts` (the prototype also had a mock layer here, since deleted).
 3. `shell/` (interface, `BrowserShell`, a `TauriShell` stub), `nav/`, `composables/`, `lib/`.
 4. `actions/types.ts`, `registry.ts`, `commands.ts`, and a stub `features/<x>/actions.ts` per feature holding the Enter and Ctrl+Enter actions from 4.3 (so the launcher works across all types from day one).
 5. `keys/keymap.ts`, `useKeymap.ts`.
@@ -1278,13 +1043,13 @@ After Phase 0 these are frozen: `routes.ts`, `registry.ts`, `tokens.css`, `compo
 | Owner | Owns (and only edits) | Notes |
 |---|---|---|
 | A | `features/home/` | Result list, groups and caps, Alt digits, `TodayPanel` |
-| B | `features/apps/`, `data/mock/seed/apps.ts` | List, details, pool editor, launch checklist |
-| C | `features/projects/`, `data/mock/seed/projects.ts` | Two-size grid, detail, launch |
-| D | `features/games/`, `data/mock/seed/games.ts`, `data/mock/covers.ts` | Cover grid, filter strip, detail |
-| E | `features/workflows/` (three sub-folders; can be split across up to three people), `data/mock/seed/workflows.ts`, `data/mock/logs.ts` | Sessions, Jobs, Idle |
-| F | `features/life/`, `data/mock/seed/life.ts` | Heatmaps, day cursor, agenda |
-| G | `features/disk/`, `data/mock/seed/disk.ts` | Lazy chunk, canvas treemap |
-| H | `features/game-mode/`, `features/settings/`, `data/mock/seed/gameMode.ts`, `data/mock/seed/settings.ts` | Phase machine screen; settings rows |
+| B | `features/apps/` | List, details, pool editor, launch checklist |
+| C | `features/projects/` | Two-size grid, detail, launch |
+| D | `features/games/` | Cover grid, filter strip, detail |
+| E | `features/workflows/` (three sub-folders; can be split across up to three people) | Sessions, Jobs, Idle |
+| F | `features/life/` | Heatmaps, day cursor, agenda |
+| G | `features/disk/` | Lazy chunk, canvas treemap |
+| H | `features/game-mode/`, `features/settings/` | Phase machine screen; settings rows |
 | T | `src-tauri/`, `src/shell/tauri.ts` | Hotkey, single instance, window state, hide on blur, capabilities |
 
 Rules for Phase 1:
@@ -1299,17 +1064,17 @@ Walk the ten daily tasks from hidden (launch app, launch pinned pool, open proje
 
 ---
 
-## 10. Out of scope for the prototype
+## 10. Out of scope
 
-- Any backend: real app discovery and launching, icon extraction, Steam/Epic scanning, Claude Code hooks, cron, idle detection, Obsidian parsing, Google Calendar, disk scanning, real game-mode shutdown.
-- OS notifications, tray icon, autostart registration, installer, signing, auto-update.
+- Features that are not built yet are listed in `docs/backend/`.
+- OS notifications, tray icon, installer, signing, auto-update.
 - Hotkey recorder (the hotkey is shown, not changed) and per-pool global hotkeys.
 - Light theme, interface scale, rail labels, compact summon, a second window, any programmatic window resizing.
 - "Capture open windows" for pools, multi-select, drag and drop, reordering pins.
 - Creating or editing jobs and idle jobs; starting or prompting Claude sessions from Rain.
-- Writing to the vault or the calendar in any form.
+- Writing to the vault except the one property a habit tick sets; writing to the calendar in any form.
 - Deleting or moving files in Disk.
 - Web search fallback, calculator, clipboard history or other launcher extras.
-- List virtualisation (mock lists are short; add Reka's virtualizer with the real backend).
+- List virtualisation (lists are short; add Reka's virtualizer if a list grows).
 - Localisation, telemetry, accounts, sync.
 - Automated tests beyond a smoke test of the keymap and `useSelection`.

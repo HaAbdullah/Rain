@@ -11,8 +11,9 @@ import { refreshResources } from '@/composables/useResource'
 import { useScreenState, type ScreenController } from '@/composables/useScreen'
 import type { useSearch } from '@/composables/useSearch'
 import { poolEditor } from '@/features/apps/actions'
-import { customGameDialog } from '@/features/games/actions'
-import { openTodaysNote } from '@/features/life/actions'
+import { openAddGame } from '@/features/games/actions'
+import { habitEditor, openTodaysNote } from '@/features/life/actions'
+import { errorMessage } from '@/lib/errors'
 import { routeByName, routes, type Route } from '@/nav/routes'
 import { useNav } from '@/nav/useNav'
 import { shell } from '@/shell'
@@ -113,17 +114,24 @@ function cycleSubView(screen: ScreenController | null, step: -1 | 1) {
  */
 async function cancelGameMode() {
   const { api, notice } = actionContext()
-  const { phase } = await api.getGameMode()
-  if (phase === 'windingDown' || phase === 'done') return
-  if (phase !== 'off') {
-    await api.resolveGameMode('cancel')
-    notice.info('Game mode cancelled')
+  try {
+    const { phase } = await api.getGameMode()
+    if (phase === 'windingDown' || phase === 'done') return
+    if (phase !== 'off') {
+      await api.resolveGameMode('cancel')
+      notice.info('Game mode cancelled')
+    }
+  } catch (reason) {
+    notice.error(errorMessage(reason, 'Game mode was not cancelled'))
+    // A backend that is away has nothing to cancel: leave the screen. A refusal (conflict) keeps it.
+    if (typeof reason === 'object' && reason !== null && 'code' in reason && reason.code === 'conflict') return
   }
   nav.back()
 }
 
-/** The Esc ladder below "close the overlay": clear the query, else hide (spec 2.3). */
-function escape({ route, search }: KeyContext) {
+/** The Esc ladder below "close the overlay": leave a sub-view, clear the query, else hide (spec 2.3). */
+function escape({ route, search, screen }: KeyContext) {
+  if (screen?.back?.()) return
   if (search.query.value !== '') search.clear()
   else if (route.name === 'gameMode') void cancelGameMode()
   else void shell.hide()
@@ -156,7 +164,7 @@ const ALT_DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => 
 export const keymap: KeyBinding[] = [
   // Window
   summonBinding,
-  { id: 'back', combo: 'Escape', group: 'Window', label: 'Back: overlay, query, hide', run: escape },
+  { id: 'back', combo: 'Escape', group: 'Window', label: 'Back: overlay, open habit, query, hide', run: escape },
   {
     id: 'hide',
     combo: 'Shift+Escape',
@@ -219,14 +227,14 @@ export const keymap: KeyBinding[] = [
     id: 'page',
     combo: ['PageUp', 'PageDown'],
     group: 'Move',
-    label: 'Page up / down; month or year in Life',
+    label: 'Page up / down; a year in an open habit',
     run: ({ screen }, combo) => screen?.page?.(combo === 'PageUp' ? -1 : 1),
   },
   {
     id: 'group',
     combo: ['Ctrl+ArrowUp', 'Ctrl+ArrowDown'],
     group: 'Move',
-    label: 'Previous / next group',
+    label: 'Previous / next group (Life: Daily, Weekly, Monthly)',
     when: ({ screen }) => screen?.group !== undefined,
     run: ({ screen }, combo) => screen?.group?.(combo === 'Ctrl+ArrowUp' ? -1 : 1),
   },
@@ -234,7 +242,7 @@ export const keymap: KeyBinding[] = [
     id: 'step-out',
     combo: 'Backspace',
     group: 'Move',
-    label: 'Step out (empty query): folder up, else remove the chip',
+    label: 'Step out (empty query): folder up, close habit, else remove the chip',
     when: ({ search }) => search.query.value === '',
     run({ screen, search }) {
       if (!screen?.stepOut?.()) search.setScope(null)
@@ -288,11 +296,13 @@ export const keymap: KeyBinding[] = [
     id: 'new',
     combo: 'Ctrl+KeyN',
     group: 'Act',
-    label: 'New pool (Apps), custom game (Games)',
-    when: () => nav.displayed.value === 'apps' || nav.displayed.value === 'games',
+    label: 'New pool (Apps), custom game (Games), habit (Life)',
+    when: () =>
+      nav.displayed.value === 'apps' || nav.displayed.value === 'games' || nav.displayed.value === 'life',
     run() {
       if (nav.displayed.value === 'apps') poolEditor.create()
-      else customGameDialog.open.value = true
+      else if (nav.displayed.value === 'life') habitEditor.create()
+      else openAddGame()
     },
   },
   {

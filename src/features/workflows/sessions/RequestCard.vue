@@ -5,12 +5,15 @@ import KeyHint from '@/components/rain/KeyHint.vue'
 import RelTime from '@/components/rain/RelTime.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { PermissionRequest } from '@/data/types'
+import type { PermissionRequest, SessionHost } from '@/data/types'
 import { keepFocus } from '@/lib/focus'
 import { NO_PRESS } from '../buttonStyle'
 import { useRunAction } from '../useRunAction'
 
-const props = defineProps<{ request: PermissionRequest }>()
+const props = defineProps<{ request: PermissionRequest; host: SessionHost }>()
+
+/** Where the user answers a request that Rain can no longer answer. */
+const answerPlace = computed(() => (props.host === 'desktop' ? 'in the Claude app' : 'in the terminal'))
 
 const run = useRunAction()
 
@@ -37,7 +40,9 @@ const lines = computed(() => {
       class="selectable max-h-[220px] overflow-auto rounded-md bg-surface-0 p-3 font-mono text-xs whitespace-pre text-foreground"
     ><span v-for="(line, index) in lines" :key="index" class="block min-h-4" :class="line.tone">{{ line.text }}</span></pre>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <p v-if="!request.answerable" class="text-13 text-muted-foreground">Answer this {{ answerPlace }}</p>
+
+    <div v-else class="flex flex-wrap items-center gap-2">
       <Button size="sm" class="gap-2" tabindex="-1" @mousedown="keepFocus" @click="run('allow-once')">
         Allow once
         <KeyHint keys="Ctrl+KeyY" />

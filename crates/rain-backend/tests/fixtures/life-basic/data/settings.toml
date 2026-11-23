@@ -1,0 +1,4 @@
+# Rain settings for the Life tests (made-up values).
+schema_version = 1
+vault_path = '{DATA}\vault'
+daily_note_folder = 'Daily'

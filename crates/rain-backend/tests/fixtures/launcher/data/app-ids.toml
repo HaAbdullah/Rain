@@ -1,0 +1,13 @@
+# app-ids.toml: made-up ids for the tests.
+schema_version = 1
+
+[[app]]
+id = "app-fake-editor"
+key = '''aumid:{fake-pf}\fake editor\editor.exe'''
+name = "Fake Editor"
+keywords = ["code"]
+
+[[app]]
+id = "app-fake-notes"
+key = 'aumid:fake.notes_abc123!app'
+name = "Fake Notes"

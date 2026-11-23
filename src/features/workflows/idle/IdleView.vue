@@ -1,13 +1,14 @@
 <script setup lang="ts">
 // The Idle tab: the machine's idle state above a list of jobs that run when the PC is idle.
 import { MonitorIcon } from '@lucide/vue'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import type { ActionTarget } from '@/actions/types'
 import EmptyState from '@/components/rain/EmptyState.vue'
 import ErrorRow from '@/components/rain/ErrorRow.vue'
 import ItemList from '@/components/rain/ItemList.vue'
 import ScreenFrame from '@/components/rain/ScreenFrame.vue'
 import { useActionPanel } from '@/composables/useActionPanel'
+import { useNow } from '@/composables/useNow'
 import { useSectionQuery } from '@/composables/useSearch'
 import { useSelection, type SelGroup } from '@/composables/useSelection'
 import type { IdleJob } from '@/data/types'
@@ -21,11 +22,12 @@ import IdleRow from './IdleRow.vue'
 
 defineSlots<{ strip(): unknown }>()
 
-/** Shown when no job says how long the PC must be idle. */
-const DEFAULT_IDLE_AFTER_MINUTES = 10
-
 const idleJobs = useIdleJobs()
 const machine = useMachine()
+// The backend has no machine topic, so the idle minutes are asked for again every 30 s while the
+// window is visible (useNow stops while Rain is hidden).
+const tick = useNow(30_000)
+watch(tick, () => void machine.reload())
 const query = useSectionQuery('workflows')
 const run = useRunAction()
 const panel = useActionPanel()
@@ -43,7 +45,8 @@ const statusLine = computed(() => {
   if (!state) return machine.error.value ? 'Machine state unavailable' : ''
   if (!state.userActive) return `PC idle for ${state.idleMinutes} min. Idle jobs can run.`
   const waits = (idleJobs.data.value ?? []).map((job) => job.idleAfterMinutes)
-  const after = waits.length > 0 ? Math.min(...waits) : DEFAULT_IDLE_AFTER_MINUTES
+  // The line is only drawn for a list that has jobs, so `waits` is never empty.
+  const after = Math.min(...waits)
   return `PC active. Idle jobs start after ${after} min idle.`
 })
 
@@ -69,9 +72,14 @@ defineExpose({ target, move, page, group })
   <ScreenFrame pane="wide">
     <template #strip><slot name="strip" /></template>
 
-    <ErrorRow v-if="idleJobs.error.value" class="m-2" message="Idle jobs unavailable" @retry="idleJobs.reload" />
+    <ErrorRow v-if="idleJobs.error.value" class="m-2" message="Idle jobs unavailable" :detail="idleJobs.error.value.message" @retry="idleJobs.reload" />
     <ListSkeleton v-if="showSkeleton" size="lg" :rows="4" />
-    <EmptyState v-else-if="hasData && idleJobs.data.value?.length === 0" icon="cpu" title="No idle jobs" />
+    <EmptyState
+      v-else-if="hasData && idleJobs.data.value?.length === 0"
+      icon="cpu"
+      title="No idle jobs"
+      hint="Idle jobs are defined in idle-jobs.toml in your data folder"
+    />
     <EmptyState v-else-if="hasData && shownCount === 0" icon="search-x" title="No match" />
     <template v-else-if="hasData">
       <div class="flex h-10 shrink-0 items-center gap-2 border-b border-border px-4 text-13 text-muted-foreground">

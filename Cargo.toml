@@ -4,7 +4,7 @@
 [workspace]
 resolver = "3"
 members = ["src-tauri", "crates/*"]
-default-members = ["src-tauri", "crates/rain-backend"]   # `cargo build` builds the shell and the backend
+default-members = ["src-tauri", "crates/rain-backend", "crates/rain-hook"]   # `cargo build` builds the shell, the backend and the hook (the hooks switch needs rain-hook.exe next to the backend)
 
 [workspace.package]
 version = "0.1.0"
@@ -32,15 +32,14 @@ strip = true
 # `panic` cannot be set per package, so it applies to every program.
 panic = "unwind"
 
-# TEMPORARY: switch this on when crates/rain-hook exists (stage 8). Cargo warns about a profile
-# entry for a package that is not in the workspace.
-# [profile.release.package.rain-hook]
-# opt-level = "z"                   # the hook is small and short-lived
+# The hook is small and short-lived (foundation 1.4).
+[profile.release.package.rain-hook]
+opt-level = "z"
 
 # The only place where dependency versions are written. A member says `name = { workspace = true }`.
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }   # preserve_order: the installer keeps the key order of the user's Claude settings. NEVER add arbitrary_precision (see tests/source_rules.rs)
 serde_repr = "0.1"
 ts-rs = "12.0.1"                  # default features only (serde-compat); see section 9
 tauri = { version = "2" }
@@ -55,7 +54,6 @@ hyper-util = { version = "0.1.21", features = ["tokio", "service", "server", "ht
 http-body-util = "0.1.5"
 tower = { version = "0.5", features = ["util", "timeout"] }
 tower-http = { version = "0.6", default-features = false, features = ["catch-panic"] }
-tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 futures-util = "0.3"
 thiserror = "2"
@@ -67,8 +65,8 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Secur
 toml = { version = "1.2", default-features = false, features = ["std", "serde", "parse"] }   # reads typed values from the user's TOML files
 toml_edit = "0.25.20"             # edits those files and keeps their comments and order
 tempfile = "3.27"
-rusqlite = { version = "0.43", features = ["bundled"] }   # SQLite for history and caches (stage 2)
-notify = "9.0.0"                  # file watching (stage 2)
+rusqlite = { version = "0.43", features = ["bundled"] }   # SQLite for history and caches
+notify = "9.0.0"                  # file watching
 notify-debouncer-full = "0.8.0"
 windows = { version = "0.62", features = [
   "Win32_Foundation", "Win32_Security", "Win32_Graphics_Gdi", "Win32_Storage_EnhancedStorage",
@@ -79,3 +77,9 @@ windows = { version = "0.62", features = [
 ] }                               # all unsafe Windows API code is in rain-backend `platform/`
 winreg = "0.56"                   # registry: autostart value, Steam path
 png = "0.18"                      # icons as PNG
+rayon = "1.12"                    # the disk walker's thread pool, built for one scan (section 05)
+# jobs (section 03): cron schedules. `chrono` stays inside the jobs module (foundation 1.6).
+croner = "5.0.0"
+chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
+chrono-tz = "0.10.4"              # dev-dependency of rain-backend only: DST tests of the schedule
+yaml-rust2 = "0.13.2"              # TEST ONLY (life): an independent YAML parser that checks the frontmatter editor

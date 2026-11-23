@@ -64,6 +64,39 @@ pub struct IconRef {
     pub value: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tint: Option<String>,
+    // For kind `url` only: the text whose first letter is drawn as a tile when the image
+    // cannot be loaded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<String>,
+}
+
+impl IconRef {
+    /// A Lucide icon by its kebab-case name.
+    pub fn lucide(name: &str) -> Self {
+        Self::plain(IconKind::Lucide, name)
+    }
+
+    /// A letter tile for `name`.
+    pub fn letter(name: &str) -> Self {
+        Self::plain(IconKind::Letter, name)
+    }
+
+    /// An image reference (`media/...`) with the text for the tile that shows when it fails to load.
+    pub fn image(reference: &str, fallback: &str) -> Self {
+        Self {
+            fallback: Some(fallback.to_owned()),
+            ..Self::plain(IconKind::Url, reference)
+        }
+    }
+
+    fn plain(kind: IconKind, value: &str) -> Self {
+        Self {
+            kind,
+            value: value.to_owned(),
+            tint: None,
+            fallback: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -149,8 +182,20 @@ mod tests {
             kind: IconKind::Letter,
             value: "A".into(),
             tint: None,
+            fallback: None,
         };
         assert_eq!(round_trip(&icon), json!({ "kind": "letter", "value": "A" }));
+    }
+
+    #[test]
+    fn an_image_icon_carries_its_fallback_text() {
+        let icon = IconRef::image("media/app-icon/app-x?v=1", "App X");
+        assert_eq!(
+            round_trip(&icon),
+            json!({ "kind": "url", "value": "media/app-icon/app-x?v=1", "fallback": "App X" })
+        );
+        assert_eq!(IconRef::letter("A").kind, IconKind::Letter);
+        assert_eq!(IconRef::lucide("bot").kind, IconKind::Lucide);
     }
 
     #[test]
@@ -159,6 +204,7 @@ mod tests {
             kind: IconKind::Url,
             value: "media/app-icon/app-vscode?v=3fa9".into(),
             tint: Some("#ff8800".into()),
+            fallback: None,
         };
         assert_eq!(
             round_trip(&icon),

@@ -36,7 +36,8 @@ const cover = useImageFallback(() => props.game.coverUrl)
             <span class="line-clamp-4 text-center text-sm font-medium text-foreground">{{ game.title }}</span>
           </div>
 
-          <div v-if="!game.installed" class="absolute inset-0 flex items-center justify-center">
+          <!-- Only a game that could be downloaded shows the glyph; a local game whose program is gone is just dimmed. -->
+          <div v-if="!game.installed && game.source !== 'custom'" class="absolute inset-0 flex items-center justify-center">
             <DownloadIcon :size="20" :stroke-width="1.75" class="text-foreground" aria-hidden="true" />
           </div>
 

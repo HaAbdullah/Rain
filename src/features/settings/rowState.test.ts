@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { configIssueText, monitorClaudeRowState } from './rowState'
+import { configIssueText, monitorClaudeRowState, sourceRowState } from './rowState'
 
 describe('monitorClaudeRowState', () => {
   it('shows nothing when the switch is off, so the row keeps its plain hint', () => {
@@ -28,5 +28,24 @@ describe('configIssueText', () => {
 
   it('names only the file when the parser gave no line', () => {
     expect(configIssueText({ file: 'machine.toml', message: 'unreadable' })).toBe('machine.toml has an error')
+  })
+})
+
+describe('sourceRowState', () => {
+  it('says nothing for a source that is fine, missing or silent', () => {
+    expect(sourceRowState(undefined)).toBeUndefined()
+    expect(sourceRowState({ name: 'steam', state: 'ok' })).toBeUndefined()
+    expect(sourceRowState({ name: 'steam', state: 'off' })).toBeUndefined()
+  })
+
+  it('shows the backend text, failed or quiet', () => {
+    expect(sourceRowState({ name: 'steam', state: 'failed', message: 'Cannot read libraryfolders.vdf' })).toEqual({
+      status: 'failed',
+      text: 'Cannot read libraryfolders.vdf',
+    })
+    expect(sourceRowState({ name: 'epic', state: 'off', message: 'Epic is not installed' })).toEqual({
+      status: 'idle',
+      text: 'Epic is not installed',
+    })
   })
 })

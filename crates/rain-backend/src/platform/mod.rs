@@ -13,6 +13,7 @@
 //! | `process` | `hidden_command`, process lists, `spawn_detached`, `ExitWatcher` |
 //! | `job` | `OwnedJob`: a process tree that dies with Rain, with its output captured |
 //! | `windows` | the visible top-level windows |
+//! | `windows_focus` | the windows with their handles, and bringing one to the front |
 //! | `idle` | milliseconds since the last keyboard or mouse input |
 //! | `fs` | the fixed drives and their sizes |
 //! | `time` | the local calendar date |
@@ -36,3 +37,4 @@ pub mod shell;
 pub mod thread;
 pub mod time;
 pub mod windows;
+pub mod windows_focus;

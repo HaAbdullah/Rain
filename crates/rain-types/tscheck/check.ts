@@ -4,9 +4,9 @@
 // This is a compile-time check only: it fails by making `tsc` report an error. Nothing runs.
 // `Equals` is true only when two types are exactly the same, not merely assignable to each other.
 //
-// Stage 1a covers the types that exist on both sides. When a later stage moves a type into
-// `src/bindings/rain-types.ts` and deletes the hand-written one, its line here is replaced by a
-// check of its own (or removed once `src/data/types.ts` only re-exports the generated file).
+// It covers the types that exist on both sides. When a type moves into `src/bindings/rain-types.ts`
+// and the hand-written one is deleted, its line here is replaced by a check of its own (or removed
+// once `src/data/types.ts` only re-exports the generated file).
 
 import type * as G from '../../../src/bindings/rain-types'
 import type { RainError, Topic } from '../../../src/data/api'
@@ -34,9 +34,8 @@ export const errorCodesGrew: Equals<G.ApiError['code'], RainError['code'] | 'inv
 export const errorCodeAliasMatches: Equals<G.ErrorCode, G.ApiError['code']> = true
 
 // ---- the topic names ----
-// `health` and `settings` are real topics from stage 1b; the six old names must still agree.
-// (The frontend adds the two new names to its own `Topic` in the same stage; both sides are
-// compared without them so that this check does not depend on the order of those edits.)
+// `health` and `settings` are compared apart from the other names, so that this check does not
+// depend on the order in which the two sides were edited.
 type NewTopic = 'health' | 'settings'
 export const topicNamesMatch: Equals<
   Exclude<(typeof G.TOPIC_NAMES)[number], NewTopic>,

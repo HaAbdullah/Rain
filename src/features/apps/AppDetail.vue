@@ -37,7 +37,8 @@ const state = computed<{ status: Status; text: string }>(() => {
 <template>
   <DetailPane :title="app.name">
     <RIcon :icon="app.icon" :size="32" class="mb-3" />
-    <PathText :path="app.exePath" />
+    <PathText v-if="app.exePath" :path="app.exePath" />
+    <p v-else-if="app.kind === 'store'" class="text-13 text-muted-foreground">Store app</p>
 
     <div class="mt-4 flex items-center gap-2 text-13">
       <StatusDot :status="state.status" :size="12" />
@@ -66,7 +67,14 @@ const state = computed<{ status: Status; text: string }>(() => {
         Launch
         <KeyHint keys="Enter" />
       </Button>
-      <Button variant="ghost" tabindex="-1" class="gap-2 active:translate-y-0 transition-colors" @mousedown="keepFocus" @click="emit('reveal')">
+      <Button
+        v-if="app.exePath"
+        variant="ghost"
+        tabindex="-1"
+        class="gap-2 active:translate-y-0 transition-colors"
+        @mousedown="keepFocus"
+        @click="emit('reveal')"
+      >
         Open file location
         <KeyHint keys="Ctrl+Enter" />
       </Button>

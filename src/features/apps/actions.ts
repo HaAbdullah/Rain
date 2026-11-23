@@ -50,10 +50,18 @@ export const appActions: ActionProvider<TargetOf<'app'>> = ({ item: app }) => [
       await ctx.launch({ type: 'app', id: app.id }, app.name)
     },
   },
-  revealAction(app.exePath, 'secondary', 'Open file location'),
+  // A Store app has no file, so it has nothing to show in Explorer and no path to copy.
+  ...(app.exePath ? [revealAction(app.exePath, 'secondary', 'Open file location')] : []),
   pinAction('app', app.id, app.pinned),
-  copyAction('path', app.exePath),
+  ...(app.exePath ? [copyAction('path', app.exePath)] : []),
 ]
+
+/** "Scan again": asks the backend to read the installed apps once more and refreshes what shows them. */
+export async function rescanApps({ api, notice }: Pick<ActionContext, 'api' | 'notice'>): Promise<void> {
+  const found = await api.rescanApps()
+  refreshResources('apps', 'pools', 'pinned', 'recent')
+  notice.info(found.length === 0 ? 'Still no apps found' : `Found ${found.length} apps`)
+}
 
 export const poolActions: ActionProvider<TargetOf<'pool'>> = ({ item: pool }) => [
   {

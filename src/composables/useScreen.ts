@@ -20,6 +20,8 @@ export interface ScreenController {
   subView?: { ids: readonly string[]; current: Ref<string> }
   /** Backspace on an empty query. Returns false when not handled. */
   stepOut?(): boolean
+  /** Esc: leave a sub-view of the screen (Life: the open habit). Returns false when there is none. */
+  back?(): boolean
   /** Alt+1..9 targets (Home only). */
   digits?: Ref<ActionTarget[]>
   /** Game mode: replaces the registry's actions. */

@@ -21,7 +21,9 @@ use rain_backend::core::clock::Clock;
 use rain_backend::core::launch_contract::Opener;
 use rain_backend::core::secrets::Secrets;
 use rain_backend::core::state::{AppState, AppStateBuilder};
+use rain_backend::modules::launcher::{AppSource, IconRenderer, PathProbe};
 use rain_backend::modules::settings::Detect;
+use rain_backend::platform::process::ProcessLister;
 use rain_backend::platform::registry::RunKey;
 use rain_backend::{Running, start};
 use rain_pipe::{PipeClient, SseFrame, SseReader, pipe_exists};
@@ -93,6 +95,17 @@ impl TestBackend {
             tweaks: vec![
                 Arc::new(|b| b.with::<dyn Detect>(Arc::new(fakes::FakeDetect::default()))),
                 Arc::new(|b| b.with::<dyn RunKey>(Arc::new(fakes::FakeRunKey::default()))),
+                // launcher and apps (section 01): no real app list, icon, process list, file check or
+                // program start in any test. A test that wants to see them replaces these.
+                Arc::new(|b| b.with::<dyn AppSource>(Arc::new(fakes::FakeAppSource::default()))),
+                Arc::new(|b| {
+                    b.with::<dyn IconRenderer>(Arc::new(fakes::FakeIconRenderer::default()))
+                }),
+                Arc::new(|b| b.with::<dyn PathProbe>(Arc::new(fakes::FakePathProbe::default()))),
+                Arc::new(|b| {
+                    b.with::<dyn ProcessLister>(Arc::new(fakes::FakeProcesses::default()))
+                }),
+                Arc::new(|b| b.opener(Arc::new(fakes::FakeOpener::default()))),
             ],
             config_tweaks: Vec::new(),
         }

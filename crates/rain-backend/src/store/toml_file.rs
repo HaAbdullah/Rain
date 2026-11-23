@@ -404,7 +404,7 @@ impl<T: DeserializeOwned + Default + Send + Sync + 'static> TomlFile<T> {
     /// a broken one means defaults plus an issue in `/health`. `validate` states the rules that
     /// the types cannot (lengths, allowed characters); it runs for every load and every write.
     ///
-    /// Stage 1b departure from the foundation signature: `open` is `async`, because the first
+    /// Departure from the foundation signature: `open` is `async`, because the first
     /// read runs on a blocking thread.
     pub async fn open(
         hub: &ConfigHub,

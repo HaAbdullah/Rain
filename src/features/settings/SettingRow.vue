@@ -6,19 +6,17 @@ import { computed, ref, useTemplateRef, watch } from 'vue'
 import type { SettingDef } from '@/actions/types'
 import KeyHint from '@/components/rain/KeyHint.vue'
 import StatusDot from '@/components/rain/StatusDot.vue'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { useOverlay } from '@/composables/useOverlay'
 import { useSearch } from '@/composables/useSearch'
-import { mockControl } from '@/data/mock/control'
 import { keepFocus } from '@/lib/focus'
 import { settingActivation } from './actions'
-import { splitPaths, type SettingValue } from './settingValues'
+import type { SettingValue } from './settingValues'
 import { selectChoices } from './settingDefs'
 import type { RowState } from './rowState'
+import { usePathCheck } from './usePathCheck'
 
 const props = defineProps<{
   def: SettingDef
@@ -35,7 +33,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   change: [value: SettingValue]
   changePath: [path: string]
-  press: []
 }>()
 
 const search = useSearch()
@@ -63,8 +60,8 @@ watch(fieldValue, (text) => {
 /** An empty field is "not set", not a mistake, so it has no glyph and shows its placeholder. */
 const hasPathGlyph = computed(() => isPathField.value && draft.value.trim() !== '')
 
-/** Every folder of the field exists on the sample machine. */
-const pathFound = computed(() => splitPaths(draft.value).every(mockControl.pathExists))
+/** Whether every folder of the field exists: the backend answers (api.checkPaths); undefined until it has. */
+const pathFound = usePathCheck(draft, isPathField)
 
 function commitField() {
   if (draft.value === sent) return
@@ -85,7 +82,6 @@ watch(settingActivation, (activation) => {
   if (activation?.def.id !== props.def.id) return
   if (props.def.kind === 'switch') emit('change', props.value !== true)
   else if (props.def.kind === 'select') selectOpen.value = true
-  else if (props.def.kind === 'button') emit('press')
   else root.value?.querySelector('input')?.focus()
 })
 </script>
@@ -117,6 +113,7 @@ watch(settingActivation, (activation) => {
         />
         <span v-if="hasPathGlyph" class="flex size-4 items-center justify-center">
           <StatusDot
+            v-if="pathFound !== undefined"
             :status="pathFound ? 'success' : 'failed'"
             :label="pathFound ? 'Found' : 'Missing'"
           />
@@ -149,17 +146,10 @@ watch(settingActivation, (activation) => {
         </SelectContent>
       </Select>
 
-      <Button v-else-if="def.kind === 'button'" variant="outline" tabindex="-1" @click="emit('press')">
-        Reset
-      </Button>
-
       <template v-else-if="def.kind === 'info'">
         <StatusDot v-if="problem" status="failed" :label="problem" />
         <KeyHint v-if="def.key === 'hotkey'" :keys="String(value)" />
-        <template v-else>
-          <span class="text-13 text-muted-foreground">{{ value }}</span>
-          <Badge v-if="def.id === 'about'" variant="secondary" class="text-muted-foreground">Mock data</Badge>
-        </template>
+        <span v-else class="text-13 text-muted-foreground">{{ value }}</span>
       </template>
     </div>
   </div>

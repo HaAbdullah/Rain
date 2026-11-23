@@ -32,6 +32,8 @@ const now = useNow()
 
 const changedFiles = computed(() => {
   const count = props.project.dirtyFiles
+  // Absent when git is missing or has not answered yet: then the pane says nothing.
+  if (count === undefined) return undefined
   if (count === 0) return 'No changed files'
   return count === 1 ? '1 changed file' : `${count} changed files`
 })
@@ -71,7 +73,7 @@ const starting = computed(() => props.run?.status === 'running')
           <GitBranchIcon :size="12" :stroke-width="1.75" class="shrink-0" aria-hidden="true" />
           <span class="selectable min-w-0 truncate font-mono text-xs">{{ project.branch }}</span>
         </div>
-        <p class="text-13 text-muted-foreground">{{ changedFiles }}</p>
+        <p v-if="changedFiles" class="text-13 text-muted-foreground">{{ changedFiles }}</p>
       </template>
     </div>
 

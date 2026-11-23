@@ -102,6 +102,27 @@ async fn a_published_topic_arrives_as_a_frame() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_payload_over_the_frame_limit_reaches_the_client_as_a_resync() {
+    let backend = TestBackend::start().await;
+    let mut stream = backend.stream().await;
+    expect_head(&mut stream, &backend).await;
+
+    let padding = "x".repeat(rain_types::limits::FRAME_MAX);
+    backend
+        .state
+        .bus
+        .publish::<Sessions>(&json!({ "padding": padding }));
+
+    let (event, frame) = stream.expect_event().await;
+    assert_eq!(
+        event, "resync",
+        "the client refetches instead of going stale"
+    );
+    assert_eq!(frame.payload["reason"], "lagged");
+    backend.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_change_of_health_is_published_on_the_health_topic() {
     let backend = TestBackend::start().await;
     let mut stream = backend.stream().await;
@@ -115,7 +136,12 @@ async fn a_change_of_health_is_published_on_the_health_topic() {
 
     let (event, frame) = stream.expect_event().await;
     assert_eq!(event, "health");
-    assert_eq!(frame.payload["sources"][0]["name"], "steam");
+    // Other modules report their own sources at start, so the source is looked up by name.
+    assert!(
+        frame.payload["sources"]
+            .as_array()
+            .is_some_and(|sources| sources.iter().any(|source| source["name"] == "steam"))
+    );
     assert_eq!(frame.payload["startId"], backend.state.start_id.as_str());
     backend.stop().await;
 }
@@ -208,4 +234,37 @@ async fn a_stop_is_not_held_up_by_a_client_that_never_reads() {
     // The pipe name goes only when the client lets go of its end too.
     drop(stalled);
     backend.wait_pipe_gone().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_stop_still_writes_the_frames_that_were_already_published() {
+    let backend = TestBackend::start().await;
+    let mut stream = backend.stream().await;
+    expect_head(&mut stream, &backend).await;
+
+    // The client does not read while the frames are published, so many of them are still in the
+    // buffer of the stream when the stop comes. They were published before the stop, so they must
+    // all arrive, in order, and the lifecycle frame comes after them (game mode relies on this
+    // for its `done` frame).
+    let first = backend.state.bus.seq() + 1;
+    let padding = "x".repeat(50_000);
+    for _ in 0..20 {
+        backend
+            .state
+            .bus
+            .publish::<Sessions>(&json!({ "padding": padding }));
+    }
+    let last = backend.state.bus.seq();
+    backend.request_stop("gameMode").await;
+    let rest = stream.rest().await;
+
+    let seqs: Vec<u64> = rest
+        .iter()
+        .filter(|(event, _)| event == "sessions")
+        .map(|(_, frame)| frame.seq)
+        .collect();
+    assert_eq!(seqs, (first..=last).collect::<Vec<_>>());
+    let (event, _) = rest.last().expect("the stream ended with a frame");
+    assert_eq!(event, "lifecycle");
+    backend.wait_stopped().await;
 }

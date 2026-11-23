@@ -69,10 +69,14 @@ fn route(method: &str, path: &str) -> Result<Target, ApiError> {
     if !METHODS.contains(&method) {
         return Err(bad_request("The method is not allowed"));
     }
-    let tricks = ["..", "\\", "//", "://", "#"];
+    let tricks = ["\\", "//", "://", "#"];
+    // `..` is a trick only as a whole path segment. In the query string it is plain user text
+    // (a search for "a..b", a folder named "v1..2"), so only the part before `?` is checked.
+    let dot_segment = path_only(path).split('/').any(|segment| segment == "..");
     if !path.starts_with('/')
         || path.len() > URL_MAX
         || path.chars().any(char::is_control)
+        || dot_segment
         || tricks.iter().any(|trick| path.contains(trick))
     {
         return Err(bad_request("The path is not allowed"));
@@ -280,6 +284,18 @@ mod tests {
             "/set\u{7f}tings",
         ] {
             refused("GET", path);
+        }
+    }
+
+    #[test]
+    fn two_dots_in_the_query_text_are_plain_text() {
+        for path in [
+            "/search?q=..",
+            "/search?q=a..b",
+            "/disk/scan?path=D%3A%2Fv1..2",
+            "/a/b..c",
+        ] {
+            assert!(route("GET", path).is_ok(), "{path}");
         }
     }
 

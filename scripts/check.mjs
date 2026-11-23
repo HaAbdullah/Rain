@@ -10,8 +10,10 @@ const checks = [
   ['npm run types:check', 'generated types are current'],
   ['npm run types:barrel', 'no type is declared in both places'],
   ['cargo test --workspace', 'unit and integration tests'],
+  ['node scripts/frontend-checks.mjs', 'no mock code is left, one version'],
   ['npm test', 'frontend tests'],
   ['npm run build', 'vue-tsc and vite build'],
+  ['node scripts/frontend-checks.mjs --dist', 'the built output holds no mock code'],
   ['npm run smoke', 'the app starts'],
 ]
 

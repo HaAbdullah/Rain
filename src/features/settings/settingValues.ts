@@ -1,8 +1,6 @@
-// Reads a row's value out of Settings (or the mock's options) and turns a changed
-// value back into the patch for api.updateSettings. Each Settings field has its own
-// case, so the types stay exact without casts.
+// Reads a row's value out of Settings and turns a changed value back into the patch for
+// api.updateSettings. Each Settings field has its own case, so the types stay exact without casts.
 import type { SettingDef } from '@/actions/types'
-import { mockControl } from '@/data/mock/control'
 import type { Settings, SettingsPatch } from '@/data/types'
 import { APP_VERSION } from './settingDefs'
 
@@ -29,7 +27,7 @@ export const splitPaths = (text: string): string[] =>
     .filter((part) => part !== '')
 export const joinPaths = (paths: string[]): string => paths.join('; ')
 
-/** What the row's control shows. Prototype rows have no Settings field and read the mock. */
+/** What the row's control shows. The About row has no Settings field and shows the app version. */
 export function readValue(def: SettingDef, settings: Settings): SettingValue {
   switch (def.key) {
     case 'hotkey':
@@ -54,8 +52,6 @@ export function readValue(def: SettingDef, settings: Settings): SettingValue {
     case 'gameFolders':
       return joinPaths(settings[def.key])
     default:
-      if (def.id === 'mock-scenario') return mockControl.options.scenario
-      if (def.id === 'mock-latency') return mockControl.options.latency
       return def.id === 'about' ? `Version ${APP_VERSION}` : ''
   }
 }

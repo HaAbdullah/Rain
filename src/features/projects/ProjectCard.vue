@@ -31,7 +31,7 @@ const environmentIcons = computed(() => props.project.environment.map((step) => 
           <ProjectCardName :project="project" :icon-size="32" name-class="text-base font-semibold" />
           <span class="flex-1" />
           <StatusDot v-if="sessionStatus" :status="sessionStatus" label="Claude session" />
-          <RelTime :iso="project.lastOpenedAt" short class="text-xs text-muted-foreground" />
+          <RelTime v-if="project.lastOpenedAt" :iso="project.lastOpenedAt" short class="text-xs text-muted-foreground" />
         </div>
         <div class="flex items-center gap-2 text-muted-foreground">
           <GitBranchIcon :size="12" :stroke-width="1.75" class="shrink-0" aria-hidden="true" />
@@ -48,7 +48,7 @@ const environmentIcons = computed(() => props.project.environment.map((step) => 
         <div class="flex items-center gap-2 text-muted-foreground">
           <GitBranchIcon :size="12" :stroke-width="1.75" class="shrink-0" aria-hidden="true" />
           <span class="min-w-0 flex-1 truncate font-mono text-xs">{{ project.branch }}</span>
-          <RelTime :iso="project.lastOpenedAt" short class="text-xs" />
+          <RelTime v-if="project.lastOpenedAt" :iso="project.lastOpenedAt" short class="text-xs" />
         </div>
       </div>
     </Tile>

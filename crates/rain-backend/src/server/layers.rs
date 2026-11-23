@@ -3,7 +3,6 @@
 
 use std::time::Instant;
 
-use axum::BoxError;
 use axum::extract::{Request, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderValue, Method};
@@ -14,7 +13,7 @@ use tracing::debug;
 
 use super::builtin::SHUTDOWN_ROUTE;
 use crate::core::error::{
-    ApiError, method_not_allowed_error, shutting_down_error, timeout_error, url_too_long_error,
+    method_not_allowed_error, shutting_down_error, timeout_error, url_too_long_error,
 };
 use crate::core::state::AppState;
 
@@ -85,9 +84,21 @@ pub async fn check_request(
     next.run(request).await
 }
 
-/// The timeout layer can fail in one way only: the time ran out.
-pub async fn handle_timeout(_error: BoxError) -> ApiError {
-    timeout_error()
+/// The route that holds a request open longer than `request_timeout` on purpose: the hook route
+/// waits up to 19 seconds for the user's answer to a permission request (section 03 6.5.1).
+/// Everything else has the one time limit of foundation 3.4.
+const HOLDING_ROUTE: &str = "/internal/hook";
+
+/// A handler that takes longer than `Limits::request_timeout` is answered with `unavailable`
+/// (reason `timeout`). The permission hold of `HOLDING_ROUTE` is the one exception.
+pub async fn limit_time(State(state): State<AppState>, request: Request, next: Next) -> Response {
+    if request.uri().path().strip_prefix(API_PREFIX) == Some(HOLDING_ROUTE) {
+        return next.run(request).await;
+    }
+    match tokio::time::timeout(state.config.limits.request_timeout, next.run(request)).await {
+        Ok(response) => response,
+        Err(_) => timeout_error().into_response(),
+    }
 }
 
 #[cfg(test)]

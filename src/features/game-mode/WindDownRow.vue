@@ -21,7 +21,15 @@ const WIND_DOWN_STATUS: Record<WindDownItem['status'], StatusKind> = {
   stopped: 'success',
 }
 
+const BADGE_TEXT: Record<WindDownItem['effect'], string> = {
+  safe: 'safe',
+  interrupts: 'interrupts',
+  leftRunning: 'left running',
+}
+
 const progress = computed<StatusKind | null>(() => {
+  // A row that is left alone has nothing to show progress for.
+  if (props.item.effect === 'leftRunning') return null
   if (props.phase === 'windingDown') return WIND_DOWN_STATUS[props.item.status]
   return props.waiting && props.item.effect === 'interrupts' ? 'running' : null
 })
@@ -34,10 +42,10 @@ const progress = computed<StatusKind | null>(() => {
     <span class="text-13 text-muted-foreground tabular-nums">{{ item.count }}</span>
     <Badge
       variant="secondary"
-      class="w-20 text-muted-foreground"
+      class="w-24 text-muted-foreground"
       :class="{ 'bg-[color-mix(in_srgb,var(--status-waiting)_15%,transparent)] text-status-waiting': item.effect === 'interrupts' }"
     >
-      {{ item.effect === 'interrupts' ? 'interrupts' : 'safe' }}
+      {{ BADGE_TEXT[item.effect] }}
     </Badge>
     <span class="flex size-4 shrink-0 items-center justify-center">
       <StatusDot v-if="progress" :status="progress" />

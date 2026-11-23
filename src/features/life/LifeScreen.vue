@@ -1,190 +1,123 @@
 <script setup lang="ts">
-// Life (spec 7.6): habits from the Obsidian daily notes as a month or year heatmap,
-// the selected day on the right, today's agenda below it. Strictly read-only.
+// Life (spec 7.6): your habits, nothing else. A list grouped by Daily, Weekly and Monthly, each
+// row a habit with today's checkbox and a small heat strip. The full progress of one habit is
+// its own view, opened with Ctrl+Enter or a click on the row.
+//
+// Rain reads the vault, and writes exactly one thing: the checkbox you tick sets that one
+// property in that day's daily note. There is no calendar and no agenda here.
+import { TriangleAlertIcon } from '@lucide/vue'
 import { computed, watch } from 'vue'
-import { ChevronLeftIcon, ChevronRightIcon, LockIcon } from '@lucide/vue'
-import { actionContext } from '@/actions/context'
+import { runPrimary } from '@/actions/context'
 import type { ActionTarget } from '@/actions/types'
 import EmptyState from '@/components/rain/EmptyState.vue'
 import ErrorRow from '@/components/rain/ErrorRow.vue'
+import ItemList from '@/components/rain/ItemList.vue'
 import ScreenFrame from '@/components/rain/ScreenFrame.vue'
-import ViewStrip from '@/components/rain/ViewStrip.vue'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useNotice } from '@/composables/useNotice'
+import { useActionPanel } from '@/composables/useActionPanel'
 import { useNow } from '@/composables/useNow'
 import { useResource } from '@/composables/useResource'
 import { useScreen } from '@/composables/useScreen'
 import { useSectionQuery } from '@/composables/useSearch'
+import { useSelection } from '@/composables/useSelection'
 import { api } from '@/data'
-import type { HabitDay, ID } from '@/data/types'
-import { errorMessage } from '@/lib/errors'
 import { keepFocus } from '@/lib/focus'
-import { matches } from '@/lib/score'
-import { formatDayLabel, toISODate } from '@/lib/time'
+import { toISODate } from '@/lib/time'
 import { useNav } from '@/nav/useNav'
-import { openTodaysNote } from './actions'
-import Agenda from './Agenda.vue'
-import DayPanel from './DayPanel.vue'
-import { addDays, parseISODate } from './dates'
-import { doneCount, habitWords, streakAt } from './heat'
-import MonthHeatmap from './MonthHeatmap.vue'
-import { ALL_HABITS, useDayCursor, type LifeView } from './useDayCursor'
-import YearHeatmap from './YearHeatmap.vue'
-
-const VIEWS: readonly LifeView[] = ['month', 'year']
-const STRIP_ITEMS = [
-  { id: 'month', label: 'Month', icon: 'calendar' },
-  { id: 'year', label: 'Year', icon: 'calendar-range' },
-]
+import { closeHabit, habitEditor, lifeView, openHabit } from './actions'
+import HabitEditorDialog from './HabitEditorDialog.vue'
+import HabitRow from './HabitRow.vue'
+import HabitView from './HabitView.vue'
+import { groupHabits, type HabitRow as HabitRowItem } from './rows'
+import { useOpenHabit } from './useOpenHabit'
 
 const nav = useNav()
-const notice = useNotice()
+const panel = useActionPanel()
 const query = useSectionQuery('life')
 const now = useNow()
 const today = computed(() => toISODate(new Date(now.value)))
 
-const view = computed<LifeView>({
-  get: () => VIEWS.find((id) => id === nav.route.value.sub) ?? 'month',
-  set: (id) => nav.setSub(id),
-})
-
 // ---- data ----
 
-// One range feeds both views and the streaks: last year and this year.
-// Both follow `today`, so the screen stays right when it is left open past midnight or New Year.
-const thisYear = computed(() => parseISODate(today.value).getFullYear())
-const rangeFrom = computed(() => toISODate(new Date(thisYear.value - 1, 0, 1)))
-const rangeTo = computed(() => toISODate(new Date(thisYear.value, 11, 31)))
-
 const vault = useResource('vault', () => api.getVaultStatus())
-const habits = useResource('habits', () => api.listHabits())
-const habitDays = useResource('habitDays:life', () => api.listHabitDays(rangeFrom.value, rangeTo.value))
-const events = useResource('events:agenda', () => api.listEvents(today.value, addDays(today.value, 1)))
-const settings = useResource('settings', () => api.getSettings())
-
-// The fetchers read the new dates when they run again.
-watch(rangeTo, () => void habitDays.reload())
-watch(today, () => void events.reload())
+// The backend pushes the list after a tick and after a change in the notes or in habits.toml.
+const habits = useResource('habits', () => api.listHabits(), { live: 'habits' })
+// After midnight "today" is another day: the list is fetched again.
+watch(today, () => void habits.reload())
 
 const habitList = computed(() => habits.data.value ?? [])
-const days = computed(() => new Map((habitDays.data.value ?? []).map((day) => [day.date, day])))
-const vaultFound = computed(() => vault.data.value?.connected === true)
-const ready = computed(() => vault.data.value && habits.data.value && habitDays.data.value)
-const failed = computed(() => vault.error.value ?? habits.error.value ?? habitDays.error.value)
+const open = useOpenHabit(habitList, today)
 
-/** Habits whose property no daily note has. */
-const missing = computed(
-  () =>
-    new Set(
-      habitList.value
-        .filter((habit) => vault.data.value?.missingProperties.includes(habit.property))
-        .map((habit) => habit.id),
-    ),
-)
-
-/** The month rows: the section filter narrows them by habit name. */
-const shownHabits = computed(() => habitList.value.filter((habit) => matches(query.value, habit.name)))
-
-function reloadVault() {
-  void Promise.all([vault.reload(), habits.reload(), habitDays.reload()])
-}
+const failed = computed(() => vault.error.value ?? habits.error.value)
+const ready = computed(() => vault.data.value !== undefined && habits.data.value !== undefined)
+const connected = computed(() => vault.data.value?.connected === true)
+const writable = computed(() => vault.data.value?.writable === true)
 
 function reloadAll() {
-  reloadVault()
-  void events.reload()
-  void settings.reload()
+  void Promise.all([vault.reload(), habits.reload()])
 }
 
-// ---- the cursor ----
+// "Show in Life" can open a habit straight away; read once, like the pool of the Apps screen.
+const wantedHabitId = nav.route.value.params?.id
+if (wantedHabitId) openHabit(wantedHabitId)
 
-const cursor = useDayCursor({
-  view,
-  today,
-  min: rangeFrom,
-  rows: computed(() => shownHabits.value.map((habit) => habit.id)),
-  chips: computed(() => [ALL_HABITS, ...habitList.value.map((habit) => habit.id)]),
+// A habit that was deleted (or renamed by hand in habits.toml) while it was open: back to the list.
+watch([() => habits.data.value, () => lifeView.habitId], () => {
+  const list = habits.data.value
+  if (list && lifeView.habitId !== '' && !list.some((summary) => summary.habit.id === lifeView.habitId)) {
+    closeHabit()
+  }
 })
 
-// A new filter text selects its first match: a row in Month, the chip in Year.
-watch(query, (text) => {
-  const first = shownHabits.value[0]
-  if (text === '' || !first) return
-  cursor.select(cursor.date.value, first.id)
-  cursor.selectChip(first.id)
+// ---- the list ----
+
+const groups = computed(() => groupHabits(habitList.value, query.value))
+const { selectedId, selected, move, page, group, select } = useSelection(groups, {
+  resetOn: query,
+  persistKey: 'life.selected',
 })
 
-const selectedDay = computed<HabitDay>(
-  () => days.value.get(cursor.date.value) ?? { date: cursor.date.value, noteExists: false, values: {} },
+function targetOf(row: HabitRowItem): ActionTarget {
+  return { type: 'habit', id: row.id, item: row }
+}
+
+const noMatch = computed(
+  () => habitList.value.length > 0 && groups.value.every((entry) => entry.items.length === 0),
 )
 
-/** The habit the cursor is on: the month row, or the year chip unless it is "All". */
-const cursorHabit = computed(() => {
-  const id: ID | null = view.value === 'month' ? cursor.row.value : cursor.chip.value
-  return habitList.value.find((habit) => habit.id === id)
-})
+function openPanel(row: HabitRowItem, event: MouseEvent) {
+  select(row.id)
+  panel.open(targetOf(row), event)
+}
 
-const target = computed<ActionTarget | null>(() =>
-  ready.value && vaultFound.value ? { type: 'day', id: cursor.date.value, item: selectedDay.value } : null,
-)
+// ---- keys ----
 
-// Without a grid to move over, Left/Right belong to the search caret.
-const hasGrid = computed(
-  () => target.value !== null && habitList.value.length > 0 && (view.value === 'year' || shownHabits.value.length > 0),
-)
+const viewing = computed(() => open.habit.value !== undefined)
 
 useScreen({
-  target,
-  move: (dir) => hasGrid.value && cursor.move(dir),
-  page: cursor.page,
-  group: cursor.group,
-  subView: { ids: VIEWS, current: view },
+  target: computed<ActionTarget | null>(() => {
+    if (viewing.value) {
+      const day = open.dayItem.value
+      return day ? { type: 'habitDay', id: day.date, item: day } : null
+    }
+    return selected.value ? targetOf(selected.value) : null
+  }),
+  // The list returns false for Left and Right, so the caret keeps them; the year grid takes all four.
+  move: (dir) => (viewing.value ? open.move(dir) : move(dir)),
+  page: (dir) => (viewing.value ? open.page(dir) : page(dir)),
+  group: (dir) => {
+    if (!viewing.value) group(dir)
+  },
+  // Esc and Backspace on an empty query leave the full view.
+  back: leaveHabit,
+  stepOut: leaveHabit,
 })
 
-/** True until both the events and the connection setting are known, so no wrong state is painted. */
-const agendaLoading = computed(
-  () =>
-    (events.data.value === undefined && events.error.value === null) ||
-    (settings.data.value === undefined && settings.error.value === null),
-)
-
-// ---- text ----
-
-const readout = computed(() => {
-  const label = formatDayLabel(cursor.date.value)
-  if (!selectedDay.value.noteExists) return `${label}, no note`
-  const habit = cursorHabit.value
-  if (!habit) {
-    const { done, counted } = doneCount(
-      habitList.value.filter((candidate) => !missing.value.has(candidate.id)),
-      selectedDay.value,
-    )
-    return `${label}, ${done} of ${counted} habits done`
-  }
-  const streak = missing.value.has(habit.id) ? 0 : streakAt(habit, days.value, cursor.date.value, today.value)
-  return `${label}, ${habitWords(habit, selectedDay.value)}${streak > 0 ? `, streak ${streak}` : ''}`
-})
-
-const periodLabel = computed(() => {
-  const date = parseISODate(cursor.date.value)
-  return view.value === 'year'
-    ? String(date.getFullYear())
-    : new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(date)
-})
-
-// ---- actions ----
-
-function pickView(id: string) {
-  const known = VIEWS.find((candidate) => candidate === id)
-  if (known) view.value = known
-}
-
-async function openToday() {
-  try {
-    await openTodaysNote(actionContext())
-  } catch (reason) {
-    notice.error(errorMessage(reason, "Could not open today's note"))
-  }
+function leaveHabit(): boolean {
+  if (lifeView.habitId === '') return false
+  closeHabit()
+  return true
 }
 
 function openSettings() {
@@ -193,63 +126,20 @@ function openSettings() {
 </script>
 
 <template>
-  <ScreenFrame pane="md">
-    <template #strip>
-      <ViewStrip :items="STRIP_ITEMS" :model-value="view" @update:model-value="pickView">
-        <template #end>
-          <button
-            type="button"
-            tabindex="-1"
-            aria-label="Previous"
-            class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
-            @click="cursor.page(-1)"
-          >
-            <ChevronLeftIcon :size="16" :stroke-width="1.75" />
-          </button>
-          <span class="min-w-28 text-center text-13 text-foreground">{{ periodLabel }}</span>
-          <button
-            type="button"
-            tabindex="-1"
-            aria-label="Next"
-            class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
-            @click="cursor.page(1)"
-          >
-            <ChevronRightIcon :size="16" :stroke-width="1.75" />
-          </button>
-          <button
-            type="button"
-            tabindex="-1"
-            class="h-7 rounded-md px-2 text-13 text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
-            @click="cursor.goToday()"
-          >
-            Today
-          </button>
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <LockIcon :size="16" :stroke-width="1.75" class="mx-2 text-text-3" aria-label="Read-only" />
-            </TooltipTrigger>
-            <TooltipContent>Rain reads your vault and never writes to it</TooltipContent>
-          </Tooltip>
-        </template>
-      </ViewStrip>
-    </template>
-
-    <div v-if="failed" class="p-4" @mousedown="keepFocus">
-      <ErrorRow message="Vault unavailable" @retry="reloadVault" />
+  <ScreenFrame pane="none">
+    <!-- A failed refetch keeps the data the screen already has: the error shows above it, not instead of it. -->
+    <div v-if="failed" class="px-4 pt-4" @mousedown="keepFocus">
+      <ErrorRow message="Vault unavailable" :detail="failed.message" @retry="reloadAll" />
     </div>
 
-    <div v-else-if="!ready" class="flex flex-col gap-3 p-4">
-      <template v-if="vault.showSkeleton.value || habits.showSkeleton.value || habitDays.showSkeleton.value">
-        <Skeleton v-if="view === 'year'" class="h-7 w-2/3" />
-        <Skeleton v-if="view === 'year'" class="h-40" />
-        <template v-else>
-          <Skeleton v-for="row in 5" :key="row" class="h-5" />
-        </template>
+    <div v-if="!ready" class="flex flex-col gap-2 p-4" aria-hidden="true">
+      <template v-if="vault.showSkeleton.value || habits.showSkeleton.value">
+        <Skeleton v-for="row in 5" :key="row" class="h-10" />
       </template>
     </div>
 
     <EmptyState
-      v-else-if="!vaultFound"
+      v-else-if="!connected"
       icon="calendar-check"
       :title="vault.data.value?.path ? 'Vault not found' : 'Choose your vault'"
       :hint="
@@ -264,59 +154,61 @@ function openSettings() {
     <EmptyState
       v-else-if="habitList.length === 0"
       icon="calendar-check"
-      title="No habits found"
-      hint="Add habit properties to your daily notes, then read the vault again."
-      action-label="Re-read vault"
-      action-keys="Ctrl+KeyR"
-      @action="reloadAll"
+      title="No habits yet"
+      hint="A habit is a checkbox property at the top of your daily note."
+      action-label="New habit"
+      action-keys="Ctrl+KeyN"
+      @action="habitEditor.create()"
     />
 
-    <EmptyState v-else-if="view === 'month' && shownHabits.length === 0" icon="search-x" title="No habit matches" />
-
-    <MonthHeatmap
-      v-else-if="view === 'month'"
-      :habits="shownHabits"
-      :days="days"
-      :date="cursor.date.value"
+    <HabitView
+      v-else-if="open.habit.value"
+      :summary="open.habit.value"
+      :open="open"
       :today="today"
-      :row="cursor.row.value"
-      :missing="missing"
-      @select="cursor.select"
+      :writable="writable"
+      @back="closeHabit()"
+      @edit="habitEditor.edit(open.habit.value.habit)"
+      @tick-today="runPrimary({ type: 'habit', id: open.habit.value.habit.id, item: open.habit.value })"
     />
 
-    <YearHeatmap
-      v-else
-      :habits="habitList"
-      :days="days"
-      :date="cursor.date.value"
-      :today="today"
-      :chip="cursor.chip.value"
-      :missing="missing"
-      @select="cursor.select"
-      @update:chip="cursor.selectChip"
-    />
+    <EmptyState v-else-if="noMatch" icon="search-x" title="No habit matches" />
 
-    <template #pane>
-      <DayPanel
-        :date="cursor.date.value"
-        :readout="readout"
-        :habits="habitList"
-        :day="selectedDay"
-        :vault-found="vaultFound"
-        @open-today="openToday"
+    <template v-else>
+      <!-- Only when there is something to say: a problem with the daily notes, or ticking is off. -->
+      <div
+        v-if="vault.data.value?.problem"
+        class="flex h-10 shrink-0 items-center gap-3 px-4 text-13 text-muted-foreground"
       >
-        <Agenda
-          :events="events.data.value ?? []"
-          :now="now"
-          :today="today"
-          :connected="settings.data.value?.calendarConnected ?? true"
-          :loading="agendaLoading"
-          :show-skeleton="events.showSkeleton.value"
-          :failed="events.error.value !== null"
-          @connect="openSettings"
-          @retry="events.reload"
-        />
-      </DayPanel>
+        <TriangleAlertIcon :size="16" :stroke-width="1.75" class="shrink-0 text-status-waiting" aria-hidden="true" />
+        <span class="min-w-0 flex-1 truncate">{{ vault.data.value.problem }}</span>
+        <Button variant="ghost" size="sm" tabindex="-1" @mousedown="keepFocus" @click="openSettings">
+          Open settings
+        </Button>
+      </div>
+      <p v-if="!writable" class="flex h-10 shrink-0 items-center px-4 text-13 text-muted-foreground">
+        Ticking is switched off in this development build.
+      </p>
+
+      <ItemList
+        :groups="groups"
+        :selected-id="selectedId"
+        click-runs
+        @update:selected-id="select"
+        @activate="openHabit($event.id)"
+        @context="openPanel"
+      >
+        <template #row="{ item, selected: isSelected }">
+          <HabitRow
+            :item="item"
+            :selected="isSelected"
+            :writable="writable"
+            @tick="runPrimary(targetOf(item))"
+          />
+        </template>
+      </ItemList>
     </template>
+
+    <HabitEditorDialog />
   </ScreenFrame>
 </template>

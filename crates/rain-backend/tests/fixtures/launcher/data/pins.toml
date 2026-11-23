@@ -1,0 +1,15 @@
+# pins.toml: made-up pins for the tests.
+schema_version = 1
+
+# the editor
+[[pin]]
+type = "app"
+id = "app-fake-editor"
+
+[[pin]]
+type = "pool"
+id = "pool-web-dev"
+
+[[pin]]
+type = "app"
+id = "app-fake-notes"

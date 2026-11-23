@@ -118,7 +118,10 @@ async fn health_starts_empty_and_shows_a_reported_source() {
     let backend = TestBackend::start().await;
     let health: Health = backend.get("/health").await;
     assert_eq!(health.start_id, backend.state.start_id);
-    assert!(health.sources.is_empty() && health.config_issues.is_empty());
+    assert!(health.config_issues.is_empty());
+    // A module reports its sources while it starts (the sessions module reports the Claude
+    // registry), so the list is not empty; a source that nobody reported is not in it.
+    assert!(health.sources.iter().all(|source| source.name != "steam"));
 
     backend.state.health.set_source(
         "steam",
@@ -126,7 +129,7 @@ async fn health_starts_empty_and_shows_a_reported_source() {
         Some("not installed".into()),
     );
     let health: Health = backend.get("/health").await;
-    assert_eq!(health.sources[0].name, "steam");
+    assert!(health.sources.iter().any(|source| source.name == "steam"));
     backend.stop().await;
 }
 

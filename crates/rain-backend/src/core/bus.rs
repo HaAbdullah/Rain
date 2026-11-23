@@ -12,7 +12,7 @@ use rain_types::Topic;
 use rain_types::limits::{BUS_CAPACITY, FRAME_MAX};
 use serde::Serialize;
 use tokio::sync::broadcast;
-use tracing::error;
+use tracing::{error, warn};
 
 /// One frame, ready to be written to a client.
 #[derive(Debug)]
@@ -23,6 +23,9 @@ pub struct FrameBytes {
     pub seq: u64,
     /// The envelope `{ "topic", "seq", "payload" }` as JSON text: the SSE `data:` field.
     pub json: String,
+    /// The payload was over `FRAME_MAX`, so `json` is empty. The stream writes a `resync` instead:
+    /// the client fetches the list again and nobody is left with a screen that never updates.
+    pub too_big: bool,
 }
 
 /// The same shape as `rain_types::Frame`, but it borrows its parts and serialises the payload
@@ -84,7 +87,8 @@ impl EventBus {
     ///
     /// Does nothing while no client is connected: the state of a module still changes, but nobody
     /// needs a frame, and a client that connects later refetches anyway. A payload over
-    /// `FRAME_MAX` is dropped and logged: it is a programming error (foundation section 5.3).
+    /// `FRAME_MAX` is not sent. Its size depends on the user's data (a long list of projects), so
+    /// clients get a `resync` in its place and refetch.
     pub fn publish<T: Topic>(&self, payload: &T::Payload) {
         let mut seq = self
             .inner
@@ -102,13 +106,13 @@ impl EventBus {
                 return;
             }
         };
-        if json.len() > FRAME_MAX {
-            error!(
+        let too_big = json.len() > FRAME_MAX;
+        if too_big {
+            warn!(
                 topic = T::NAME,
                 bytes = json.len(),
-                "frame dropped: the payload is over the frame limit"
+                "the payload is over the frame limit: clients are told to refetch"
             );
-            return;
         }
         *seq = next;
         // `send` fails only when there is no receiver, and `receiver_count` was just checked
@@ -116,7 +120,8 @@ impl EventBus {
         let _ = self.inner.sender.send(Arc::new(FrameBytes {
             topic: T::NAME,
             seq: next,
-            json,
+            json: if too_big { String::new() } else { json },
+            too_big,
         }));
     }
 
@@ -199,14 +204,16 @@ mod tests {
     }
 
     #[test]
-    fn a_payload_over_the_frame_limit_is_dropped() {
+    fn a_payload_over_the_frame_limit_becomes_a_marker_for_a_resync() {
         let bus = EventBus::new();
         let mut receiver = bus.subscribe();
         let too_big = Value::String("x".repeat(FRAME_MAX));
         bus.publish::<Sessions>(&too_big);
 
-        assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
-        assert_eq!(bus.seq(), 0);
+        let frame = receiver.try_recv().unwrap();
+        assert!(frame.too_big);
+        assert!(frame.json.is_empty(), "the large text is not kept");
+        assert_eq!(bus.seq(), 1);
     }
 
     #[test]

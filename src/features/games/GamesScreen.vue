@@ -23,9 +23,7 @@ import CustomGameDialog from './CustomGameDialog.vue'
 import GameDetail from './GameDetail.vue'
 import GameTile from './GameTile.vue'
 import { SOURCE_ICON, SOURCE_LABEL } from './gameSource'
-
-const SUBS = ['all', 'steam', 'epic', 'custom', 'installed'] as const
-type Sub = (typeof SUBS)[number]
+import { SUBS, type Sub, errorMessages, failedSources, gamesOfSub, resolveSub, visibleSubs } from './library-view'
 
 /** Columns assumed until the grid has measured itself (6 at the default window size). */
 const FIRST_PAINT_COLUMNS = 6
@@ -38,55 +36,58 @@ const GAP = 12
 const nav = useNav()
 const panel = useActionPanel()
 const query = useSectionQuery('games')
-const library = useResource('games', () => api.listGames())
+const library = useResource('games', () => api.listGames(), { live: 'games' })
+
+const allGames = computed(() => library.data.value?.games ?? [])
+const sources = computed(() => library.data.value?.sources ?? [])
+const hiddenCount = computed(() => allGames.value.filter((game) => game.hidden).length)
+
+/** The tabs on screen: a source that is off has none; Hidden exists only while something is hidden. */
+const visible = computed<Sub[]>(() => visibleSubs(sources.value, hiddenCount.value))
 
 const sub = computed<Sub>({
-  get: () => SUBS.find((id) => id === nav.route.value.sub) ?? 'all',
+  get: () => resolveSub(nav.route.value.sub, visible.value),
   set: (id) => nav.setSub(id),
 })
 
 // ---- what is shown ----
 
-const shown = computed<Game[]>(() => (library.data.value?.games ?? []).filter((game) => !game.hidden))
+/** What the current tab lists; a hidden game is in the Hidden tab only. */
+const shown = computed<Game[]>(() => gamesOfSub(allGames.value, sub.value))
 
-function inSub(game: Game, id: Sub): boolean {
-  if (id === 'all') return true
-  return id === 'installed' ? game.installed : game.source === id
-}
+const filtered = computed(() => shown.value.filter((game) => matches(query.value, game.title)))
 
-const filtered = computed(() =>
-  shown.value.filter((game) => inSub(game, sub.value) && matches(query.value, game.title)),
+const failed = computed(() => failedSources(sources.value))
+
+/** What the backend says about the sources that are off (Steam not found, no game folders). Quiet: it only explains an empty list. */
+const offNotes = computed(() =>
+  sources.value.flatMap((status) => (status.state === 'off' && status.message ? [status.message] : [])),
 )
-
-const failedSources = computed<GameSource[]>(() => library.data.value?.failedSources ?? [])
 
 const stripItems = computed<ViewStripItem[]>(() => {
   const loaded = library.data.value !== undefined
-  const count = (id: Sub) => (loaded ? shown.value.filter((game) => inSub(game, id)).length : undefined)
+  const count = (id: Sub) => (loaded ? gamesOfSub(allGames.value, id).length : undefined)
   const source = (id: GameSource): ViewStripItem => ({
     id,
     label: SOURCE_LABEL[id].split(' ')[0],
     icon: SOURCE_ICON[id].value,
     brand: SOURCE_ICON[id].kind === 'brand',
     count: count(id),
-    warn: failedSources.value.includes(id),
+    warn: failed.value.some((status) => status.source === id),
   })
-  return [
-    { id: 'all', label: 'All', icon: 'library', count: count('all') },
-    source('steam'),
-    source('epic'),
-    source('custom'),
-    { id: 'installed', label: 'Installed', icon: 'hard-drive-download', count: count('installed') },
-  ]
+  const items: Record<Sub, ViewStripItem> = {
+    all: { id: 'all', label: 'All', icon: 'library', count: count('all') },
+    steam: source('steam'),
+    epic: source('epic'),
+    custom: source('custom'),
+    installed: { id: 'installed', label: 'Installed', icon: 'hard-drive-download', count: count('installed') },
+    hidden: { id: 'hidden', label: 'Hidden', icon: 'eye-off', count: count('hidden') },
+  }
+  return visible.value.map((id) => items[id])
 })
 
 /** One message per failed source that the current view would have shown, or one for the whole library. */
-const errors = computed(() => {
-  if (library.error.value) return ['Games unavailable']
-  return failedSources.value
-    .filter((id) => sub.value === 'all' || sub.value === 'installed' || sub.value === id)
-    .map((id) => `${SOURCE_LABEL[id]} library unavailable`)
-})
+const errors = computed(() => errorMessages(sources.value, sub.value, library.error.value !== null))
 
 // ---- groups and selection ----
 
@@ -94,9 +95,10 @@ const grid = useTemplateRef<{ columns: number }>('grid')
 const columns = computed(() => grid.value?.columns ?? FIRST_PAINT_COLUMNS)
 
 const groups = computed<SelGroup<Game>[]>(() => {
-  // A filter text gives one flat list of matches; Recent would only repeat them.
+  // A filter text gives one flat list of matches; Recent would only repeat them. The Hidden
+  // tab has no Recent group either.
   const recent =
-    query.value === ''
+    query.value === '' && sub.value !== 'hidden'
       ? filtered.value
           .filter((game) => game.lastPlayedAt)
           .sort((a, b) => (b.lastPlayedAt ?? '').localeCompare(a.lastPlayedAt ?? ''))
@@ -121,7 +123,8 @@ const target: ComputedRef<ActionTarget | null> = computed(() =>
   selected.value ? { type: 'game', id: selected.value.id, item: selected.value } : null,
 )
 
-useScreen({ target, move, page, group, subView: { ids: SUBS, current: sub } })
+// The keymap reads `ids` when Tab is pressed, so a getter keeps it current.
+useScreen({ target, move, page, group, subView: { get ids() { return visible.value }, current: sub } })
 
 /** A strip click: only ids of the strip itself arrive. */
 function pickSub(id: string) {
@@ -144,7 +147,13 @@ const isEmpty = computed(() => library.data.value !== undefined && filtered.valu
     </template>
 
     <div v-if="errors.length > 0" class="flex shrink-0 flex-col px-4 pt-3">
-      <ErrorRow v-for="message in errors" :key="message" :message="message" @retry="library.reload()" />
+      <ErrorRow
+        v-for="message in errors"
+        :key="message"
+        :message="message"
+        :detail="library.error.value?.message"
+        @retry="library.reload()"
+      />
     </div>
 
     <div
@@ -167,6 +176,7 @@ const isEmpty = computed(() => library.data.value !== undefined && filtered.valu
       v-else-if="isEmpty"
       icon="gamepad-2"
       title="No games found"
+      :hint="shown.length === 0 && offNotes.length > 0 ? offNotes.join(' ') : undefined"
       :action-label="shown.length === 0 ? 'Open settings' : undefined"
       @action="nav.go('settings')"
     />

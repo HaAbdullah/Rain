@@ -16,6 +16,16 @@ name = "rain_backend"
 name = "rain-backend"
 path = "src/main.rs"
 
+# A do-nothing program for the hand checks of the launcher (never started by a test). It is built
+# only on request (`--features test-tools`), so that no release build or bundle contains it.
+[[bin]]
+name = "rain-test-app"
+path = "src/bin/rain-test-app.rs"
+required-features = ["test-tools"]
+
+[features]
+test-tools = []
+
 [dependencies]
 rain-types = { path = "../rain-types" }
 # `rain-backend --stop` talks to a running backend, so this is a normal dependency (the foundation
@@ -27,7 +37,6 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 futures-util = { workspace = true }
 serde = { workspace = true }
@@ -46,8 +55,15 @@ notify-debouncer-full = { workspace = true }
 windows = { workspace = true }
 winreg = { workspace = true }
 png = { workspace = true }
+rayon = { workspace = true }
+# jobs (section 03)
+croner = { workspace = true }
+chrono = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+chrono-tz = { workspace = true }
 # `start_paused` and `time::pause`: tests control the clock of tokio (foundation 11.4).
 tokio = { workspace = true, features = ["test-util"] }
+# Life (section 04): the oracle of the frontmatter editor tests. Never linked into the program.
+yaml-rust2 = { workspace = true }

@@ -69,7 +69,7 @@ const usage = (drive: Drive) => `${formatBytes(drive.usedBytes)} of ${formatByte
       <template #row="{ item, selected }">
         <ListRow :icon="DRIVE_ICON" :title="title(item)" :subtitle="usage(item)" :selected="selected">
           <template #trailing>
-            <Meter :value="item.usedBytes / item.totalBytes" :width="160" />
+            <Meter :value="item.totalBytes > 0 ? item.usedBytes / item.totalBytes : 0" :width="160" />
           </template>
         </ListRow>
         <!-- The row is inside the option: stop a double-click on Retry from also scanning the drive. -->

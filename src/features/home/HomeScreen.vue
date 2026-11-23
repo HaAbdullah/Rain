@@ -44,7 +44,7 @@ const resolve = useTargetResolver()
 // The same keys the target resolver uses, so every list is fetched once and shared.
 const apps = useResource('apps', () => api.listApps())
 const pools = useResource('pools', () => api.listPools())
-const projects = useResource('projects', () => api.listProjects())
+const projects = useResource('projects', () => api.listProjects(), { live: 'projects' })
 const games = useResource('games', () => api.listGames())
 const sessions = useResource('sessions', () => api.listSessions(), { live: 'sessions' })
 const jobs = useResource('jobs', () => api.listJobs(), { live: 'jobs' })
@@ -246,6 +246,8 @@ const failure = computed(() => {
   if (labels.length === 0) return null
   return {
     message: `${labels.join(', ')} unavailable`,
+    // The backend's text for the first list that failed (a search failure carries none).
+    detail: failed[0]?.resource.error.value?.message,
     retry: () =>
       Promise.all([
         ...(searchFailed ? [runSearch(query.value)] : []),
@@ -282,6 +284,7 @@ function openPanel(row: HomeRow, event: MouseEvent) {
         v-if="failure"
         class="mx-2 mt-2"
         :message="failure.message"
+        :detail="failure.detail"
         @retry="failure.retry()"
       />
       <EmptyState v-if="rows.length === 0 && query !== '' && !pending && ready" icon="search-x" title="No match" />

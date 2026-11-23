@@ -29,7 +29,8 @@ use windows::Win32::System::JobObjects::{
     SetInformationJobObject, TerminateJobObject,
 };
 use windows::Win32::System::Threading::{
-    CREATE_NO_WINDOW, CREATE_SUSPENDED, OpenThread, ResumeThread, THREAD_SUSPEND_RESUME,
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, OpenThread, ResumeThread, SuspendThread,
+    THREAD_SUSPEND_RESUME,
 };
 
 /// The longest line that is passed on. A longer one arrives in pieces.
@@ -77,9 +78,23 @@ impl OwnedJob {
     /// start a child before it is in the job (that child would escape). The window of the
     /// program is hidden; input is null. Standard output and error arrive as lines on the
     /// returned `JobChild`.
-    pub fn spawn(&self, mut command: Command) -> io::Result<JobChild> {
+    pub fn spawn(&self, command: Command) -> io::Result<JobChild> {
+        self.spawn_with_input(command, None)
+    }
+
+    /// Like `spawn`, but the program's standard input holds `input` (then it is closed). A
+    /// headless Claude run reads its prompt this way. `None` gives it a null input.
+    pub fn spawn_with_input(
+        &self,
+        mut command: Command,
+        input: Option<Vec<u8>>,
+    ) -> io::Result<JobChild> {
         command
-            .stdin(std::process::Stdio::null())
+            .stdin(if input.is_some() {
+                std::process::Stdio::piped()
+            } else {
+                std::process::Stdio::null()
+            })
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .creation_flags(CREATE_SUSPENDED.0 | CREATE_NO_WINDOW.0);
@@ -99,6 +114,14 @@ impl OwnedJob {
         }
         resume_threads(pid);
 
+        if let (Some(input), Some(mut stdin)) = (input, child.stdin.take()) {
+            // The write may block when the program does not read, so it is its own task and
+            // nothing waits for it. Dropping `stdin` at the end closes the input.
+            tokio::spawn(async move {
+                use tokio::io::AsyncWriteExt;
+                let _ = stdin.write_all(&input).await;
+            });
+        }
         let (lines_out, lines) = mpsc::channel(LINE_QUEUE);
         if let Some(stdout) = child.stdout.take() {
             tokio::spawn(read_lines(stdout, Stream::Stdout, lines_out.clone()));
@@ -147,6 +170,84 @@ impl OwnedJob {
     /// True when no process is left in the job.
     pub fn is_empty(&self) -> bool {
         self.pids().is_empty()
+    }
+
+    /// Freezes every thread of every process in the job, so that a program that cannot be asked
+    /// to pause stops using the CPU (idle jobs, section 03 6.12.5). Not proven in a spike for a
+    /// whole tree: an error says that some thread could not be frozen, and the caller then ends
+    /// the run instead.
+    pub fn suspend(&self) -> io::Result<()> {
+        self.set_frozen(true)
+    }
+
+    /// Lets a frozen job run again.
+    pub fn resume(&self) -> io::Result<()> {
+        self.set_frozen(false)
+    }
+
+    /// Two passes, because a process may start a child between the list and the freeze: the
+    /// second pass catches threads that the first one did not see.
+    fn set_frozen(&self, freeze: bool) -> io::Result<()> {
+        let mut seen = std::collections::HashSet::new();
+        let mut failed = false;
+        for _pass in 0..2 {
+            let pids = self.pids();
+            for thread_id in threads_of(&pids) {
+                if seen.insert(thread_id) {
+                    failed |= !change_thread(thread_id, freeze);
+                }
+            }
+        }
+        if failed {
+            Err(io::Error::other("a thread of the job could not be changed"))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// The ids of every thread that belongs to one of `pids`, from a Toolhelp snapshot.
+fn threads_of(pids: &[u32]) -> Vec<u32> {
+    let mut threads = Vec::new();
+    // SAFETY: the snapshot handle is closed below; `entry` is a valid `THREADENTRY32` with its
+    // size set.
+    unsafe {
+        let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) else {
+            return threads;
+        };
+        let mut entry = THREADENTRY32 {
+            dwSize: std::mem::size_of::<THREADENTRY32>() as u32,
+            ..Default::default()
+        };
+        if Thread32First(snapshot, &mut entry).is_ok() {
+            loop {
+                if pids.contains(&entry.th32OwnerProcessID) {
+                    threads.push(entry.th32ThreadID);
+                }
+                if Thread32Next(snapshot, &mut entry).is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = CloseHandle(snapshot);
+    }
+    threads
+}
+
+/// Suspends or resumes one thread. False when Windows refused.
+fn change_thread(thread_id: u32, freeze: bool) -> bool {
+    // SAFETY: the thread handle is closed right after use; the calls take only that handle.
+    unsafe {
+        let Ok(thread) = OpenThread(THREAD_SUSPEND_RESUME, false, thread_id) else {
+            return false;
+        };
+        let before = if freeze {
+            SuspendThread(thread)
+        } else {
+            ResumeThread(thread)
+        };
+        let _ = CloseHandle(thread);
+        before != u32::MAX
     }
 }
 
@@ -223,6 +324,30 @@ pub struct JobChild {
 impl JobChild {
     /// Waits until the program has ended and returns its exit code (1 for a run that
     /// `OwnedJob::terminate` ended).
+    pub async fn wait(&mut self) -> io::Result<ExitStatus> {
+        self.child.wait().await
+    }
+
+    /// Separates the output from the process, so that one task can wait for the exit and read
+    /// lines at the same time (`select!` needs two separate borrows).
+    pub fn split(self) -> (JobWaiter, mpsc::Receiver<OutputLine>) {
+        (
+            JobWaiter {
+                pid: self.pid,
+                child: self.child,
+            },
+            self.lines,
+        )
+    }
+}
+
+/// The process of a `JobChild` after `split`.
+pub struct JobWaiter {
+    pub pid: u32,
+    child: Child,
+}
+
+impl JobWaiter {
     pub async fn wait(&mut self) -> io::Result<ExitStatus> {
         self.child.wait().await
     }
@@ -413,6 +538,41 @@ mod tests {
         while let Some(line) = child.lines.recv().await {
             assert!(line.text.len() <= MAX_LINE_BYTES);
         }
+    }
+
+    #[tokio::test]
+    async fn a_frozen_job_stops_working_and_goes_on_after_a_resume() {
+        let job = OwnedJob::new().unwrap();
+        // `ping` prints a line about every second: while frozen, no line can arrive.
+        let mut command = hidden_command("ping.exe");
+        command.args(["-n", "30", "127.0.0.1"]);
+        let mut child = job.spawn(command).unwrap();
+        first_line(&mut child).await;
+
+        job.suspend().unwrap();
+        // Lines that were already in the pipe may still arrive; after a moment none do.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        while child.lines.try_recv().is_ok() {}
+        let silent = tokio::time::timeout(Duration::from_millis(2500), child.lines.recv()).await;
+        assert!(silent.is_err(), "a frozen program printed {silent:?}");
+
+        job.resume().unwrap();
+        let line = tokio::time::timeout(Duration::from_secs(5), child.lines.recv()).await;
+        assert!(matches!(line, Ok(Some(_))), "no output after the resume");
+        job.terminate().unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_input_of_the_program_is_the_bytes_that_were_given() {
+        let job = OwnedJob::new().unwrap();
+        // `findstr` copies the lines of its input that match, here every line.
+        let mut command = hidden_command("findstr.exe");
+        command.arg("^");
+        let mut child = job
+            .spawn_with_input(command, Some(b"first line\r\nsecond line\r\n".to_vec()))
+            .unwrap();
+        assert_eq!(first_line(&mut child).await.text, "first line");
+        assert_eq!(first_line(&mut child).await.text, "second line");
     }
 
     #[test]

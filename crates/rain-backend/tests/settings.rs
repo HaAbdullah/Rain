@@ -668,7 +668,10 @@ async fn the_shell_report_is_published_on_the_topics_health_and_settings() {
     loop {
         let health = stream.expect_topic("health").await;
         let registered = health.payload["shell"]["hotkeyRegistered"] == true;
-        if registered && health.payload["sources"] == json!([]) {
+        let hotkey_source_left = health.payload["sources"]
+            .as_array()
+            .is_some_and(|sources| sources.iter().any(|source| source["name"] == "hotkey"));
+        if registered && !hotkey_source_left {
             break; // the hotkey source is gone again
         }
     }

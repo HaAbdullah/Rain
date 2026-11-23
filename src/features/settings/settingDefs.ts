@@ -80,10 +80,6 @@ export const settingDefs: SettingDef[] = [
 
   { id: 'countdown', group: 'Game mode', label: 'Countdown', kind: 'select', key: 'gameModeCountdownSeconds' },
 
-  { id: 'mock-scenario', group: 'Prototype', label: 'Mock scenario', kind: 'select' },
-  { id: 'mock-latency', group: 'Prototype', label: 'Simulated latency', kind: 'switch' },
-  { id: 'mock-reset', group: 'Prototype', label: 'Reset mock data', kind: 'button' },
-
   { id: 'about', group: 'About', label: 'Rain', hint: 'A personal launcher for this PC', kind: 'info' },
 ]
 
@@ -105,12 +101,7 @@ export const selectChoices: Record<string, SelectChoice[]> = {
     { value: '20', label: '20 s' },
     { value: '30', label: '30 s' },
   ],
-  'mock-scenario': [
-    { value: 'typical', label: 'Typical' },
-    { value: 'empty', label: 'Empty' },
-    { value: 'busy', label: 'Busy' },
-    { value: 'failing', label: 'Failing' },
-  ],
 }
 
-export const APP_VERSION = '0.1.0'
+/** The version of package.json, put in by Vite (`define` in vite.config.ts). */
+export const APP_VERSION: string = __APP_VERSION__

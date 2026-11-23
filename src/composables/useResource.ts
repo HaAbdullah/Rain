@@ -47,7 +47,7 @@ export const anyResourceLoading = computed(() => fetchesRunning.value > 0)
 
 /** Stores a fetched or pushed value as the newest truth for the entry. */
 function accept<T>(entry: Entry<T>, value: T) {
-  // A mock may hand back the same array after changing it in place; say "changed" anyway.
+  // An answer may be the same array object after a refetch; say "changed" anyway.
   if (entry.data.value === value) triggerRef(entry.data)
   else entry.data.value = value
   entry.error.value = null
@@ -141,7 +141,7 @@ function forget(key: string, entry: Entry<unknown>) {
   cache.delete(key)
 }
 
-/** Empties the cache and refetches what is on screen. For a scenario change and "Reset mock data". */
+/** Empties the cache and refetches what is on screen. For a change that makes every cached answer stale. */
 export function resetResources(): void {
   for (const [key, entry] of cache) {
     if (entry.users === 0) {

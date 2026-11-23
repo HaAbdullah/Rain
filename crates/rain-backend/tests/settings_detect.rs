@@ -258,7 +258,9 @@ async fn the_rules_of_table_v_for_the_new_fields() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn the_claude_switch_is_read_from_the_file_and_changing_it_waits_for_its_stage() {
+async fn the_claude_switch_is_read_from_the_file_and_the_hooks_need_a_claude_folder() {
+    // The harness gives every test a Claude folder that does not exist, so that no test reads or
+    // changes the real one (the installer itself is tested in `monitor.rs`).
     let backend = TestBackend::with_fixture("typical").await;
     let settings: Value = backend.get("/settings").await;
     assert_eq!(
@@ -266,17 +268,21 @@ async fn the_claude_switch_is_read_from_the_file_and_changing_it_waits_for_its_s
         "the fixture has monitor_claude = true"
     );
     assert_eq!(
-        settings["monitorClaudeState"], "off",
-        "the state is computed by section 03"
+        settings["monitorClaudeState"], "needsRepair",
+        "the switch is on and there is no Claude folder to hold the hooks"
     );
 
-    for on in [true, false] {
-        let (status, answer) = patch(&backend, json!({ "monitorClaude": on })).await;
-        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{answer}");
-        assert_eq!(answer["reason"], "notBuilt");
-    }
+    let (status, answer) = patch(&backend, json!({ "monitorClaude": true })).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{answer}");
+    assert_eq!(answer["reason"], "noClaude");
     // Nothing was written: the file still says what the fixture said.
     assert!(settings_text(&backend).contains("monitor_claude = true"));
+
+    // Switching off has nothing to remove, and is written.
+    let (status, answer) = patch(&backend, json!({ "monitorClaude": false })).await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    assert_eq!(answer["monitorClaudeState"], "off");
+    assert!(settings_text(&backend).contains("monitor_claude = false"));
     backend.stop().await;
 }
 

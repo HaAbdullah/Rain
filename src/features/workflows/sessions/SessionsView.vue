@@ -1,13 +1,16 @@
 <script setup lang="ts">
 // The Sessions tab: Claude sessions with the ones that wait on you first, and the selected one in the pane.
 import { computed, watch } from 'vue'
+import { runPrimary } from '@/actions/context'
 import type { ActionTarget } from '@/actions/types'
 import EmptyState from '@/components/rain/EmptyState.vue'
 import ErrorRow from '@/components/rain/ErrorRow.vue'
 import ItemList from '@/components/rain/ItemList.vue'
 import ScreenFrame from '@/components/rain/ScreenFrame.vue'
+import SourceNote from '@/components/rain/SourceNote.vue'
 import { useActionPanel } from '@/composables/useActionPanel'
 import { useNow } from '@/composables/useNow'
+import { useSourceNotes } from '@/composables/useSourceNotes'
 import { useSectionQuery } from '@/composables/useSearch'
 import { useSelection, type SelGroup } from '@/composables/useSelection'
 import type { ClaudeSession, Status } from '@/data/types'
@@ -15,7 +18,6 @@ import { matches } from '@/lib/score'
 import { answering } from '../actions'
 import ListSkeleton from '../ListSkeleton.vue'
 import { useRequestedItem } from '../useRequestedItem'
-import { useRunAction } from '../useRunAction'
 import { useSessions } from '../resources'
 import SessionDetail from './SessionDetail.vue'
 import SessionRow from './SessionRow.vue'
@@ -35,8 +37,9 @@ const GROUPS: { status: Status; title: string }[] = [
 const sessions = useSessions()
 const query = useSectionQuery('workflows')
 const now = useNow()
-const run = useRunAction()
 const panel = useActionPanel()
+// The registry and the hooks say here why a list may be empty or stale (switched off, unreadable).
+const notes = useSourceNotes('claude-registry', 'claude-hooks')
 
 /** The session that has waited longest comes first; the others by latest activity. */
 function byUrgency(a: ClaudeSession, b: ClaudeSession): number {
@@ -96,13 +99,14 @@ defineExpose({ target, move, page, group })
   <ScreenFrame pane="wide">
     <template #strip><slot name="strip" /></template>
 
-    <ErrorRow v-if="sessions.error.value" class="m-2" message="Sessions unavailable" @retry="sessions.reload" />
+    <ErrorRow v-if="sessions.error.value" class="m-2" message="Sessions unavailable" :detail="sessions.error.value.message" @retry="sessions.reload" />
+    <SourceNote v-for="source in notes" :key="source.name" :source="source" />
     <ListSkeleton v-if="showSkeleton" size="lg" />
     <EmptyState
       v-else-if="hasData && sessions.data.value?.length === 0"
       icon="bot"
       title="No sessions"
-      hint="Sessions started in a terminal appear here"
+      hint="Sessions started in a terminal appear here once Monitor Claude sessions is on in Settings."
     />
     <EmptyState v-else-if="hasData && shownCount === 0" icon="search-x" title="No match" />
     <ItemList
@@ -111,7 +115,7 @@ defineExpose({ target, move, page, group })
       :selected-id="selectedId"
       row-size="lg"
       @update:selected-id="select"
-      @activate="run('focus')"
+      @activate="runPrimary({ type: 'session', id: $event.id, item: $event })"
       @context="openPanel"
     >
       <template #row="{ item, selected: isSelected }">

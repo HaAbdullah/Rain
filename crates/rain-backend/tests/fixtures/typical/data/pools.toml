@@ -1,0 +1,16 @@
+# pools.toml: made-up pools for the tests.
+schema_version = 1
+
+# my first pool
+[[pool]]
+id = "pool-web-dev"
+name = "Web dev"
+members = [
+  { app = "app-fake-editor" },
+  { app = "app-fake-terminal", args = "--here", delay_ms = 200 },
+]
+
+[[pool]]
+id = "pool-reading"
+name = "Reading"
+members = [{ app = "app-fake-notes" }]

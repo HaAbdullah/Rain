@@ -7,5 +7,5 @@ reset_after_seconds = 300
 project_roots = ['D:\Projects', 'D:\Work']
 steam_enabled = false
 game_mode_countdown_seconds = 20
-# a key from a later stage; Rain must leave it alone
+# a key that this version of Rain does not know; Rain must leave it alone
 monitor_claude = true

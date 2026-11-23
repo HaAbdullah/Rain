@@ -5,6 +5,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
+use crate::disk::DiskScan;
+use crate::gamemode::GameModeState;
+use crate::games::GameLibrary;
+use crate::launcher::LaunchRun;
+use crate::life::HabitSummary;
+use crate::projects::Project;
 use crate::settings::Settings;
 use crate::system::Health;
 
@@ -28,50 +34,59 @@ pub trait Topic {
     type Payload: Serialize;
 }
 
-// The six topics that exist in the frontend contract today. Their payload types move into this
-// crate in the stage that makes the topic real (the stage is named at each topic). Until then the
-// payload is plain JSON, which keeps the name and the publish call stable.
+// Most topics carry a typed payload. The three list topics below (`sessions`, `jobs`, `idleJobs`)
+// still say plain JSON: the stream and bus tests use them as the free-form channel to send
+// padding and odd shapes. The publishers build them from `Vec<ClaudeSession>`, `Vec<ScheduledJob>`
+// and `Vec<IdleJob>`, which is also what the frontend expects. Typing them needs a test-only
+// topic first.
 
-/// Whole list of Claude sessions. Typed in stage 8.
+/// Whole list of Claude sessions: a JSON array of `ClaudeSession` (section 03).
 pub struct Sessions;
 impl Topic for Sessions {
     const NAME: &'static str = "sessions";
     type Payload = Value;
 }
 
-/// Whole list of scheduled jobs. Typed in stage 6.
+/// Whole list of scheduled jobs: a JSON array of `ScheduledJob` (section 03).
 pub struct Jobs;
 impl Topic for Jobs {
     const NAME: &'static str = "jobs";
     type Payload = Value;
 }
 
-/// Whole list of idle jobs. Typed in stage 6.
+/// Whole list of idle jobs: a JSON array of `IdleJob` (section 03).
 pub struct IdleJobs;
 impl Topic for IdleJobs {
     const NAME: &'static str = "idleJobs";
     type Payload = Value;
 }
 
-/// One launch run; the client matches on `run.id`. Typed in stage 4.
+/// One launch run; the client matches on `run.id`.
 pub struct Launch;
 impl Topic for Launch {
     const NAME: &'static str = "launch";
-    type Payload = Value;
+    type Payload = LaunchRun;
 }
 
-/// One disk scan; the client matches on `scan.id`. Typed in stage 3.
+/// One disk scan, never with its tree; the client matches on `scan.id`.
 pub struct Scan;
 impl Topic for Scan {
     const NAME: &'static str = "scan";
-    type Payload = Value;
+    type Payload = DiskScan;
 }
 
-/// The state of game mode. Typed in stage 9.
+/// The state of game mode.
 pub struct GameMode;
 impl Topic for GameMode {
     const NAME: &'static str = "gameMode";
-    type Payload = Value;
+    type Payload = GameModeState;
+}
+
+/// The whole game library. At most 1 frame per second (section 02 2.1).
+pub struct Games;
+impl Topic for Games {
+    const NAME: &'static str = "games";
+    type Payload = GameLibrary;
 }
 
 /// The whole `Settings` object. Published after a change and when `hotkeyAvailable` changes.
@@ -89,6 +104,21 @@ impl Topic for HealthTopic {
     type Payload = Health;
 }
 
+/// The whole list of projects (section 02): git facts and open state arrive after the first answer.
+pub struct Projects;
+impl Topic for Projects {
+    const NAME: &'static str = "projects";
+    type Payload = Vec<Project>;
+}
+
+/// Whole list of habit summaries (section 04): published after a tick, after `habits.toml`
+/// changed and after the daily notes changed.
+pub struct Habits;
+impl Topic for Habits {
+    const NAME: &'static str = "habits";
+    type Payload = Vec<HabitSummary>;
+}
+
 /// Every topic name a subscriber can ask for. Generated into the TypeScript file as `TOPIC_NAMES`.
 /// One line per topic, so that a feature section adds its own line and touches no other.
 pub const TOPIC_NAMES: &[&str] = &[
@@ -100,6 +130,9 @@ pub const TOPIC_NAMES: &[&str] = &[
     GameMode::NAME,
     SettingsTopic::NAME,
     HealthTopic::NAME,
+    Projects::NAME,
+    Games::NAME,
+    Habits::NAME,
 ];
 
 // ---- internal frames: not topics, not for subscribers ----

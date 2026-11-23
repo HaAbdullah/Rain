@@ -218,7 +218,7 @@ fn existing_folder(text: &str) -> Option<PathBuf> {
 
 /// The Epic Games Launcher folder under `ProgramData`, when it holds `Data\Manifests`. This only
 /// defines what `epicPath` points at; section 02 owns the reading of the manifests and may
-/// change the definition. Not seen working: the owner's PC has no Epic launcher.
+/// change the definition. Not seen working: not tested against a real Epic launcher.
 pub fn epic_folder(program_data: &Path) -> Option<PathBuf> {
     let launcher = program_data.join("Epic").join("EpicGamesLauncher");
     launcher

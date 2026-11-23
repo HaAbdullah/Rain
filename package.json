@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "dev:ui": "vite --mode mock",
     "dev:fixture": "node scripts/dev.mjs --fixture typical",
     "backend:start": "node scripts/backend.mjs start",
     "backend:stop": "node scripts/backend.mjs stop",
@@ -22,6 +21,7 @@
     "check": "node scripts/check.mjs",
     "smoke": "node scripts/smoke.mjs",
     "idle": "node scripts/idle.mjs",
+    "frontend-checks": "node scripts/frontend-checks.mjs",
     "types:identity": "tsc -p crates/rain-types/tscheck"
   },
   "dependencies": {

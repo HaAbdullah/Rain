@@ -14,7 +14,7 @@ use common::{PATIENCE, copy_dir, fixture_data_dir, unique_pipe_name};
 use hyper::Method;
 use rain_pipe::{PipeClient, SseFrame, SseReader, pipe_exists};
 use rain_types::limits::API_PREFIX;
-use rain_types::{Ping, Settings};
+use rain_types::{AppEntry, Ping, Settings};
 use tempfile::TempDir;
 
 const BACKEND_EXE: &str = env!("CARGO_BIN_EXE_rain-backend");
@@ -129,6 +129,26 @@ async fn the_backend_program_serves_the_pipe_ends_a_second_copy_and_stops_on_req
         settings.reset_after_seconds,
         rain_types::ResetAfterSeconds::Seconds300
     );
+
+    // The real shell answers for the app list (the count is not asserted; no program is started),
+    // and at least one icon is a PNG when there are apps.
+    let apps: Vec<AppEntry> = client
+        .json(Method::GET, &format!("{API_PREFIX}/apps"), None::<&()>)
+        .await
+        .expect("the real app list was read");
+    if !apps.is_empty() {
+        let mut png_seen = false;
+        for app in apps.iter().take(8) {
+            let path = format!("{API_PREFIX}/{}", app.icon.value);
+            let answer = client
+                .request(Method::GET, &path, None, &[])
+                .await
+                .expect("the icon route answered");
+            png_seen |= answer.status == hyper::StatusCode::OK
+                && answer.body.starts_with(&[0x89, b'P', b'N', b'G']);
+        }
+        assert!(png_seen, "one of the first apps has a PNG icon");
+    }
 
     // 2. The first two frames of the stream are hello and resync.
     let response = client

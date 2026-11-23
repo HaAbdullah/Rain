@@ -134,7 +134,7 @@ Environment variables (read once at start, only by `Config::from_env` in the bac
 | `RAIN_DATA_DIR` | The data folder (section 10). Beats `machine.toml`. |
 | `RAIN_LOCAL_DIR` | The local folder. Default when `RAIN_DATA_DIR` is set: the sibling folder `<RAIN_DATA_DIR>.local`. |
 | `RAIN_LOG` | Log filter in `tracing` syntax, for example `info,rain_backend::disk=debug`. Default `info`. |
-| `RAIN_SANDBOX` | `1` forces sandbox mode, `0` forces real mode. Default: sandbox in debug builds, real in release builds, and always sandbox when `RAIN_DATA_DIR` or `RAIN_PIPE` is set. |
+| `RAIN_SANDBOX` | `1` forces sandbox mode, `0` forces real mode. Default: sandbox in debug builds, real in release builds, and always sandbox when `RAIN_DATA_DIR`, `RAIN_LOCAL_DIR` or `RAIN_PIPE` is set. |
 
 ### 1.4 The workspace root file
 
@@ -353,7 +353,7 @@ Game mode (decision C5), the part that belongs to this foundation: the game mode
 
 ### 2.7 Sandbox mode
 
-`rain_types::env::sandbox()` is true when the build is a debug build, or `RAIN_SANDBOX=1`, or `RAIN_DATA_DIR` or `RAIN_PIPE` is set; it is false only in a release build with none of those and `RAIN_SANDBOX` not `1`. `RAIN_SANDBOX=0` overrides to false.
+`rain_types::env::sandbox()` is true when the build is a debug build, or `RAIN_SANDBOX=1`, or `RAIN_DATA_DIR`, `RAIN_LOCAL_DIR` or `RAIN_PIPE` is set; it is false only in a release build with none of those and `RAIN_SANDBOX` not `1`. `RAIN_SANDBOX=0` overrides to false.
 
 | | Real (release, no overrides) | Sandbox (debug, tests, overrides) |
 |---|---|---|
@@ -376,7 +376,6 @@ npm scripts (exact):
 | Script | Does |
 |---|---|
 | `npm run dev` | `node scripts/dev.mjs`: (1) `backend --stop`, (2) `cargo build -p rain-backend -p rain-hook`, (3) start the backend detached, (4) start a watcher on `crates/**/src` and `crates/**/Cargo.toml`: on a change it debounces 1 s and runs stop, build, start again, and also `npm run types` when the change is under `crates/rain-types`; (5) run `vite`. This is also the `beforeDevCommand` of Tauri, so `npm run tauri dev` and a plain browser use the same backend. A build error is printed and the old backend stays stopped (the UI shows its error rows). |
-| `npm run dev:ui` | `vite` only. With `VITE_RAIN_MOCK=1` the whole app runs on the mock, no backend needed (removed in stage 10). |
 | `npm run backend:start` / `backend:stop` / `backend:restart` | `node scripts/backend.mjs <verb>`: the same steps as `dev.mjs` without vite. |
 | `npm run types` | `cargo test -p rain-types write_single_file`: writes `src/bindings/rain-types.ts` (section 9.3). |
 | `npm run types:check` | `RAIN_TYPES_CHECK=1 cargo test -p rain-types write_single_file`: fails if the committed file differs from what the Rust types generate (CRLF-normalised). |
@@ -1741,6 +1740,8 @@ Acceptance:
 Goal: the always-on process behaves: shutdown with module budgets, upgrade, autostart, logs, database, file watching; idle cost measured.
 
 Build: `--stop --force` and the full shutdown order of section 2.6 (module stop budgets, checkpoint), the upgrade rule, spawn guard polish, autostart (registry value through `winreg`, `StartupApproved`), the `hotkeyAvailable` report on every `hello`, SQLite (`Db`, migration runner, `core_migrations`, corruption policy, checkpoint on stop), the `notify` watcher and `TomlFile` live reload and `ConfigIssue`s, the media registry route and the `rain-media` handler (with a test provider only in tests), log rotation with the size budget, an idle measurement script, the `lifecycle` module (`on_shell_facts`: autostart self-heal and the `hotkey` health source), settings detection (vault, Steam, Epic, daily-note folder and format), the data folder change with `machine.toml`, `getHealth` (the config-issue line in Settings) and the `settings` live reload (section 06 1.4).
+
+**Status: stage 2b is NOT built.** Rain runs from the repository only (`npm run dev`, `npm run backend:start`, or `cargo build` and starting the programs from `target`). A plain `cargo build` builds the shell, the backend and `rain-hook` (all three are default members), and the three programs must stay in one folder: the shell finds `rain-backend.exe` next to itself and the session monitor finds `rain-hook.exe` next to the backend. An installer built by `tauri build` today would contain neither program. Before removing Rain from a PC, switch "Monitor Claude sessions" off in Settings first: this removes the hooks from the Claude settings file and the copied hook program; deleting the folders by hand leaves hook entries that point at a missing program.
 
 Stage 2b (packaging; not on the critical path, may be done any time before a release, and no stage from 3 to 10 depends on it): `tauri.bundle.conf.json`, `scripts/bundle.mjs`, the NSIS pre-install stop of the old backend, the check that the sidecars land next to the main binary.
 

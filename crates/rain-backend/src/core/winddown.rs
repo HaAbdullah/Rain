@@ -47,8 +47,7 @@ pub trait WindDownPort: Send + Sync {
     fn stop_all(&self, budget: Duration) -> BoxFuture<'_, Vec<Stopped>>;
 }
 
-/// The port of a module that is not built yet, or has nothing to wind down: no work, and nothing
-/// to stop. The stubs of `jobs` and `idle` hold one until their sections replace it.
+/// A port with nothing to wind down: no work, and nothing to stop.
 pub struct NothingToWindDown {
     running: watch::Sender<u32>,
 }

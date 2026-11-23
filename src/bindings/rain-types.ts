@@ -4,7 +4,7 @@ export type Status = "idle" | "running" | "waiting" | "success" | "failed";
 
 export type IconKind = "lucide" | "brand" | "url" | "letter";
 
-export type IconRef = { kind: "lucide" | "brand" | "url" | "letter", value: string, tint?: string, };
+export type IconRef = { kind: "lucide" | "brand" | "url" | "letter", value: string, tint?: string, fallback?: string, };
 
 export type ErrorCode = "unavailable" | "notFound" | "failed" | "invalid" | "conflict";
 
@@ -46,4 +46,162 @@ export type Settings = { hotkey: string, hotkeyAvailable: boolean, hideOnBlur: b
 
 export type SettingsPatch = { hideOnBlur?: boolean, resetAfterSeconds?: ResetAfterSeconds, startWithWindows?: boolean, dataDir?: string, vaultPath?: string, dailyNoteFormat?: string, dailyNoteFolder?: string, projectRoots?: Array<string>, gameFolders?: Array<string>, steamEnabled?: boolean, steamPath?: string, epicEnabled?: boolean, epicPath?: string, monitorClaude?: boolean, gameModeCountdownSeconds?: CountdownSeconds, };
 
-export const TOPIC_NAMES = ["sessions", "jobs", "idleJobs", "launch", "scan", "gameMode", "settings", "health"] as const;
+export type SearchType = "app" | "pool" | "project" | "game" | "session" | "job" | "idleJob";
+
+export type PinnableType = "app" | "pool" | "project" | "game";
+
+export type SearchItem = { type: "app" | "pool" | "project" | "game" | "session" | "job" | "idleJob", id: string, title: string, subtitle?: string, icon: IconRef, status?: "idle" | "running" | "waiting" | "success" | "failed", score: number, };
+
+export type AppKind = "program" | "store" | "other";
+
+export type AppEntry = { id: string, name: string, icon: IconRef, kind: "program" | "store" | "other", exePath?: string, keywords: Array<string>, pinned: boolean, running: boolean, lastLaunchedAt?: string, };
+
+export type PoolMember = { appId: string, args?: string, delayMs?: number, };
+
+export type Pool = { id: string, name: string, icon: IconRef, members: Array<PoolMember>, pinned: boolean, lastLaunchedAt?: string, };
+
+export type PoolDraft = { id?: string, name: string, members: Array<PoolMember>, };
+
+export type PinBody = { pinned: boolean, };
+
+export type LaunchType = "app" | "pool" | "project" | "game";
+
+export type LaunchMode = "full" | "editorOnly" | "terminal" | "claude";
+
+export type LaunchTarget = { type: "app" | "pool" | "project" | "game", id: string, mode?: 'full' | 'editorOnly' | 'terminal' | 'claude', args?: string, };
+
+export type LaunchStep = { label: string, icon: IconRef, status: "idle" | "running" | "waiting" | "success" | "failed", error?: string, };
+
+export type RunStatus = "running" | "success" | "failed";
+
+export type LaunchRun = { id: string, target: LaunchTarget, status: "running" | "success" | "failed", steps: Array<LaunchStep>, };
+
+export type EnvKind = "editor" | "terminal" | "browser" | "claude" | "app";
+
+export type EnvStep = { kind: "editor" | "terminal" | "browser" | "claude" | "app", label: string, icon: IconRef, command?: string, url?: string, };
+
+export type Project = { id: string, name: string, path: string, icon: IconRef, branch: string, dirtyFiles?: number, commits14d: Array<number>, lastOpenedAt?: string, activityScore: number, environment: Array<EnvStep>, open: boolean, pinned: boolean, missing: boolean, };
+
+export type GameSource = "steam" | "epic" | "custom";
+
+export type Game = { id: string, title: string, source: "steam" | "epic" | "custom", coverUrl?: string, installed: boolean, running: boolean, sizeBytes?: number, playtimeMinutes: number, lastPlayedAt?: string, pinned: boolean, hidden: boolean, exePath?: string, exeGuessed?: boolean, installPath?: string, removable?: boolean, };
+
+export type GameSourceStatus = { source: "steam" | "epic" | "custom", state: "ok" | "off" | "failed", message?: string, };
+
+export type GameLibrary = { games: Array<Game>, sources: Array<GameSourceStatus>, };
+
+export type CustomGameDraft = { title: string, exePath: string, coverPath?: string, };
+
+export type GamePatch = { hidden?: boolean, title?: string, exePath?: string, coverPath?: string, };
+
+export type JobKind = "cron" | "claude";
+
+export type JobRun = { id: string, jobId: string, status: "idle" | "running" | "waiting" | "success" | "failed", startedAt: string, durationMs?: number, exitCode?: number, };
+
+export type LogLevel = "info" | "warn" | "error";
+
+export type LogLine = { ts: string, level: "info" | "warn" | "error", text: string, };
+
+export type ScheduledJob = { id: string, name: string, kind: "cron" | "claude", cron: string, scheduleLabel: string, enabled: boolean, running: boolean, nextRunAt?: string, recentRuns: Array<JobRun>, };
+
+export type IdleState = "queued" | "running" | "paused" | "success" | "failed";
+
+export type IdleResource = "cpu" | "gpu";
+
+export type IdleJob = { id: string, name: string, enabled: boolean, state: "queued" | "running" | "paused" | "success" | "failed", progress: number, resource: "cpu" | "gpu", idleAfterMinutes: number, etaMinutes?: number, lastRunAt?: string, };
+
+export type EnabledBody = { enabled: boolean, };
+
+export type PermissionAnswer = "once" | "always" | "deny";
+
+export type PermissionRequest = { id: string, tool: string, summary: string, detail: string, requestedAt: string, answerable: boolean, };
+
+export type SessionEventKind = "prompt" | "tool" | "edit" | "message" | "permission" | "error";
+
+export type SessionEvent = { at: string, kind: "prompt" | "tool" | "edit" | "message" | "permission" | "error", text: string, };
+
+export type SessionHost = "terminal" | "desktop" | "other";
+
+export type ClaudeSession = { id: string, title: string, cwd: string, projectId?: string, branch?: string, model: string, status: "idle" | "running" | "waiting" | "success" | "failed", startedAt: string, lastActivityAt: string, tokens: number, lastMessage: string, request?: PermissionRequest, recent: Array<SessionEvent>, host: "terminal" | "desktop" | "other", alive: boolean, };
+
+export type PermissionAnswerBody = { requestId: string, answer: "once" | "always" | "deny", };
+
+export type PermissionAnswerResult = { applied: "once" | "always" | "deny", ruleText?: string, };
+
+export type FocusKind = "window" | "app" | "none";
+
+export type FocusResult = { focused: "window" | "app" | "none", };
+
+export type Cadence = "daily" | "weekly" | "monthly";
+
+export type Habit = { id: string, name: string, icon: IconRef, property: string, cadence: "daily" | "weekly" | "monthly", times: number, };
+
+export type HabitDraft = { id?: string, name: string, icon: IconRef, property: string, cadence: "daily" | "weekly" | "monthly", times: number, };
+
+export type HabitCell = "none" | "miss" | "partial" | "done";
+
+export type HabitSummary = { habit: Habit, today: string, todayDone: boolean, periodCount: number, periodTarget: number, cells: Array<HabitCell>, };
+
+export type HabitDay = { date: string, done: Array<string>, };
+
+export type HabitStats = { habitId: string, today: string, since?: string, streakCurrent: number, streakBest: number, ratePercent?: number, doneThisWeek: number, doneThisMonth: number, doneThisYear: number, tickableFrom: string, windowFrom: string, };
+
+export type HabitTickBody = { done: boolean, };
+
+export type VaultStatus = { connected: boolean, path?: string, dailyFolder?: string, dailyFormat?: string, dailyFolderFound: boolean, writable: boolean, problem?: string, };
+
+export type PropertySuggestion = { property: string, days: number, lastSeen: string, };
+
+export type OpenNoteResult = { opened: boolean, };
+
+export type CalendarEvent = { id: string, title: string, start: string, end: string, allDay: boolean, calendar: string, color: string, location?: string, };
+
+export type FileCategory = "video" | "image" | "audio" | "archive" | "code" | "document" | "app" | "other";
+
+export type NodeKind = "dir" | "file" | "other";
+
+export type ScanStatus = "scanning" | "done" | "failed" | "cancelled";
+
+export type Drive = { id: string, letter: string, label: string, totalBytes: number, usedBytes: number, };
+
+export type DiskNode = { name: string, path: string, sizeBytes: number, kind: "dir" | "file" | "other", category?: "video" | "image" | "audio" | "archive" | "code" | "document" | "app" | "other", children?: Array<DiskNode>, truncated?: boolean, denied?: boolean, };
+
+export type DiskScan = { id: string, driveId: string, status: "scanning" | "done" | "failed" | "cancelled", progress: number, filesSeen: number, error?: string, notAccessible?: number, root?: DiskNode, };
+
+export type MachineState = { userActive: boolean, idleMinutes: number, };
+
+export type StartScanBody = { driveId: string, };
+
+export type RevealBody = { path: string, };
+
+export type PathsCheckBody = { paths: Array<string>, };
+
+export type PathKind = "dir" | "file";
+
+export type PathCheck = { path: string, exists: boolean, kind?: "dir" | "file", };
+
+export type GameModePhase = "off" | "review" | "countdown" | "windingDown" | "done";
+
+export type GameModeChoice = "wait" | "stopAnyway" | "closeNow" | "cancel";
+
+export type WindDownKind = "session" | "job" | "idleJob" | "service" | "window";
+
+export type WindDownEffect = "safe" | "interrupts" | "leftRunning";
+
+export type WindDownStatus = "pending" | "stopping" | "stopped";
+
+export type WindDownItem = { id: string, label: string, icon: IconRef, kind: "session" | "job" | "idleJob" | "service" | "window", count: number, effect: "safe" | "interrupts" | "leftRunning", status: "pending" | "stopping" | "stopped", };
+
+export type RecapOutcome = "stopped" | "forced" | "failed" | "leftRunning";
+
+export type RecapItem = { kind: "session" | "job" | "idleJob" | "service" | "window", label: string, count: number, outcome: "stopped" | "forced" | "failed" | "leftRunning", names: Array<string>, };
+
+export type GameModeRecap = { at: string, complete: boolean, items: Array<RecapItem>, launchedTitle?: string, launchError?: string, launchedInJob?: boolean, seen: boolean, };
+
+export type GameModeState = { phase: "off" | "review" | "countdown" | "windingDown" | "done", waiting: boolean, secondsLeft: number, countdownSeconds: number, items: Array<WindDownItem>, thenLaunchGameId?: string, waitTimedOut?: boolean, launchError?: string, last?: GameModeRecap, rev: number, };
+
+export type StartGameModeBody = { thenLaunchGameId?: string, };
+
+export type GameModeChoiceBody = { choice: "wait" | "stopAnyway" | "closeNow" | "cancel", };
+
+export const TOPIC_NAMES = ["sessions", "jobs", "idleJobs", "launch", "scan", "gameMode", "settings", "health", "projects", "games", "habits"] as const;

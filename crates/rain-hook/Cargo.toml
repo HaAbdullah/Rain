@@ -1,0 +1,15 @@
+[package]
+name = "rain-hook"
+description = "The tiny program that Claude Code runs as a hook: forwards one event to the Rain backend and exits"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+# No dependencies, on purpose (foundation 1.2): the program starts for every hook event of every
+# Claude Code session, so it must stay small and fast, and it must not be able to break on an
+# update of a library. `tests/crate_graph.rs` of rain-backend checks this.
+[dependencies]

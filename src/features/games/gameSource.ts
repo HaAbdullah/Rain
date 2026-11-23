@@ -10,5 +10,5 @@ export const SOURCE_ICON: Record<GameSource, IconRef> = {
 export const SOURCE_LABEL: Record<GameSource, string> = {
   steam: 'Steam',
   epic: 'Epic Games',
-  custom: 'Custom',
+  custom: 'Local',
 }

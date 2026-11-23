@@ -2,9 +2,8 @@
 //!
 //! Every module is one folder with the same files (`mod.rs`, `routes.rs`, `service.rs`,
 //! `store.rs`). Modules call each other only through the other module's public `Service`.
-//! `settings` and `lifecycle` are built; the other ten are stubs that each feature section fills
-//! in. A feature section only changes the files of its own folder: the entry in the table below
-//! (name, migrations, router, init, start, stop) already exists for all twelve modules.
+//! All twelve modules are built. The table below holds the entry of each one (name, migrations,
+//! router, init, start, stop); a feature section only changes the files of its own folder.
 
 use std::time::Duration;
 
@@ -88,7 +87,7 @@ pub fn routers(state: &AppState, modules: &[ModuleEntry]) -> Router<AppState> {
             module: module.name,
         };
         let routes = (module.router)();
-        // `route_layer` on a router without routes is an error in axum, and the stubs have none.
+        // `route_layer` on a router without routes is an error in axum, and a module may have none.
         let routes = if routes.has_routes() {
             routes.route_layer(from_fn_with_state(gate, refuse_if_failed))
         } else {
@@ -254,7 +253,11 @@ mod tests {
 
     #[tokio::test]
     async fn init_fills_the_slot_of_every_module() {
-        let state = state();
+        // The real modules write their example files at `init` (projects.toml, jobs.toml, ...), so
+        // the data folder is a temporary one and nothing lands in the crate folder.
+        let data = tempfile::tempdir().unwrap();
+        let config = Config::for_test("rain-unit", data.path().to_path_buf(), "local".into());
+        let state = AppState::builder(config).build();
         init_all(&state, MODULES).await.unwrap();
         // The accessors panic when a slot is empty.
         state.settings();

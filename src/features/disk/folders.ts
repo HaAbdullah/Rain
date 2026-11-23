@@ -25,3 +25,22 @@ export function trailTo(root: DiskNode, path: string): DiskNode[] {
 export function shareOf(node: DiskNode, parent: DiskNode): number {
   return parent.sizeBytes > 0 ? node.sizeBytes / parent.sizeBytes : 0
 }
+
+/** True when opening `node` needs a fetch: its children are missing, or only the largest are there. */
+export function needsLoad(node: DiskNode, loaded: ReadonlySet<string>): boolean {
+  if (node.kind !== 'dir' || node.denied || loaded.has(node.path)) return false
+  return node.truncated === true || (node.children?.some((child) => child.kind === 'other') ?? false)
+}
+
+/** A copy of `root` in which the folder with the path of `replacement` is replaced by it. Shares everything else. */
+export function replaceNode(root: DiskNode, replacement: DiskNode): DiskNode {
+  if (root.path === replacement.path) return replacement
+  if (!root.children || !isInside(replacement.path, root.path)) return root
+  const index = root.children.findIndex((child) => child.kind === 'dir' && isInside(replacement.path, child.path))
+  if (index < 0) return root
+  const replaced = replaceNode(root.children[index], replacement)
+  if (replaced === root.children[index]) return root
+  const children = root.children.slice()
+  children[index] = replaced
+  return { ...root, children }
+}

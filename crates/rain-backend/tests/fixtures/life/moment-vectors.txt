@@ -1,0 +1,27 @@
+# format | date | expected      (an expected text that starts with ! is the token that must be refused)
+YYYY-MM-DD | 2026-11-22 | 2026-11-22
+YYYY/MM/YYYY-MM-DD | 2026-01-05 | 2026/01/2026-01-05
+YYYY-MM-DD dddd | 2026-11-22 | 2026-11-22 Sunday
+[Daily] YYYY.MM.DD | 2024-02-29 | Daily 2024.02.29
+MMMM Do, YYYY | 2026-11-01 | November 1st, 2026
+MMMM Do, YYYY | 2026-11-02 | November 2nd, 2026
+MMMM Do, YYYY | 2026-11-03 | November 3rd, 2026
+MMMM Do, YYYY | 2026-11-04 | November 4th, 2026
+MMMM Do, YYYY | 2026-11-11 | November 11th, 2026
+MMMM Do, YYYY | 2026-11-12 | November 12th, 2026
+MMMM Do, YYYY | 2026-11-13 | November 13th, 2026
+MMMM Do, YYYY | 2026-11-21 | November 21st, 2026
+MMMM Do, YYYY | 2026-11-22 | November 22nd, 2026
+MMMM Do, YYYY | 2026-11-23 | November 23rd, 2026
+MMMM Do, YYYY | 2026-10-31 | October 31st, 2026
+GGGG-[W]WW-E | 2021-01-03 | 2020-W53-7
+GGGG-[W]WW-E | 2026-01-01 | 2026-W01-4
+GGGG-[W]WW-E | 2024-12-30 | 2025-W01-1
+ddd, D MMM YY | 2026-11-03 | Tue, 3 Nov 26
+dd d | 2026-11-03 | Tu 2
+dd d | 2026-11-22 | Su 0
+GG W | 2026-11-03 | 26 45
+M/D/YY | 2026-02-03 | 2/3/26
+YYYY-MM-DD HH:mm | 2026-11-22 | !HH
+YYYY-MM-DD [ | 2026-11-22 | ![
+YYYY-DDD | 2026-11-22 | !DDD

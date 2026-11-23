@@ -16,14 +16,17 @@ import StatusDot from '@/components/rain/StatusDot.vue'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useActionPanel } from '@/composables/useActionPanel'
 import { useLaunch } from '@/composables/useLaunch'
+import { useNotice } from '@/composables/useNotice'
 import { useResource } from '@/composables/useResource'
 import { useScreen, useScreenState } from '@/composables/useScreen'
 import { useSectionQuery } from '@/composables/useSearch'
 import { useSelection, type SelGroup } from '@/composables/useSelection'
 import { api } from '@/data'
 import type { AppEntry, IconRef, Pool, Status } from '@/data/types'
+import { errorMessage } from '@/lib/errors'
 import { matches } from '@/lib/score'
 import { useNav } from '@/nav/useNav'
+import { rescanApps } from './actions'
 import AppDetail from './AppDetail.vue'
 import PoolDetail from './PoolDetail.vue'
 import PoolEditorDialog from './PoolEditorDialog.vue'
@@ -42,9 +45,19 @@ const NEW_POOL_COMMAND = commands.find((command) => command.id === 'new-pool')
 const nav = useNav()
 const query = useSectionQuery('apps')
 const { runs } = useLaunch()
+const notice = useNotice()
 const { primary, secondary } = useScreenState()
 const apps = useResource('apps', () => api.listApps())
 const pools = useResource('pools', () => api.listPools())
+
+/** The empty state's button: read the installed apps again. */
+async function scan(): Promise<void> {
+  try {
+    await rescanApps({ api, notice })
+  } catch (reason) {
+    notice.error(errorMessage(reason, 'Could not scan for apps'))
+  }
+}
 
 const appList = computed(() => apps.data.value ?? [])
 const poolList = computed(() => pools.data.value ?? [])
@@ -163,6 +176,7 @@ const noApps = computed(() => apps.data.value?.length === 0 && pools.data.value?
         v-for="source in failedSources"
         :key="source.label"
         :message="`${source.label} unavailable`"
+        :detail="source.resource.error.value?.message"
         @retry="source.resource.reload()"
       />
     </div>
@@ -179,8 +193,9 @@ const noApps = computed(() => apps.data.value?.length === 0 && pools.data.value?
       v-else-if="noApps"
       icon="layout-grid"
       title="No apps found"
-      action-label="Open settings"
-      @action="nav.go('settings')"
+      hint="Rain lists the apps that Windows shows in the Start menu."
+      action-label="Scan again"
+      @action="scan"
     />
     <EmptyState v-else-if="!hasRows && query !== ''" icon="search-x" title="No match" />
     <ItemList

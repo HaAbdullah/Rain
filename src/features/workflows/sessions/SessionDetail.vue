@@ -18,6 +18,7 @@ import type { ClaudeSession, SessionEvent } from '@/data/types'
 import { keepFocus } from '@/lib/focus'
 import { formatCount } from '@/lib/format'
 import { formatClock } from '@/lib/time'
+import { focusLabel } from './sessionInfo'
 import { NO_PRESS } from '../buttonStyle'
 import FactList from '../FactList.vue'
 import { useRunAction } from '../useRunAction'
@@ -63,13 +64,13 @@ const kindTones: Partial<Record<SessionEvent['kind'], string>> = {
         <dd>{{ session.model }}</dd>
         <dt>Started</dt>
         <dd><RelTime :iso="session.startedAt" /></dd>
-        <dt>Tokens</dt>
+        <dt>Context</dt>
         <dd>{{ formatCount(session.tokens) }}</dd>
       </FactList>
 
       <p class="selectable line-clamp-3 text-13 text-foreground">{{ session.lastMessage }}</p>
 
-      <RequestCard v-if="session.status === 'waiting' && session.request" :request="session.request" />
+      <RequestCard v-if="session.request" :request="session.request" :host="session.host" />
 
       <section class="flex flex-col gap-1" aria-label="Recent events">
         <h3 class="text-xs font-medium text-muted-foreground">Recent</h3>
@@ -93,8 +94,8 @@ const kindTones: Partial<Record<SessionEvent['kind'], string>> = {
     </div>
 
     <template #actions>
-      <Button variant="outline" class="gap-2" :class="NO_PRESS" tabindex="-1" @mousedown="keepFocus" @click="run('focus')">
-        Focus terminal
+      <Button v-if="session.alive" variant="outline" class="gap-2" :class="NO_PRESS" tabindex="-1" @mousedown="keepFocus" @click="run('focus')">
+        {{ focusLabel(session.host) }}
         <KeyHint keys="Enter" />
       </Button>
       <Button variant="ghost" class="gap-2" :class="NO_PRESS" tabindex="-1" @mousedown="keepFocus" @click="run('transcript')">

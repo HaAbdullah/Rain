@@ -1,31 +1,12 @@
-// The app's single data entry point. Screens import `api` from here and never from the mock
-// folder or the REST client (foundation 8.5).
-//
-// While the backend is built stage by stage, `api` is a router: the methods and topics of
-// finished stages go to the Rust backend, every other one to the mock (routing.ts).
-// `VITE_RAIN_MOCK=1` (npm run dev:ui) runs the whole app on the mock and opens no stream.
-// In stage 10 this file becomes `createRestApi(shell.bridge, stream)` alone.
+// The app's single data entry point. Screens import `api` from here and never from the REST
+// client directly (foundation 8.5). There is no sample data: every call goes to the backend,
+// and the stream is opened once, when this file is first loaded.
 import { shell } from '@/shell'
 import type { RainApi } from './api'
-import { createMockApi } from './mock'
 import { createRestApi } from './rest/client'
-import { createStream, type RestStream } from './rest/stream'
-import { createRouterApi } from './router'
-import { routing } from './routing'
+import { createStream } from './rest/stream'
 
-interface DataLayer {
-  api: RainApi
-  onStreamReset: RestStream['onReset']
-}
+const stream = createStream(shell.bridge)
 
-function createDataLayer(): DataLayer {
-  if (import.meta.env.VITE_RAIN_MOCK === '1') {
-    // Retired methods are undefined here; their screens show an error row. Stage 10 deletes this branch.
-    return { api: createMockApi() as RainApi, onStreamReset: () => () => {} }
-  }
-  const stream = createStream(shell.bridge)
-  const real = createRestApi(shell.bridge, stream)
-  return { api: createRouterApi({ real, mock: createMockApi(), routing }), onStreamReset: stream.onReset }
-}
-
-export const { api, onStreamReset } = createDataLayer()
+export const api: RainApi = createRestApi(shell.bridge, stream)
+export const onStreamReset = stream.onReset

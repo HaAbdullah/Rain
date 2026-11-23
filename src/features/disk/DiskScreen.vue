@@ -25,6 +25,7 @@ import { cancelScanAction, diskView, scanAction } from './actions'
 import { keepTreeWhileAway } from './diskCache'
 import DriveList from './DriveList.vue'
 import FolderList, { type FolderRow } from './FolderList.vue'
+import NotAccessible from './NotAccessible.vue'
 import { isInside, shareOf, trailTo } from './folders'
 import TreemapCanvas from './TreemapCanvas.vue'
 
@@ -78,7 +79,8 @@ const selectedNode = computed(() => rowSelection.selected.value?.node ?? null)
 const target = computed<ActionTarget | null>(() => {
   if (folder.value) {
     const node = selectedNode.value
-    return node ? { type: 'diskNode', id: node.path, item: node } : null
+    // An "other" row is selectable (the arrows pass over it) but has no action target.
+    return node && node.kind !== 'other' ? { type: 'diskNode', id: node.path, item: node } : null
   }
   // The running scan owns the screen, whichever drive row was selected before.
   const drive = scanning.value
@@ -106,6 +108,7 @@ function targetOfRow(row: FolderRow): ActionTarget {
 }
 
 function openPanel(row: FolderRow, event: MouseEvent) {
+  if (row.node.kind === 'other') return // nothing to do with it: no panel
   rowSelection.select(row.id)
   useActionPanel().open(targetOfRow(row), event)
 }
@@ -151,12 +154,17 @@ function sharePercent(node: DiskNode, parent: DiskNode): string {
           </template>
         </BreadcrumbList>
       </Breadcrumb>
+      <NotAccessible v-if="trail.length === 1 && scan?.notAccessible" :count="scan.notAccessible" class="px-2" />
       <span class="shrink-0 px-4 font-mono text-xs text-muted-foreground">{{ formatBytes(folder.sizeBytes) }}</span>
     </template>
 
     <!-- Result -->
     <template v-if="folder">
-      <EmptyState v-if="!folder.children?.length" icon="folder-open" title="This folder is empty" />
+      <EmptyState
+        v-if="!folder.children?.length"
+        :icon="folder.denied ? 'lock' : 'folder-open'"
+        :title="folder.denied ? 'Not accessible' : 'This folder is empty'"
+      />
       <div v-else class="grid min-h-0 flex-1 grid-cols-[minmax(0,5fr)_minmax(0,12fr)]">
         <div class="flex min-h-0 min-w-0 flex-col border-r border-border">
           <EmptyState v-if="rows.length === 0" icon="search-x" title="No match" />
@@ -171,7 +179,7 @@ function sharePercent(node: DiskNode, parent: DiskNode): string {
             />
           </div>
           <div v-if="selectedNode" class="flex shrink-0 flex-col gap-1 border-t border-border px-4 py-3">
-            <PathText :path="selectedNode.path" />
+            <PathText v-if="selectedNode.kind !== 'other'" :path="selectedNode.path" />
             <p class="text-13 text-muted-foreground">
               {{ formatBytes(selectedNode.sizeBytes) }}, {{ sharePercent(selectedNode, folder) }} of {{ folder.name }}
             </p>
@@ -192,7 +200,7 @@ function sharePercent(node: DiskNode, parent: DiskNode): string {
         <Skeleton v-for="n in 2" :key="n" class="h-14 w-full" />
       </div>
       <div v-else-if="drives.error.value && !drives.data.value" class="mx-auto w-full max-w-[560px] p-2 pt-6">
-        <ErrorRow message="Drives unavailable" @retry="drives.reload()" />
+        <ErrorRow message="Drives unavailable" :detail="drives.error.value.message" @retry="drives.reload()" />
       </div>
       <EmptyState v-else-if="drives.data.value?.length === 0" :icon="icon" title="No drives found" />
       <DriveList

@@ -74,12 +74,13 @@ defineExpose({ target, move, page, group })
   <ScreenFrame pane="wide">
     <template #strip><slot name="strip" /></template>
 
-    <ErrorRow v-if="jobs.error.value" class="m-2" message="Jobs unavailable" @retry="jobs.reload" />
+    <ErrorRow v-if="jobs.error.value" class="m-2" message="Jobs unavailable" :detail="jobs.error.value.message" @retry="jobs.reload" />
     <ListSkeleton v-if="showSkeleton" />
     <EmptyState
       v-else-if="hasData && jobs.data.value?.length === 0"
       icon="calendar-clock"
       title="No scheduled jobs"
+      hint="Jobs are defined in jobs.toml in your data folder"
     />
     <EmptyState v-else-if="hasData && shownCount === 0" icon="search-x" title="No match" />
     <template v-else-if="hasData">

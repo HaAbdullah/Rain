@@ -178,10 +178,15 @@ async fn a_hotkey_that_did_not_register_is_a_failed_source_in_the_health_report_
     facts["hotkeyError"] = json!("The hotkey is already in use");
     backend.send("PUT", "/internal/shell", Some(facts)).await;
     let health: Health = backend.get("/health").await;
-    assert_eq!(health.sources.len(), 1);
-    assert_eq!(health.sources[0].name, "hotkey");
+    // Other modules report their own sources at start (the Claude registry, for one), so the
+    // hotkey source is looked up by name.
+    let hotkey = health
+        .sources
+        .iter()
+        .find(|source| source.name == "hotkey")
+        .expect("the hotkey source is reported");
     assert_eq!(
-        health.sources[0].message.as_deref(),
+        hotkey.message.as_deref(),
         Some("The hotkey is already in use")
     );
 
@@ -193,7 +198,7 @@ async fn a_hotkey_that_did_not_register_is_a_failed_source_in_the_health_report_
         )
         .await;
     let health: Health = backend.get("/health").await;
-    assert!(health.sources.is_empty());
+    assert!(health.sources.iter().all(|source| source.name != "hotkey"));
     backend.stop().await;
 }
 

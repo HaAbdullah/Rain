@@ -4,6 +4,7 @@
 //   npm run backend:stop       ask it to stop
 //   npm run backend:restart    stop it, build it, start it detached
 //   node scripts/backend.mjs start --fixture typical|empty|broken
+//   node scripts/backend.mjs fault apps normal|empty|fail   the launcher's app list answers normally, with nothing, or with an error
 //
 // Windows refuses to overwrite a running `rain-backend.exe`, so every start stops first. The
 // stop command is the same program, which Windows allows to run a second time.
@@ -16,7 +17,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { pipeNameFor } from '../vite/pipe-proxy.ts'
-import { pipeExists, sleep, waitForPing } from './lib/pipe.mjs'
+import { API, pipeExists, pipeRequest, sleep, waitForPing } from './lib/pipe.mjs'
 
 export const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
 export const BACKEND_EXE = join(REPO, 'target', 'debug', 'rain-backend.exe')
@@ -105,8 +106,30 @@ export async function restartBackend(env = backendEnv()) {
   return true
 }
 
+/**
+ * The dev-only fault route of the launcher (section 01 11.3): the app list answers normally,
+ * with nothing, or with an error, so that the empty and failing screens can be seen.
+ */
+async function fault([area, mode]) {
+  if (area !== 'apps' || !['normal', 'empty', 'fail'].includes(mode)) {
+    console.error('Usage: node scripts/backend.mjs fault apps normal|empty|fail')
+    return false
+  }
+  const { status, body } = await pipeRequest(pipeNameFor(backendEnv()), `${API}/internal/test/apps-source`, {
+    method: 'PUT',
+    body: { mode },
+  })
+  if (status !== 204) {
+    console.error(`backend: the fault route answered ${status} ${body}`)
+    return false
+  }
+  console.log(`backend: the app source now answers "${mode}"`)
+  return true
+}
+
 async function main(args) {
   const verb = args[0]
+  if (verb === 'fault') return fault(args.slice(1))
   if (verb === 'stop') return stopBackend(backendEnv())
   if (verb === 'start' || verb === 'restart') {
     const fixture = fixtureFromArgs(args)
