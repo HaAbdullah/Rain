@@ -22,24 +22,16 @@ import { useScreen, useScreenState } from '@/composables/useScreen'
 import { useSectionQuery } from '@/composables/useSearch'
 import { useSelection, type SelGroup } from '@/composables/useSelection'
 import { api } from '@/data'
-import type { AppEntry, IconRef, Pool, Status } from '@/data/types'
+import type { IconRef, Pool, Status } from '@/data/types'
 import { errorMessage } from '@/lib/errors'
-import { matches } from '@/lib/score'
 import { useNav } from '@/nav/useNav'
 import { rescanApps } from './actions'
 import AppDetail from './AppDetail.vue'
+import { buildGroups, type Row } from './listGroups'
 import PoolDetail from './PoolDetail.vue'
 import PoolEditorDialog from './PoolEditorDialog.vue'
 
-/** A list row. Pool and app ids may be equal, so the row id carries the kind. */
-type Row =
-  | { id: string; kind: 'pool'; pool: Pool }
-  | { id: string; kind: 'app'; app: AppEntry }
-  /** The dashed "New pool" row, shown only while there are no pools. */
-  | { id: string; kind: 'new' }
-
 const SKELETON_ROWS = 8
-const NEW_POOL_ROW: Row = { id: 'new-pool', kind: 'new' }
 const NEW_POOL_COMMAND = commands.find((command) => command.id === 'new-pool')
 
 const nav = useNav()
@@ -65,23 +57,7 @@ const appById = computed(() => new Map(appList.value.map((app) => [app.id, app])
 
 // ---- the list ----
 
-const groups = computed<SelGroup<Row>[]>(() => {
-  const poolRows: Row[] = poolList.value
-    .filter((pool) => matches(query.value, pool.name))
-    .map((pool) => ({ id: `pool:${pool.id}`, kind: 'pool', pool }))
-  // With no pools at all (not merely none that match) the group offers to make one.
-  if (pools.data.value?.length === 0 && query.value === '') poolRows.push(NEW_POOL_ROW)
-
-  const appRows: Row[] = appList.value
-    .filter((app) => matches(query.value, app.name, app.keywords))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((app) => ({ id: `app:${app.id}`, kind: 'app', app }))
-
-  return [
-    { id: 'pools', title: 'Pools', count: poolRows.length, items: poolRows },
-    { id: 'apps', title: 'Apps', count: appRows.length, items: appRows },
-  ]
-})
+const groups = computed<SelGroup<Row>[]>(() => buildGroups(pools.data.value, appList.value, query.value))
 
 const hasRows = computed(() => groups.value.some((group) => group.items.length > 0))
 

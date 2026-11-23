@@ -586,7 +586,7 @@ Cost: two registry reads (tens of microseconds), cached 30 s. The meaning of the
 
 #### 6.1.4 Epic path (detected, UNPROVEN)
 
-The owner's PC has no Epic launcher, so nothing was seen working. The rule: if `%ProgramData%\Epic\EpicGamesLauncher` exists and holds `Data\Manifests`, the effective path is that `EpicGamesLauncher` folder; otherwise `""`. This is only a definition of what `epicPath` points at; section 02 owns the real reading of manifests and may change the definition (point O2). `""` is not a failure: the source is `off` in `GET /health` (foundation 6.9).
+The owner's PC has the NEW launcher (read-only check, 2026-11-22; section 02 6.10.1) and not the old one. The rules: (1) the new launcher's data folder: the registry value `HKCU\Software\Epic Games\EpicGamesLauncher` `AppDataPath` (`%NAME%` expanded), else `%LOCALAPPDATA%\com.epicgames.eglv2`; it counts when it holds `installations.jsonl`. (2) The old launcher: if `%ProgramData%\Epic\EpicGamesLauncher` exists and holds `Data\Manifests`, that `EpicGamesLauncher` folder. The effective path is (1) when it counts, else (2), else `""`; when both count, (2) is also given to section 02 as `Resolved.epic_extra_path` (`Detect::epic_extra`) so that both formats are read. A typed `epicPath` may point at either kind of folder, and then nothing extra is read. This is only a definition of what `epicPath` points at; section 02 owns the real reading of manifests and may change the definition (point O2). `""` is not a failure: the source is `off` in `GET /health` (foundation 6.9).
 
 #### 6.1.5 Caching
 

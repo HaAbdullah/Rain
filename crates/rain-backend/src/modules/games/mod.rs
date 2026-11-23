@@ -1,8 +1,9 @@
 //! Games: Steam, Epic, game folders and hand-added games. Feature section 02.
 //!
 //! What lives here:
-//! - `steam`, `epic`, `folders`: the three kinds of source (installed games of the signed-in Steam
-//!   account, the Epic launcher's manifests, and the folders of the setting `gameFolders`);
+//! - `steam`, `epic`, `epic_data`, `folders`: the kinds of source (installed games of the signed-in
+//!   Steam account, the old Epic launcher's manifests and the new one's journal, and the folders of
+//!   the setting `gameFolders`);
 //! - `guess`: which program file starts a game folder (pure scoring);
 //! - `config`: `games.toml`, the user's corrections and hand-added games;
 //! - `library`: puts the sources together; `edit`: what the user changes;
@@ -17,6 +18,7 @@ mod config;
 mod covers;
 mod edit;
 mod epic;
+mod epic_data;
 mod folders;
 mod guess;
 mod launch;

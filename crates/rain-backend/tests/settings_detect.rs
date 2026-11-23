@@ -70,6 +70,31 @@ async fn the_only_vault_steam_epic_and_the_daily_note_settings_are_shown_without
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_pc_with_both_epic_launchers_shows_the_one_in_use_and_reads_the_other_too() {
+    let detect = pc_with_one_vault();
+    *detect.epic.lock().expect("lock") = Some(PathBuf::from(r"C:\Fake Epic New"));
+    *detect.epic_extra.lock().expect("lock") = Some(PathBuf::from(r"C:\Fake Epic Old"));
+    let backend = detecting_backend(&detect).await;
+
+    let settings: Value = backend.get("/settings").await;
+    assert_eq!(settings["epicPath"], r"C:\Fake Epic New", "the path in use");
+    let resolved = backend.state.settings().resolved();
+    assert_eq!(resolved.epic_path, Some(PathBuf::from(r"C:\Fake Epic New")));
+    assert_eq!(
+        resolved.epic_extra_path,
+        Some(PathBuf::from(r"C:\Fake Epic Old"))
+    );
+
+    // A path that the user typed means exactly that folder, whichever format it holds.
+    let (_, typed) = patch(&backend, json!({ "epicPath": r"D:\Typed Epic" })).await;
+    assert_eq!(typed["epicPath"], r"D:\Typed Epic");
+    let resolved = backend.state.settings().resolved();
+    assert_eq!(resolved.epic_path, Some(PathBuf::from(r"D:\Typed Epic")));
+    assert_eq!(resolved.epic_extra_path, None);
+    backend.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn several_vaults_and_no_choice_mean_no_vault_and_a_choice_reads_that_vault() {
     let detect = Arc::new(FakeDetect::with_vaults(vec![
         FakeDetect::vault("one", r"C:\One"),

@@ -1,5 +1,6 @@
 //! What Rain finds out about this PC: the Obsidian vaults, the daily-note settings of the chosen
-//! vault, the Steam folder and the Epic Games Launcher folder. Section 06 6.1.2 to 6.1.5.
+//! vault, the Steam folder and the Epic Games Launcher folder (the old launcher's or the new
+//! one's). Section 06 6.1.2 to 6.1.5.
 //!
 //! First run needs no setup: a value that the user has not typed is detected here. Nothing
 //! personal is in the code: every path comes from Windows, the registry or a file that Obsidian
@@ -17,6 +18,7 @@ use rain_types::limits::DETECT_TTL;
 use serde::Deserialize;
 use tracing::debug;
 
+use super::resolved::expand_env;
 use super::rules;
 use crate::core::clock::Clock;
 use crate::core::paths::normalize;
@@ -47,9 +49,19 @@ pub trait Detect: Send + Sync {
     fn daily_notes(&self, vault: &Path) -> NoteSettings;
     /// The Steam folder, when Steam is installed.
     fn steam(&self) -> Option<PathBuf>;
-    /// The data folder of the Epic Games Launcher, when it is installed.
+    /// The data folder of the Epic Games Launcher, when it is installed. A PC with the new
+    /// launcher (`installations.jsonl` inside) gives that folder, even when the old launcher's
+    /// manifests exist too: the new launcher is the one in use.
     fn epic(&self) -> Option<PathBuf>;
+    /// The folder of the other Epic launcher, when a PC has both. Games read it too, so that
+    /// nothing of the old launcher disappears. Nothing by default.
+    fn epic_extra(&self) -> Option<PathBuf> {
+        None
+    }
 }
+
+/// The file whose presence tells the new Epic launcher's data folder from any other folder.
+pub const EPIC_JOURNAL_FILE: &str = "installations.jsonl";
 
 /// The answers of all detectors at one moment.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -57,6 +69,8 @@ pub struct Detected {
     pub vaults: Vec<VaultEntry>,
     pub steam: Option<PathBuf>,
     pub epic: Option<PathBuf>,
+    /// The other Epic launcher's folder when both are installed.
+    pub epic_extra: Option<PathBuf>,
     /// The daily-note settings of the chosen vault (empty without one).
     pub notes: NoteSettings,
 }
@@ -140,10 +154,12 @@ impl Detector {
         let vaults = self.source.vaults();
         let steam = self.source.steam();
         let epic = self.source.epic();
+        let epic_extra = self.source.epic_extra();
         let mut detected = Detected {
             vaults,
             steam,
             epic,
+            epic_extra,
             notes: NoteSettings::default(),
         };
         let chosen = vault_override
@@ -206,8 +222,33 @@ impl Detect for SystemDetect {
     }
 
     fn epic(&self) -> Option<PathBuf> {
-        epic_folder(&known_folder(KnownFolder::ProgramData).ok()?)
+        epic_v2_system().or_else(epic_v1_system)
     }
+
+    fn epic_extra(&self) -> Option<PathBuf> {
+        // Only when the new folder is the one in use, so the old one is the "other".
+        epic_v2_system().and(epic_v1_system())
+    }
+}
+
+/// The old launcher's folder on this PC.
+fn epic_v1_system() -> Option<PathBuf> {
+    epic_folder(&known_folder(KnownFolder::ProgramData).ok()?)
+}
+
+/// The new launcher's data folder on this PC: the registry value, else the default place.
+fn epic_v2_system() -> Option<PathBuf> {
+    let registered = read_string(
+        Hive::CurrentUser,
+        r"Software\Epic Games\EpicGamesLauncher",
+        "AppDataPath",
+    )
+    .ok()
+    .flatten();
+    epic_v2_folder(
+        registered.as_deref(),
+        known_folder(KnownFolder::LocalAppData).ok().as_deref(),
+    )
 }
 
 /// A folder that exists, from a path as a program wrote it (the Steam value has forward slashes
@@ -226,6 +267,25 @@ pub fn epic_folder(program_data: &Path) -> Option<PathBuf> {
         .join("Manifests")
         .is_dir()
         .then_some(launcher)
+}
+
+/// The data folder of the new Epic launcher ("eglv2"): the folder the registry value
+/// `AppDataPath` names (`%NAME%` in it is expanded), else `<local app data>\com.epicgames.eglv2`.
+/// A folder counts only when it holds `installations.jsonl`: an empty leftover folder of an
+/// uninstalled launcher is not an installation. Nothing personal is in the code; the paths come
+/// from Windows.
+pub fn epic_v2_folder(
+    app_data_path: Option<&str>,
+    local_app_data: Option<&Path>,
+) -> Option<PathBuf> {
+    let registered = app_data_path
+        .filter(|text| !text.trim().is_empty())
+        .and_then(|text| normalize(&expand_env(text.trim()), true).ok());
+    let default = local_app_data.map(|local| local.join("com.epicgames.eglv2"));
+    registered
+        .into_iter()
+        .chain(default)
+        .find(|folder| folder.join(EPIC_JOURNAL_FILE).is_file())
 }
 
 // ---- the files that Obsidian writes ----

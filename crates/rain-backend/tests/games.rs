@@ -781,6 +781,228 @@ async fn a_game_added_by_hand_is_validated_stored_and_removable() {
     assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
+// ---- the new Epic launcher ----
+
+const V2_ITEM: &str = "00112233445566778899aabbccddeeff";
+const V2_COVER_MD5: &str = "0123456789abcdef0123456789abcdef";
+
+/// The data folder of the new Epic launcher (`<root>\Epic`, which the settings name) with one
+/// invented game: a journal, a title, a cover picture, a size, play time and a last-played time.
+/// `app` is the app name, so a test can make it equal to an old manifest's.
+fn make_epic_v2(root: &Path, app: &str, title: &str) {
+    let data = root.join("Epic");
+    let install = root.join("EpicGames").join("Fixture Quest");
+    fs::create_dir_all(&install).unwrap();
+    let record = |complete: bool| {
+        json!({
+            "installationId": "inst1", "complete": complete, "platform": "Windows",
+            "dir": install.to_string_lossy(), "namespace": "fixturens", "itemId": V2_ITEM,
+            "artifactId": app, "version": "1.0", "launchExecutable": "Game/Quest.exe",
+        })
+    };
+    write(
+        &data.join("installations.jsonl"),
+        &format!(
+            "{{\"version\":1,\"entries\":2}}
+{}
+{}
+",
+            record(false),
+            record(true)
+        ),
+    );
+    let account = data
+        .join("cache")
+        .join("prod")
+        .join("account")
+        .join("acct1");
+    write(
+        &account.join("library-cache.json"),
+        &json!({"items": [{
+            "relationshipId": format!("fixturens:{V2_ITEM}:{app}"),
+            "appId": {"namespaceId": "fixturens", "itemId": V2_ITEM, "appName": app},
+            "title": title, "owned": true,
+        }]})
+        .to_string(),
+    );
+    write(
+        &account.join("playtime-cache.json"),
+        &json!({"items": [{"accountId": "acct1", "artifactId": app, "totalTime": 7260}]})
+            .to_string(),
+    );
+    write(
+        &data.join("cache").join("prod").join("catalog-cache.json"),
+        &json!({"items": {V2_ITEM: {"item": {"id": V2_ITEM, "keyImages": [
+            {"type": "Landscape", "md5": "ffffffffffffffffffffffffffffffff", "width": 2000, "height": 1000},
+            {"type": "Tall", "md5": V2_COVER_MD5, "width": 1200, "height": 1600},
+        ]}}}})
+        .to_string(),
+    );
+    fs::create_dir_all(data.join("images")).unwrap();
+    fs::write(data.join("images").join(format!("{V2_COVER_MD5}.jpg")), PNG).unwrap();
+    write(
+        &data.join("cache").join("disk-size-cache.json"),
+        &json!({"entries": [{
+            "app_id": {"namespaceId": "fixturens", "itemId": V2_ITEM, "appName": app},
+            "bytes": 5000000.0, "measured_at_ms": 1,
+        }]})
+        .to_string(),
+    );
+    write(
+        &data.join("last-played.json"),
+        &json!({"acct1": {format!("fixturens:{V2_ITEM}:{app}"): "2026-11-22T05:57:51.736380500+00:00"}})
+            .to_string(),
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_game_of_the_new_epic_launcher_is_listed_with_its_title_cover_size_and_play_time() {
+    let backend = builder().start().await;
+    let temp = temp_of(&backend);
+    make_epic_v2(&temp, "FixtureQuest_1", "Fixture Quest Deluxe");
+
+    // The files were made after the start, so the list is asked for again from the disk, then
+    // read as `GET /games` gives it.
+    refreshed(&backend).await;
+    let library = library(&backend).await;
+    let (state, message) = state_of(&library, GameSource::Epic);
+    assert_eq!((state, message), (SourceState::Ok, None));
+    let epic: Vec<&Game> = library
+        .games
+        .iter()
+        .filter(|g| g.source == GameSource::Epic)
+        .collect();
+    assert_eq!(
+        epic.len(),
+        1,
+        "the last journal line says the install is complete"
+    );
+    let quest = epic[0];
+    assert_eq!(quest.id, "game-epic-fixturequest-1");
+    assert_eq!(quest.title, "Fixture Quest Deluxe");
+    assert!(quest.installed);
+    assert_eq!(quest.size_bytes, Some(5_000_000));
+    assert_eq!(
+        quest.playtime_minutes, 121,
+        "Epic's own seconds, in minutes"
+    );
+    assert!(
+        quest
+            .last_played_at
+            .as_deref()
+            .unwrap()
+            .starts_with("2026-11-22T05:57:51")
+    );
+    assert!(
+        quest
+            .install_path
+            .as_deref()
+            .unwrap()
+            .ends_with("Fixture Quest")
+    );
+
+    // The portrait picture on disk is the cover, served through the usual media route.
+    let cover = quest.cover_url.clone().expect("a local cover");
+    assert!(cover.starts_with("media/game-cover/game-epic-fixturequest-1?v="));
+    let served = backend
+        .client
+        .request(Method::GET, &format!("{API_PREFIX}/{cover}"), None, &[])
+        .await
+        .unwrap();
+    assert_eq!(served.status, StatusCode::OK);
+    assert_eq!(served.body.as_ref(), PNG);
+
+    // Launched through the launcher with all three parts of the address.
+    let plan = backend
+        .state
+        .games()
+        .plan(&target("game-epic-fixturequest-1"))
+        .unwrap();
+    match &plan.steps[0].action {
+        StepAction::ShellExec { file, .. } => assert_eq!(
+            file,
+            &format!(
+                "com.epicgames.launcher://apps/fixturens%3A{V2_ITEM}%3AFixtureQuest_1?action=launch&silent=true"
+            )
+        ),
+        _ => panic!("an Epic game is started through its address"),
+    }
+
+    // `hidden` in games.toml works with the same key as for the old launcher.
+    let (status, body) = backend
+        .send(
+            "PATCH",
+            "/games/game-epic-fixturequest-1",
+            Some(json!({ "hidden": true })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(games_toml(&backend).contains("epic:FixtureQuest_1"));
+    let after = refreshed(&backend).await;
+    let hidden = after
+        .games
+        .iter()
+        .find(|g| g.id == "game-epic-fixturequest-1")
+        .expect("still in the library");
+    assert!(hidden.hidden, "the correction is applied to the new format");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_game_in_both_epic_formats_is_one_game_and_the_new_format_wins() {
+    let backend = builder().start().await;
+    let temp = temp_of(&backend);
+    // The old launcher's manifest (`EpicArena_1`) and the new launcher's journal sit in the
+    // folder that the settings name; the journal lists the same app name and one more game.
+    make_epic(&temp);
+    make_epic_v2(&temp, "EpicArena_1", "Epic Arena Renewed");
+
+    let library = refreshed(&backend).await;
+    assert_eq!(state_of(&library, GameSource::Epic).0, SourceState::Ok);
+    let epic: Vec<&Game> = library
+        .games
+        .iter()
+        .filter(|g| g.source == GameSource::Epic)
+        .collect();
+    assert_eq!(epic.len(), 1, "one game, not two");
+    assert_eq!(epic[0].id, "game-epic-epicarena-1");
+    assert_eq!(epic[0].title, "Epic Arena Renewed");
+    assert!(
+        epic[0]
+            .install_path
+            .as_deref()
+            .unwrap()
+            .ends_with("Fixture Quest")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_journal_that_is_garbage_fails_epic_and_names_the_file() {
+    let backend = builder().start().await;
+    let temp = temp_of(&backend);
+    write(
+        &temp.join("Epic").join("installations.jsonl"),
+        "garbage
+more
+",
+    );
+    let library = refreshed(&backend).await;
+    assert_eq!(
+        state_of(&library, GameSource::Epic),
+        (
+            SourceState::Failed,
+            Some("Could not read installations.jsonl".to_owned())
+        )
+    );
+    let health: Value = backend.get("/health").await;
+    assert!(
+        health["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["name"] == "epic" && s["state"] == "failed")
+    );
+}
+
 // ---- covers as media ----
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -370,7 +370,13 @@ impl Service {
         };
         let epic_scan = {
             let resolved = Arc::clone(&resolved);
-            blocking::run(move || epic::scan(resolved.epic_enabled, resolved.epic_path.as_deref()))
+            blocking::run(move || {
+                epic::scan(
+                    resolved.epic_enabled,
+                    resolved.epic_path.as_deref(),
+                    resolved.epic_extra_path.as_deref(),
+                )
+            })
         };
         let (steam_result, epic_result) = tokio::join!(steam_scan, epic_scan);
         let (steam_result, epic_result) = (steam_result?, epic_result?);
@@ -660,7 +666,10 @@ fn lock_std<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 pub fn game_of(entry: &Found, live: &Live) -> Game {
     let play = live.plays.get(&play_key(entry));
     let rain_last = play.and_then(|play| play.last_played_at.clone());
-    let steam_last = entry
+    let rain_minutes = play.map_or(0, |play| {
+        (play.play_seconds / 60).min(u64::from(u32::MAX)) as u32
+    });
+    let launcher_last = entry
         .last_played_unix
         .filter(|seconds| *seconds > 0)
         .map(|seconds| {
@@ -680,14 +689,15 @@ pub fn game_of(entry: &Found, live: &Live) -> Game {
         installed: local.is_none_or(|local| local.installed),
         running: live.running.contains(&entry.id),
         size_bytes: entry.size_bytes,
-        // Steam keeps its own play time; for the others it is Rain's record of its own launches.
+        // Steam keeps its own play time. The new Epic launcher keeps one too: it is the starting
+        // point, and Rain's own record (it counts nothing for a game that the launcher starts)
+        // can only raise it. Everything else is Rain's record of its own launches.
         playtime_minutes: match entry.source {
             GameSource::Steam => entry.playtime_minutes,
-            _ => play.map_or(0, |play| {
-                (play.play_seconds / 60).min(u64::from(u32::MAX)) as u32
-            }),
+            GameSource::Epic => entry.playtime_minutes.max(rain_minutes),
+            GameSource::Custom => rain_minutes,
         },
-        last_played_at: [steam_last, rain_last].into_iter().flatten().max(),
+        last_played_at: [launcher_last, rain_last].into_iter().flatten().max(),
         pinned: live.pinned.contains(&entry.id),
         hidden: entry.hidden,
         exe_path: local

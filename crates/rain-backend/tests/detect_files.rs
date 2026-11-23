@@ -2,7 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
-use rain_backend::modules::settings::{epic_folder, parse_daily_notes_json, parse_obsidian_json};
+use rain_backend::modules::settings::{
+    epic_folder, epic_v2_folder, parse_daily_notes_json, parse_obsidian_json,
+};
 
 fn fixture(name: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -61,4 +63,49 @@ fn the_epic_folder_is_the_launcher_data_folder_only_when_it_holds_the_manifests(
 
     std::fs::create_dir_all(launcher.join("Data").join("Manifests")).unwrap();
     assert_eq!(epic_folder(temp.path()), Some(launcher));
+}
+
+#[test]
+fn the_new_epic_launcher_is_found_by_its_journal_in_the_registered_or_the_default_folder() {
+    let temp = tempfile::tempdir().unwrap();
+    let local = temp.path().join("Local");
+    let default = local.join("com.epicgames.eglv2");
+    assert_eq!(
+        epic_v2_folder(None, Some(&local)),
+        None,
+        "nothing installed"
+    );
+
+    // A folder without the journal is a leftover, not an installation.
+    std::fs::create_dir_all(&default).unwrap();
+    assert_eq!(epic_v2_folder(None, Some(&local)), None);
+
+    std::fs::write(
+        default.join("installations.jsonl"),
+        "{}
+",
+    )
+    .unwrap();
+    assert_eq!(epic_v2_folder(None, Some(&local)), Some(default.clone()));
+    assert_eq!(
+        epic_v2_folder(Some("  "), Some(&local)),
+        Some(default.clone())
+    );
+
+    // The registered folder comes first; one without the journal falls back to the default.
+    let registered = temp.path().join("Moved");
+    std::fs::create_dir_all(&registered).unwrap();
+    let text = registered.to_string_lossy().into_owned();
+    assert_eq!(
+        epic_v2_folder(Some(&text), Some(&local)),
+        Some(default.clone())
+    );
+    std::fs::write(
+        registered.join("installations.jsonl"),
+        "{}
+",
+    )
+    .unwrap();
+    assert_eq!(epic_v2_folder(Some(&text), Some(&local)), Some(registered));
+    assert_eq!(epic_v2_folder(Some("relative/path"), None), None);
 }

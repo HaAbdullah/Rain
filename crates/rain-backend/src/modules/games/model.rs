@@ -9,10 +9,22 @@ use rain_types::{GameSource, SourceState};
 pub enum Launch {
     /// `steam://rungameid/<appid>`.
     Steam { appid: String },
-    /// `com.epicgames.launcher://apps/<AppName>?action=launch&silent=true`.
-    Epic { app_name: String },
+    /// An Epic game. The old launcher's manifests give only the app name; the new launcher's
+    /// journal also gives the catalog ids, and its address needs all three (see `epic::launch_url`).
+    Epic {
+        app_name: String,
+        /// `None` for a game of the old launcher's manifests.
+        catalog: Option<EpicCatalog>,
+    },
     /// A direct start of a program file (folder games and hand-added games).
     Local,
+}
+
+/// The two ids besides the app name that the new Epic launcher puts into a launch address.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EpicCatalog {
+    pub namespace: String,
+    pub item_id: String,
 }
 
 /// One game as a source found it, before the user's corrections and the live facts (running,
@@ -28,11 +40,13 @@ pub struct Found {
     pub launch: Launch,
     /// The folder of the game, when there is one.
     pub install: Option<PathBuf>,
-    /// A size the source knows by itself (Steam's `SizeOnDisk`, Epic's `InstallSize`).
+    /// A size the source knows by itself (Steam's `SizeOnDisk`, Epic's `InstallSize` or the new
+    /// launcher's disk-size cache).
     pub size_bytes: Option<u64>,
     /// A local image file that can serve as the cover.
     pub cover: Option<PathBuf>,
-    /// Steam's own play time and last played, in whole minutes and Unix seconds.
+    /// The launcher's own play time and last played (Steam's, or the new Epic launcher's), in
+    /// whole minutes and Unix seconds.
     pub playtime_minutes: u32,
     pub last_played_unix: Option<i64>,
     /// Hidden by the user (a correction in `games.toml`).

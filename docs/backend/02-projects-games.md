@@ -487,7 +487,8 @@ Read through `settings::Service::resolved()` (section 06 6.1.7; the `Resolved` v
 | Field | Meaning | Empty (`None`) means |
 |---|---|---|
 | `steamPath` | the Steam install folder (the one with `steamapps` and `config`); detected by section 06 only (06 6.1.3), this section runs no detection | source `off` (6.9) |
-| `epicPath` | the `EpicGamesLauncher` folder (06 6.1.4, the one that holds `Data\Manifests`). The manifests are searched at `<path>`, `<path>\Manifests` and `<path>\Data\Manifests`, the first that exists; detected by section 06 only | source `off` (6.10) |
+| `epicPath` | the folder of an Epic launcher (06 6.1.4): the new launcher's data folder (the one that holds `installations.jsonl`, 6.10.1) or the old launcher's `EpicGamesLauncher` folder (the one that holds `Data\Manifests`). A typed path may be either; Rain tells them apart by what is inside. The old manifests are searched at `<path>`, `<path>\Manifests` and `<path>\Data\Manifests`, the first that exists; detected by section 06 only | source `off` (6.10) |
+| `epic_extra_path` (`Resolved` only, no setting) | the other launcher's folder when the PC has both and no `epicPath` is typed | nothing extra is read |
 
 A change of any of the six fields makes both modules drop their caches and publish their topic (they subscribe through `settings::Service::watch`).
 
@@ -850,7 +851,7 @@ Account names are never logged or stored. The file is read whole (limit 4 MiB), 
 
 ### 6.10 Epic Games
 
-Nothing was verified on this PC: Epic is not installed here. Everything in this subsection is UNVERIFIED and defensive. The facts come from general knowledge of the launcher's manifest files.
+There are two launchers, and a PC can have either or both. This subsection is the OLD launcher (`*.item` manifests); 6.10.1 is the NEW one. The old launcher was never seen on the owner's PC: everything about it here is UNVERIFIED and defensive, and its facts come from general knowledge of the manifest files. The new launcher was read on the owner's PC (6.10.1). One game found in both formats is one game (same `AppName`), and the new format wins.
 
 **Find.**
 
@@ -859,6 +860,7 @@ Nothing was verified on this PC: Epic is not installed here. Everything in this 
 | `epicEnabled = false` | `off`, "Turned off in Settings" |
 | `Resolved.epic_path` is `Some` (the `EpicGamesLauncher` folder, override or detected by section 06 6.1.4): the manifests are searched at `<path>`, `<path>\Manifests` and `<path>\Data\Manifests`, the first that exists | none of them exists: `failed`, `Epic folder not found: <path>` |
 | `Resolved.epic_path` is `None` (an empty value means the source is off; section 06 is the only detector) | `off`, "Epic Games is not installed" |
+| a folder (`epic_path`, and `epic_extra_path` when set) holds `installations.jsonl` | it is read as the new format (6.10.1), besides any manifests it also has; it needs no manifests |
 
 **Read.** Every `*.item` file in the folder (not recursive), at most 1 MiB each, read as bytes, a UTF-8 BOM removed, parsed with `serde_json::Value` (not a typed struct: every field is optional). Fields used: `DisplayName`, `AppName`, `InstallLocation`, `InstallSize`, `LaunchExecutable`, `bIsIncompleteInstall`, `MainGameAppName`, `AppCategories`. A game is listed when all of these hold:
 
@@ -873,6 +875,34 @@ The game is `{ key: epic:<AppName>, title: DisplayName, installPath: InstallLoca
 `lastPlayedAt` and the play time exist only from Rain's own record of launches made through Rain (the Epic manifests have none). Epic games the user starts outside Rain show no last-played time.
 
 **Running.** A process whose image lies inside `InstallLocation`. **Launch**: 6.14.
+
+#### 6.10.1 The new Epic Games Launcher ("eglv2")
+
+Read on the owner's PC (read-only), 2026-11-22. That PC has no `.item` manifests and no `C:\ProgramData\Epic`; the new launcher keeps everything per user. Nothing personal is in the repository: fixtures use invented games and ids.
+
+**Find.** Section 06 6.1.4 detects the data folder: the registry value `HKCU\Software\Epic Games\EpicGamesLauncher` `AppDataPath` (a `%NAME%` in it is expanded), else `%LOCALAPPDATA%\com.epicgames.eglv2` (from Windows at run time). A folder counts only when it holds `installations.jsonl`. When a PC has both launchers, `epicPath` shows the new data folder (the one in use) and `Resolved.epic_extra_path` carries the old folder, so both are read; a typed `epicPath` is read alone. Settings shows the path that is in use.
+
+**Read `installations.jsonl`.** A journal: one JSON object per line, the first line a header (`version`, `writtenAt`, `entries`; skipped). The same installation appears several times (lines are appended while a game installs or updates): the LAST record of an `installationId` is its current state. At most 4 MiB are read (a larger file makes the source `failed`: "installations.jsonl is too large to read") and at most 20 000 lines. Each line is parsed as a plain JSON value; keys that are not listed are ignored; a line that is not a JSON object or has no `installationId` is skipped, counted and logged once (a count, no content). A game is listed when its last record has `complete = true`, `platform` is "Windows" or absent, `namespace`, `itemId` and `artifactId` match `^[A-Za-z0-9_.-]{1,128}$` (they go into a launch address and into `games.toml`), and `dir` is a folder that exists. A record whose folder is gone is "not installed", as a stale manifest is. `installations.jsonl.prev` is not used.
+
+**The game.** `key = epic:<artifactId>` and `id = game-epic-<slug(artifactId)>` (the same as the old format, so a correction in `games.toml` such as `hidden` works for both), `installPath = dir`.
+
+| What | Where (all below the data folder, all optional) | Without it |
+|---|---|---|
+| title | `cache\prod\account\<account>\library-cache.json`: the first account folder (by name, at most 16) whose `items[]` has the same `namespace` + `itemId` + `artifactId` (`appId.namespaceId`, `appId.itemId`, `appId.appName`, else `relationshipId`) gives `title` | `artifactId` |
+| cover | `cache\prod\catalog-cache.json`: `items[<itemId>].item.keyImages[]`; a key image counts only when `images\<md5>.jpg` (also `.jpeg`, `.png`, `.webp`; `md5` is 32 or 40 hex characters, checked before it is part of a path) exists and is at most 8 MiB. Portrait images (taller than wide) come before landscape ones, then the larger. It is served through the usual `game-cover` media route. Nothing is downloaded | the letter tile |
+| size | `cache\disk-size-cache.json`: `entries[].bytes` of the same three ids (written as a float) | none; Rain does not measure Epic folders (as for the old format) |
+| play time | `cache\prod\account\<account>\playtime-cache.json`: `items[].totalTime` seconds of `artifactId`, in whole minutes; with several accounts the largest | Rain's own record (nothing counts for a game that the launcher starts) |
+| last played | `last-played.json`: `{<account>: {"<namespace>:<itemId>:<artifactId>": <RFC 3339 time>}}`, the latest of any account | Rain's own record |
+
+Play time and last played are Epic's own numbers, the way Steam's own numbers are used for Steam games (6.9): `playtimeMinutes` of an Epic game is the larger of Epic's number and Rain's record, and `lastPlayedAt` is the later of Epic's time and Rain's record. Every cache file has the size limit of 8 MiB; a file that is missing, too large or does not parse only means "no title/cover/size/time", never a failed source.
+
+**Launch.** Through the launcher, never the game's own program (the launcher handles sign-in and anti-cheat): `ShellExecuteW(open, "com.epicgames.launcher://apps/<namespace>%3A<itemId>%3A<artifactId>?action=launch&silent=true")`. The old format keeps `apps/<AppName>`. One function (`epic::launch_url`) builds both.
+
+**Health.** `ok` with games from either format; `off` ("Epic Games is not installed") when neither launcher exists; `failed` when no folder could be read: a journal that is not readable, is too large, or has lines and not one of them JSON gives "Could not read installations.jsonl" (the file is named, the path is not). When one of two folders works and the other does not, the games show and the source is `ok` with the sentence of the one that failed.
+
+**Watching.** Not watched: the module never watched the old manifests either. The library is scanned when a request needs a fresh one (cached for 2 seconds), at `POST /games/refresh`, and after a change of the settings.
+
+**Not done.** The `.prev` copy of the journal is not read when the main file cannot be read. Add-ons or DLC are not told from games in the journal (it has no category); an add-on that has its own installation record would be listed.
 
 ### 6.11 Game folders: discovery and the program-file guess
 
@@ -1005,7 +1035,7 @@ Implemented as `LaunchPlanner::plan` for target type `game` (section 01 6.9); `p
 | Source | Start | Error cases |
 |---|---|---|
 | Steam | `ShellExecuteW(open, "steam://rungameid/<appid>")`; the appid is digits only (checked) | Steam `off` ("Steam is not installed"); `ShellExecuteW` result <= 32: 31 (no handler) "Steam is not installed", other values "Could not hand the game to Steam" |
-| Epic | `ShellExecuteW(open, "com.epicgames.launcher://apps/<AppName>?action=launch&silent=true")`; `AppName` matched the charset of 6.10 | Epic `off` ("Epic Games is not installed"); result 31 "Epic Games Launcher is not installed" |
+| Epic | `ShellExecuteW(open, "com.epicgames.launcher://apps/<AppName>?action=launch&silent=true")`; `AppName` matched the charset of 6.10; for a game of the new launcher `<AppName>` is `<namespace>%3A<itemId>%3A<AppName>` (6.10.1) | Epic `off` ("Epic Games is not installed"); result 31 "Epic Games Launcher is not installed" |
 | Local | step action `StepAction::Spawn { exe, args_raw, cwd }` (a direct start of the program file through `platform::process::spawn_detached(exe, raw args, working folder = the program's own folder)`; the planned step carries `on_spawned(pid, creation_time)`, which inserts the session row and starts the process wait for the play time, 6.13): flags `DETACHED_PROCESS \| CREATE_NEW_PROCESS_GROUP \| CREATE_BREAKAWAY_FROM_JOB`, retry without breakaway on os error 5, null stdio, fire and forget. Command line: `"<exe>" <args>` | no program file: "No program file. Choose one with Edit"; file missing: `Program file not found: <path>`; os error 740 (needs administrator rights): the planned step carries `shell_fallback { file: exe, params: args, dir: folder }` (section 01 6.9) and the engine then starts it through `ShellExecuteW(open, exe, args, folder)` instead (a UAC prompt appears; not watched); any other error: `Could not start the program` |
 
 Success means "handed over or started". In `finished(run)` (awaited by the engine, so the write is done before the final frame) the module then writes `games_play` (launch time and count; for a local game the `games_session` row and the watcher were already made by `on_spawned`), and publishes `games` before the final run frame (the UI refetches after it, `useLaunch.ts:89`).

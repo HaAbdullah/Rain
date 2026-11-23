@@ -7,7 +7,7 @@
 //! | Source | The step |
 //! |---|---|
 //! | Steam | the address `steam://rungameid/<appid>`, handed to Windows (Steam starts the game) |
-//! | Epic | the address `com.epicgames.launcher://apps/<AppName>?action=launch&silent=true` |
+//! | Epic | the address `com.epicgames.launcher://apps/<AppName>?action=launch&silent=true`; for a game of the new launcher `<AppName>` is `<namespace>%3A<itemId>%3A<AppName>` |
 //! | Local | a direct start of the program file in its own folder, detached from Rain |
 //!
 //! `launch_after_game_mode` does the same without a run, for game mode, which calls it just
@@ -56,8 +56,8 @@ pub(super) fn start_of(found: &Found) -> Start {
             params: None,
             dir: None,
         }),
-        Launch::Epic { app_name } => Start::Open(OpenRequest::ShellExec {
-            file: format!("com.epicgames.launcher://apps/{app_name}?action=launch&silent=true"),
+        Launch::Epic { app_name, catalog } => Start::Open(OpenRequest::ShellExec {
+            file: super::epic::launch_url(app_name, catalog.as_ref()),
             params: None,
             dir: None,
         }),

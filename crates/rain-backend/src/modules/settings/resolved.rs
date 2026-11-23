@@ -40,6 +40,9 @@ pub struct Resolved {
     pub steam_path: Option<PathBuf>,
     pub epic_enabled: bool,
     pub epic_path: Option<PathBuf>,
+    /// The folder of the other Epic launcher when the PC has both and the user typed no path.
+    /// A typed `epic_path` means "read exactly this", so it leaves this empty.
+    pub epic_extra_path: Option<PathBuf>,
     pub countdown_seconds: u32,
     pub monitor_claude: bool,
 }
@@ -62,6 +65,10 @@ impl Resolved {
             steam_path: path_with_fallback(&file.steam_path, detected.steam.as_ref()),
             epic_enabled: file.epic_enabled.unwrap_or(true),
             epic_path: path_with_fallback(&file.epic_path, detected.epic.as_ref()),
+            epic_extra_path: detected
+                .epic_extra
+                .clone()
+                .filter(|_| file.epic_path.trim().is_empty()),
             countdown_seconds: file
                 .game_mode_countdown_seconds
                 .unwrap_or(DEFAULT_COUNTDOWN) as u32,
@@ -187,11 +194,32 @@ mod tests {
             vaults: vec![vault(r"C:\Detected")],
             steam: Some(PathBuf::from(r"C:\Steam")),
             epic: Some(PathBuf::from(r"C:\Epic")),
+            epic_extra: None,
             notes: NoteSettings {
                 format: Some("DD-MM-YYYY".into()),
                 folder: Some("Daily".into()),
             },
         }
+    }
+
+    #[test]
+    fn the_other_epic_launcher_is_read_too_unless_the_user_typed_a_path() {
+        let mut detected = detected_with_one_vault();
+        detected.epic_extra = Some(PathBuf::from(r"C:\OldEpic"));
+        let auto = Resolved::build(&SettingsFile::default(), &detected);
+        assert_eq!(auto.epic_path, Some(PathBuf::from(r"C:\Epic")));
+        assert_eq!(auto.epic_extra_path, Some(PathBuf::from(r"C:\OldEpic")));
+
+        let file = SettingsFile {
+            epic_path: r"E:\Epic".into(),
+            ..SettingsFile::default()
+        };
+        let typed = Resolved::build(&file, &detected);
+        assert_eq!(typed.epic_path, Some(PathBuf::from(r"E:\Epic")));
+        assert_eq!(
+            typed.epic_extra_path, None,
+            "a typed path means exactly this folder"
+        );
     }
 
     #[test]
