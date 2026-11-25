@@ -170,6 +170,9 @@ pub struct LaunchStep {
     pub status: Status,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    // A step that started but whose window was not put in its zone says why here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// The status of a whole run: a subset of `Status`.
@@ -255,6 +258,7 @@ mod tests {
                 icon: icon(),
                 status: Status::Running,
                 error: None,
+                note: None,
             }],
         };
         round_trip(&run);

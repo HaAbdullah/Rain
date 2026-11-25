@@ -6,7 +6,7 @@ import type {
   ApiError, AppEntry, CalendarEvent, ClaudeSession, CustomGameDraft, DiskNode, DiskScan, Drive, FocusResult, Game,
   GameLibrary, GameModeChoice, GameModeState, Habit, HabitDay, HabitDraft, HabitStats, HabitSummary, Health, ID, IdleJob, ISODate, JobRun,
   LaunchRun, LaunchTarget, LogLine, MachineState, OpenNoteResult, PathCheck, PermissionAnswer, PermissionAnswerResult, PinnableType, Pool, PoolDraft,
-  GamePatch, Project, PropertySuggestion, ScheduledJob, SearchItem, SearchType, Settings, SettingsPatch, VaultStatus,
+  GamePatch, LayoutSave, Project, ProjectLayout, PropertySuggestion, ScheduledJob, SearchItem, SearchType, Settings, SettingsPatch, VaultStatus,
 } from './types'
 
 /** What every rejected call carries: the backend's error body (or one the bridge made in its shape). */
@@ -49,6 +49,8 @@ export interface RainApi {
 
   // projects and games
   listProjects(): Promise<Project[]>                                           // GET  /projects
+  getProjectLayout(id: ID): Promise<ProjectLayout>                             // GET  /projects/:id/layout
+  saveProjectLayout(id: ID, save: LayoutSave): Promise<ProjectLayout>          // PUT  /projects/:id/layout
   listGames(): Promise<GameLibrary>                                            // GET  /games
   saveCustomGame(draft: CustomGameDraft): Promise<Game>                        // POST /games
   setGameHidden(id: ID, hidden: boolean): Promise<void>                        // PATCH /games/:id

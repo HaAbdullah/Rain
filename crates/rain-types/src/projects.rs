@@ -17,6 +17,8 @@ pub enum EnvKind {
     Browser,
     Claude,
     App,
+    // The project folder in Explorer.
+    Folder,
 }
 
 /// One step of the environment of a project, as the detail pane lists it.

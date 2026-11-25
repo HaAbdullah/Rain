@@ -318,6 +318,7 @@ export const keymap: KeyBinding[] = [
     },
   },
   actionChord('log', 'Ctrl+KeyL', 'Log or transcript'),
+  actionChord('layout', 'Ctrl+KeyE', 'Edit the layout of a project'),
   actionChord('allow', 'Ctrl+KeyY', 'Allow once (waiting session)'),
   actionChord('deny', 'Ctrl+KeyD', 'Deny (waiting session)'),
 

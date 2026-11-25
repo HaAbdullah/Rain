@@ -13,7 +13,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::panic::AssertUnwindSafe;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -47,9 +47,11 @@ use super::store::{self, AppIdsFile, PinsFile, PoolRow, PoolsFile, id_map};
 use crate::core::blocking;
 use crate::core::error::{ApiError, ApiResult, shutting_down_error};
 use crate::core::launch_contract::{ItemSource, LaunchPlanner};
+use crate::core::placement::{Desktop, Placer};
 use crate::core::state::{AppState, WeakAppState};
 use crate::core::throttle::Throttle;
 use crate::platform::process::{ProcessLister, SystemProcessLister};
+use crate::platform::windows_place::SystemDesktop;
 use crate::store::hub::DirWatch;
 use crate::store::toml_file::TomlFile;
 
@@ -141,6 +143,16 @@ struct Built {
 
 // ---- the service ----
 
+/// An app of the list as a layout of a project needs it (section 02 6.17).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppFacts {
+    pub name: String,
+    pub icon: IconRef,
+    pub kind: AppKind,
+    /// The image name of a classic program (lower case, like `notepad.exe`).
+    pub image: Option<String>,
+}
+
 pub struct Service {
     state: WeakAppState,
     pins: TomlFile<PinsFile>,
@@ -151,6 +163,8 @@ pub struct Service {
     processes: Arc<dyn ProcessLister>,
     icons: Icons,
     probe: Arc<dyn PathProbe>,
+    /// Puts the windows of a layout in their zones (section 02 6.17).
+    placer: Arc<Placer>,
     list: Mutex<ListState>,
     flight: Mutex<Option<ScanFlight>>,
     /// The newest use of every app and pool, from `launcher_launch`.
@@ -205,6 +219,14 @@ impl Service {
             probe: state
                 .seam::<dyn PathProbe>()
                 .unwrap_or_else(|| Arc::new(DiskProbe)),
+            // A test replaces the whole placer, to choose its waiting times.
+            placer: state.seam::<Placer>().unwrap_or_else(|| {
+                Arc::new(Placer::new(
+                    state
+                        .seam::<dyn Desktop>()
+                        .unwrap_or_else(|| Arc::new(SystemDesktop)),
+                ))
+            }),
             list: Mutex::new(ListState {
                 rows,
                 filled,
@@ -305,6 +327,30 @@ impl Service {
 
     fn find_app(&self, id: &str) -> Option<AppRecord> {
         self.current_apps().iter().find(|app| app.id == id).cloned()
+    }
+
+    /// How many monitors the PC has now (for the layout editor of a project).
+    pub async fn monitor_count(&self) -> u32 {
+        self.placer.monitor_count().await
+    }
+
+    /// What the projects module needs to show an app of a layout and to find its window. `None`
+    /// for an id that is not in the list.
+    pub fn app_facts(&self, id: &str) -> Option<AppFacts> {
+        let app = self.find_app(id)?;
+        let image = (app.kind == AppKind::Program)
+            .then(|| {
+                Path::new(&app.exe_path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().to_lowercase())
+            })
+            .flatten();
+        Some(AppFacts {
+            icon: app.icon(),
+            name: app.name,
+            kind: app.kind,
+            image,
+        })
     }
 
     /// Reads the installed apps now. A scan that is running is shared: every caller gets its
@@ -1042,10 +1088,28 @@ impl Service {
         let cancel = state.shutdown.token().clone();
         let mut used_apps: Vec<String> = Vec::new();
         let count = steps.len();
+        // Only a run with a layout looks at windows: the others never ask Windows for any.
+        let mut placing = if steps.iter().any(|step| step.placement.is_some()) {
+            Some(self.placer.begin().await)
+        } else {
+            None
+        };
         for (index, step) in steps.iter().enumerate() {
+            // The windows before the step starts: the window of the step is a new one.
+            let before = match (&placing, &step.placement) {
+                (Some(run), Some(_)) => Some(run.snapshot().await),
+                _ => None,
+            };
             let outcome = tokio::select! {
                 () = cancel.cancelled() => return, // stopping publishes nothing
                 outcome = run_step(&env, step) => outcome,
+            };
+            let note = match (&mut placing, &step.placement, &before, &outcome) {
+                (Some(run), Some(placement), Some(before), Ok(started)) => tokio::select! {
+                    () = cancel.cancelled() => return,
+                    note = run.place(before, placement, started.pid) => note,
+                },
+                _ => None,
             };
             let succeeded = outcome.is_ok();
             if succeeded && let Source::App { app, .. } = &step.source {
@@ -1056,6 +1120,7 @@ impl Service {
             let more = index + 1 < count && !stop;
             let snapshot = lock(&self.runs).update(&run.id, |run| {
                 let step = &mut run.steps[index];
+                step.note = note;
                 match outcome {
                     Ok(_) => step.status = Status::Success,
                     Err(text) => {

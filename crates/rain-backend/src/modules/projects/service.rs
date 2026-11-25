@@ -19,8 +19,9 @@ use std::time::{Duration, Instant};
 
 use futures_util::future::{BoxFuture, join_all};
 use rain_types::{
-    EnvKind, EnvStep, IconKind, IconRef, LaunchRun, LaunchTarget, LaunchType, PinnableType,
-    Project, Projects, SearchItem, SearchType, SourceState, Status,
+    EnvKind, EnvStep, IconKind, IconRef, LAYOUT_ITEMS_MAX, LAYOUT_MONITOR_MAX, LaunchRun,
+    LaunchTarget, LaunchType, LayoutSave, LayoutStepOption, LayoutWhat, PinnableType, Project,
+    ProjectLayout, Projects, SearchItem, SearchType, SourceState, Status,
 };
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -33,6 +34,7 @@ use super::facts::{self, Moment, Needed, Target};
 use super::git::{self, GitRunner, SystemGit};
 use super::ids::{path_key, project_id};
 use super::launch::{self, PlanInput, WtOptions};
+use super::layout_file::{self, Scope};
 use super::open::{self, EditorWindow};
 use super::store::{self, Found, GitRow, Snapshot};
 use super::tools::{self, Lookup as ToolFound, SystemToolEnv, Tool, ToolEnv};
@@ -42,6 +44,7 @@ use crate::core::launch_contract::{ItemSource, LaunchPlan, LaunchPlanner};
 use crate::core::state::{AppState, WeakAppState};
 use crate::core::task::spawn_named;
 use crate::core::throttle::Throttle;
+use crate::modules::launcher::AppFacts;
 use crate::platform::process::{ProcessLister, SystemProcessLister};
 use crate::platform::windows::{SystemWindowLister, WindowLister};
 use crate::store::toml_file::TomlFile;
@@ -523,8 +526,11 @@ impl Service {
         let snapshot = &gathered.snapshot;
         let mut list = Vec::with_capacity(snapshot.found.len() + snapshot.missing.len());
 
+        let apps = self.app_lookup();
         let environment = |key: &str, id: &str| {
-            let (specs, _) = gathered.analysis.resolve(key, id, &gathered.builtins);
+            let (specs, _) = gathered
+                .analysis
+                .resolve(key, id, &gathered.builtins, &apps);
             env_steps(&specs)
         };
         let display = |key: &str, id: &str, folder: &str| {
@@ -594,6 +600,164 @@ impl Service {
             .upgrade()
             .map(|app| app.launcher().pinned_ids(PinnableType::Project))
             .unwrap_or_default()
+    }
+
+    /// Looks up an app of the launcher's list. An id without an app (or a launcher that is not
+    /// there yet) answers `None`.
+    fn app_lookup(&self) -> impl Fn(&str) -> Option<AppFacts> + use<> {
+        let state = self.state.clone();
+        move |id: &str| state.upgrade().and_then(|app| app.launcher().app_facts(id))
+    }
+
+    // ---- layouts ----
+
+    /// The project of an id from the last list: its folder and its key.
+    fn project_for_layout(&self, id: &str) -> ApiResult<Project> {
+        self.list_cached()
+            .iter()
+            .find(|project| project.id == id)
+            .cloned()
+            .ok_or_else(|| {
+                ApiError::not_found("Project not found")
+                    .with_source(SOURCE)
+                    .with_reason("unknownId")
+            })
+    }
+
+    /// The steps that an item of a layout can name: the built-in ones, then those of the file.
+    fn step_options(analysis: &Analysis, builtins: &Builtins) -> Vec<LayoutStepOption> {
+        let mut names: Vec<String> = ["editor", "terminal", "claude"]
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect();
+        let mut named: Vec<&String> = analysis
+            .steps
+            .keys()
+            .filter(|name| !names.contains(name))
+            .collect();
+        named.sort();
+        names.extend(named.into_iter().cloned());
+        names
+            .iter()
+            .filter_map(|name| {
+                analysis
+                    .steps
+                    .get(name)
+                    .cloned()
+                    .or_else(|| env::builtin_step(name, builtins))
+            })
+            .map(|spec| LayoutStepOption {
+                name: spec.name,
+                kind: spec.kind,
+                label: spec.label,
+                icon: spec.icon,
+            })
+            .collect()
+    }
+
+    /// `GET /projects/{id}/layout`.
+    pub async fn layout(&self, id: &str) -> ApiResult<ProjectLayout> {
+        let project = self.project_for_layout(id)?;
+        let file = self.file.get();
+        let editor = tools::find(Tool::Editor, &file.overrides(), self.tools.as_ref());
+        let builtins = Builtins {
+            editor_label: editor_label(&editor),
+        };
+        let analysis = env::analyze(&file, &builtins);
+        let (scope, items) = analysis.layout_of(&path_key(&project.path), &project.id);
+        let monitors = match self.state() {
+            Ok(state) => state.launcher().monitor_count().await,
+            Err(_) => 0,
+        };
+        Ok(ProjectLayout {
+            items: items.to_vec(),
+            scope,
+            steps: Self::step_options(&analysis, &builtins),
+            monitors,
+        })
+    }
+
+    /// `PUT /projects/{id}/layout`: writes the layout into `projects.toml` and answers the layout
+    /// that counts for the project afterwards.
+    pub async fn save_layout(&self, id: &str, save: LayoutSave) -> ApiResult<ProjectLayout> {
+        let project = self.project_for_layout(id)?;
+        let invalid = |reason: &'static str, message: String| {
+            ApiError::invalid(message)
+                .with_source(SOURCE)
+                .with_reason(reason)
+        };
+        if save.items.len() > LAYOUT_ITEMS_MAX {
+            return Err(invalid(
+                "tooManyItems",
+                format!("A layout holds at most {LAYOUT_ITEMS_MAX} items"),
+            ));
+        }
+        let file = self.file.get();
+        let editor = tools::find(Tool::Editor, &file.overrides(), self.tools.as_ref());
+        let builtins = Builtins {
+            editor_label: editor_label(&editor),
+        };
+        let analysis = env::analyze(&file, &builtins);
+        let apps = self.app_lookup();
+        for item in &save.items {
+            if item
+                .monitor
+                .is_some_and(|number| number == 0 || number > LAYOUT_MONITOR_MAX)
+            {
+                return Err(invalid(
+                    "badMonitor",
+                    format!("A monitor number is 1 to {LAYOUT_MONITOR_MAX}"),
+                ));
+            }
+            match &item.what {
+                LayoutWhat::Step { name }
+                    if !analysis.steps.contains_key(name)
+                        && env::builtin_step(name, &builtins).is_none() =>
+                {
+                    return Err(invalid("unknownStep", format!("No step is named {name}")));
+                }
+                LayoutWhat::App { id } if apps(id).is_none() => {
+                    return Err(invalid(
+                        "unknownApp",
+                        "An app of the layout was not found".to_owned(),
+                    ));
+                }
+                _ => {}
+            }
+        }
+        // A file that would refuse the write says so before anything else happens.
+        self.file
+            .writable()
+            .map_err(|error| error.with_source(SOURCE))?;
+        let key = path_key(&project.path);
+        let (all, items) = (save.all, save.items);
+        let path = project.path.clone();
+        let project_id = project.id.clone();
+        self.file
+            .edit(move |document| {
+                let scope = if all {
+                    Scope::Defaults
+                } else {
+                    Scope::Project {
+                        key: &key,
+                        id: &project_id,
+                        path: &path,
+                    }
+                };
+                layout_file::set_layout(document, &scope, &items)
+            })
+            .await
+            .map_err(|error| {
+                if error.status == axum::http::StatusCode::INTERNAL_SERVER_ERROR {
+                    ApiError::failed("Could not save projects.toml")
+                        .with_source(SOURCE)
+                        .with_reason("saveFailed")
+                } else {
+                    error.with_source(SOURCE)
+                }
+            })?;
+        // The file watcher publishes the new list; the answer is what counts now.
+        self.layout(id).await
     }
 
     // ---- open detection ----
@@ -917,7 +1081,8 @@ impl LaunchPlanner for Service {
         };
         let analysis = env::analyze(&file, &builtins);
         let key = path_key(&project.path);
-        let (specs, _) = analysis.resolve(&key, &project.id, &builtins);
+        let apps = self.app_lookup();
+        let (specs, _) = analysis.resolve(&key, &project.id, &builtins, &apps);
         let steps = launch::select_steps(target.mode, &specs, &builtins)
             .map_err(|e| e.with_source(SOURCE))?;
         let mode = target.mode.unwrap_or(rain_types::LaunchMode::Full);
@@ -942,6 +1107,7 @@ impl LaunchPlanner for Service {
             terminal: tools::find(Tool::WindowsTerminal, &overrides, self.tools.as_ref()),
             coding_agent: tools::find(Tool::Claude, &overrides, self.tools.as_ref()),
             builtins: &builtins,
+            apps: &apps,
         });
         Ok(LaunchPlan { steps })
     }

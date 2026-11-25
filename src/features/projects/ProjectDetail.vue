@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // The detail pane of the selected project: where it is, its dev environment (a launch
-// checklist while it starts), the Claude sessions in it, and the two open buttons.
+// checklist while it starts), where its windows go (the layout), the Claude sessions in it,
+// and the two open buttons.
 import { FolderXIcon, GitBranchIcon } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import { runAction } from '@/actions/context'
@@ -17,6 +18,8 @@ import { useScreenState } from '@/composables/useScreen'
 import type { ClaudeSession, LaunchRun, Project } from '@/data/types'
 import { keepFocus } from '@/lib/focus'
 import { useNav } from '@/nav/useNav'
+import { placementNotes } from './layout'
+import LayoutSection from './LayoutSection.vue'
 import { sessionStatus } from './project-sessions'
 
 const props = defineProps<{
@@ -58,6 +61,23 @@ const checklist = computed(() => {
   return run && shown ? run.steps : []
 })
 const starting = computed(() => props.run?.status === 'running')
+
+// After a launch that has ended, a quiet line says what could not be placed. A launch that ended
+// before this project was selected is not shown again.
+const dismissedRunId = ref<string>()
+watch(
+  () => props.project.id,
+  () => {
+    const run = props.run
+    dismissedRunId.value = run && run.status !== 'running' ? run.id : undefined
+  },
+  { immediate: true },
+)
+const notes = computed(() => {
+  const run = props.run
+  if (!run || run.status === 'running' || run.id === dismissedRunId.value) return []
+  return placementNotes(run.steps)
+})
 </script>
 
 <template>
@@ -93,6 +113,11 @@ const starting = computed(() => props.run?.status === 'running')
         </li>
       </ul>
     </template>
+
+    <LayoutSection v-if="!project.missing" :key="project.id" :project="project" />
+    <div v-if="notes.length > 0" class="mt-2 flex flex-col gap-0.5">
+      <p v-for="note in notes" :key="note" class="text-xs text-muted-foreground">{{ note }}</p>
+    </div>
 
     <template v-if="sessions.length > 0">
       <SectionHeader class="-ml-2 mt-3" title="Sessions here" :count="sessions.length" />

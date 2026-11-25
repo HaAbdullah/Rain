@@ -13,6 +13,7 @@ mod gamemode;
 mod games;
 mod jobs;
 mod launcher;
+mod layout;
 mod life;
 pub mod limits;
 mod projects;
@@ -45,6 +46,10 @@ pub use jobs::{
 pub use launcher::{
     AppEntry, AppKind, LaunchMode, LaunchRun, LaunchStep, LaunchTarget, LaunchType, PinBody,
     PinnableType, Pool, PoolDraft, PoolMember, RunStatus, SearchItem, SearchType,
+};
+pub use layout::{
+    LAYOUT_ITEMS_MAX, LAYOUT_MONITOR_MAX, LayoutItem, LayoutSave, LayoutScope, LayoutStepOption,
+    LayoutWhat, LayoutZone, ProjectLayout,
 };
 pub use life::{
     Cadence, CalendarEvent, Habit, HabitCell, HabitDay, HabitDraft, HabitStats, HabitSummary,

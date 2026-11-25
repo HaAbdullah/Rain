@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Health, IdleJob, LogLine, Project, ScheduledJob, Settings } from '../types'
+import type { Health, IdleJob, LayoutSave, LogLine, Project, ProjectLayout, ScheduledJob, Settings } from '../types'
 import { createRestApi } from './client'
 import { createFakeBridge } from './fake-bridge.testing'
 
@@ -253,6 +253,23 @@ describe('REST client: projects', () => {
 
     expect(await api.listProjects()).toEqual(projects)
     expect(bridge.calls).toEqual([{ method: 'GET', path: '/projects', body: undefined }])
+  })
+
+  it('getProjectLayout is GET /projects/:id/layout and saveProjectLayout is PUT with the save as the body', async () => {
+    const { bridge, api } = setup()
+    const layout: ProjectLayout = { items: [], scope: 'none', steps: [], monitors: 2 }
+    bridge.answerWith(layout)
+    expect(await api.getProjectLayout('proj-a b')).toEqual(layout)
+
+    const save: LayoutSave = {
+      items: [{ what: { kind: 'step', name: 'editor' }, zone: 'right-half' }],
+      all: false,
+    }
+    await api.saveProjectLayout('proj-alpha', save)
+    expect(bridge.calls).toEqual([
+      { method: 'GET', path: '/projects/proj-a%20b/layout', body: undefined },
+      { method: 'PUT', path: '/projects/proj-alpha/layout', body: save },
+    ])
   })
 })
 

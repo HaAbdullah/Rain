@@ -1786,6 +1786,8 @@ This table is the contract between the REST client and the modules. Comments in 
 | `rescanApps` (new) | `POST /apps/scan` | launcher | 01 | |
 | `getLaunch` | `GET /launches/{id}` | launcher | 01 | |
 | `listProjects` | `GET /projects` | projects | 02 | |
+| `getProjectLayout` | `GET /projects/{id}/layout` | projects | 02 | the layout that counts for a project (6.17) |
+| `saveProjectLayout` | `PUT /projects/{id}/layout` | projects | 02 | writes `projects.toml` |
 | `listGames` | `GET /games` | games | 02 | |
 | `saveCustomGame` | `POST /games` | games | 02 | 201 |
 | `setGameHidden` | `PATCH /games/{id}` | games | 02 | body `{ "hidden": boolean }` |

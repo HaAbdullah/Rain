@@ -32,7 +32,7 @@ pub use apps::{AppRecord, AppSource, SourceError};
 pub use icons::IconRenderer;
 pub use launch::PathProbe;
 pub use opener::WindowsOpener;
-pub use service::{FaultMode, ScanError, Service, pin_kind};
+pub use service::{AppFacts, FaultMode, ScanError, Service, pin_kind};
 
 use anyhow::anyhow;
 

@@ -27,6 +27,7 @@ import { useNav } from '@/nav/useNav'
 import { byLastOpened } from './project-order'
 import { leadStatus, sessionsOfProject } from './project-sessions'
 import ProjectCard from './ProjectCard.vue'
+import LayoutEditorDialog from './LayoutEditorDialog.vue'
 import ProjectDetail from './ProjectDetail.vue'
 
 const ACTIVE_COUNT = 3
@@ -157,5 +158,6 @@ const noMatch = computed(() => projects.data.value !== undefined && !isEmpty.val
       />
       <EmptyState v-else icon="folder-git-2" title="No project selected" />
     </template>
+    <LayoutEditorDialog />
   </ScreenFrame>
 </template>

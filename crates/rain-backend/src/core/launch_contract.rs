@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use futures_util::future::BoxFuture;
-use rain_types::{IconRef, LaunchRun, LaunchTarget, SearchItem};
+use rain_types::{IconRef, LaunchRun, LaunchTarget, LayoutZone, SearchItem};
 
 use super::error::ApiResult;
 
@@ -139,6 +139,34 @@ pub struct PlannedStep {
     /// Replaces the text the engine would take from its own table for a failed step, for texts
     /// that only the planner knows ("Program file not found: <path>").
     pub error_text: Option<ErrorText>,
+    /// Where the window of this step goes once the step has started. `None` leaves it where
+    /// Windows puts it.
+    pub placement: Option<Placement>,
+}
+
+/// Where the window of a step goes, and how to tell which window the step made. Plain data: the
+/// rules that use it are in `core::placement`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Placement {
+    pub zone: LayoutZone,
+    /// 1 is the monitor at the far left. `None`: the monitor that Rain's window is on.
+    pub monitor: Option<u32>,
+    pub find: WindowQuery,
+}
+
+/// How the window of a step is told from the other windows.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WindowQuery {
+    /// Image names (lower case, with `.exe`) of the programs that may own the window. The
+    /// started process itself always counts, whatever its name. Without names and with a title
+    /// rule, any program may own the window.
+    pub images: Vec<String>,
+    /// The window title must hold this text (lower case). Needed for a window of a program that
+    /// owns many windows.
+    pub title_has: Option<String>,
+    /// A window that is open already may be the one (VS Code with the folder open: the project
+    /// is being opened, so its own window is placed). Needs `title_has`.
+    pub allow_existing: bool,
 }
 
 pub struct ShellFallback {
