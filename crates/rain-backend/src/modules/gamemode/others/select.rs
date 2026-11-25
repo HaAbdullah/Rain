@@ -264,7 +264,12 @@ pub fn select(scan: &Scan, rules: &Rules) -> Selection {
             continue;
         }
         let name = process.name.to_lowercase();
-        let image = process.image.as_deref().map(norm);
+        // A program whose file Rain cannot read may be a Windows program: it is kept.
+        let Some(image) = process.image.as_deref().map(norm) else {
+            always.insert(name);
+            continue;
+        };
+        let image = Some(image);
         let why = kept.get(&process.pid).copied().or_else(|| {
             if image.as_deref().is_some_and(|image| under(image, &windir)) {
                 Some(Why::Windows)
@@ -459,6 +464,13 @@ mod tests {
             selection.always_kept, 2,
             "only Rain's backend and its WebView count"
         );
+    }
+
+    #[test]
+    fn a_process_whose_program_file_cannot_be_read_is_kept() {
+        let scan = pc(vec![proc(250, 1, "mystery.exe", "")]);
+        let selection = select(&scan, &rules());
+        assert!(selection.candidates.is_empty(), "{:?}", ids(&selection));
     }
 
     #[test]
