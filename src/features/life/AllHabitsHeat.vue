@@ -60,7 +60,7 @@ function tip(date: ISODate, done: number, total: number): string {
     </div>
 
     <div ref="box" class="min-w-0 overflow-hidden">
-      <div class="grid w-max" :style="{ gridTemplateColumns: columns, gap: `${GAP}px` }">
+      <div class="mx-auto grid w-max" :style="{ gridTemplateColumns: columns, gap: `${GAP}px` }">
         <span
           v-for="label in model.labels"
           :key="`${label.column}-${label.name}`"
