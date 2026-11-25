@@ -245,7 +245,7 @@ fn sorted_entries(dir: &Path) -> Vec<(String, PathBuf)> {
             )
         })
         .collect();
-    list.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    list.sort_by_key(|a| a.0.to_lowercase());
     list
 }
 

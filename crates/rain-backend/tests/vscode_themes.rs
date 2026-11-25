@@ -1,6 +1,8 @@
 //! The VS Code theme routes on a real backend, with the folders of a made-up VS Code in a
 //! temporary folder (nothing of a real theme is used).
 
+#![allow(clippy::unwrap_used)] // a test panics with the failing line, which is its message
+
 mod common;
 
 use std::fs;
