@@ -21,6 +21,7 @@ use rain_backend::core::clock::Clock;
 use rain_backend::core::launch_contract::Opener;
 use rain_backend::core::secrets::Secrets;
 use rain_backend::core::state::{AppState, AppStateBuilder};
+use rain_backend::modules::gamemode::Pc;
 use rain_backend::modules::launcher::{AppSource, IconRenderer, PathProbe};
 use rain_backend::modules::settings::Detect;
 use rain_backend::platform::process::ProcessLister;
@@ -106,6 +107,8 @@ impl TestBackend {
                     b.with::<dyn ProcessLister>(Arc::new(fakes::FakeProcesses::default()))
                 }),
                 Arc::new(|b| b.opener(Arc::new(fakes::FakeOpener::default()))),
+                // game mode (section 06 6.11): no test ever sees, asks or ends a real program.
+                Arc::new(|b| b.with::<dyn Pc>(Arc::new(fakes::FakePc::default()))),
             ],
             config_tweaks: Vec::new(),
         }

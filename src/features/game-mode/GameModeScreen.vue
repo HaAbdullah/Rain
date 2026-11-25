@@ -12,6 +12,7 @@ import RIcon from '@/components/rain/RIcon.vue'
 import ScreenFrame from '@/components/rain/ScreenFrame.vue'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { formatBytes } from '@/lib/format'
 import { useNotice } from '@/composables/useNotice'
 import { useResource } from '@/composables/useResource'
 import { useScreen } from '@/composables/useScreen'
@@ -23,6 +24,7 @@ import { keepFocus } from '@/lib/focus'
 import { lucideIcon } from '@/lib/icon-map'
 import { useNav } from '@/nav/useNav'
 import { shell } from '@/shell'
+import OtherAppsList from './OtherAppsList.vue'
 import WindDownRow from './WindDownRow.vue'
 
 const nav = useNav()
@@ -31,6 +33,9 @@ const search = useSearch()
 
 const mode = useResource('gameMode', () => api.getGameMode(), { live: 'gameMode' })
 const games = useResource('games', () => api.listGames())
+// The programs that game mode would close. Not a topic: asking for it looks at every process,
+// so only this screen asks, and only when it opens and when a run begins.
+const apps = useResource('gameModeApps', () => api.getOtherApps())
 
 // The cache may still hold the phase of an earlier visit; nothing is drawn from it until
 // the fetch made on mount has replaced it.
@@ -48,12 +53,55 @@ async function start() {
 
 // ---- starting and leaving ----
 
+/** True while the list waits for the user to look at it and press Start (nothing runs yet). */
+const previewing = ref(false)
+
+/** Programs that would be closed now. With none, there is nothing to look at. */
+const hasWork = computed(() => {
+  const list = apps.data.value
+  return !!list && list.enabled && list.apps.some((app) => app.close)
+})
+
 // Going to the route does not start game mode (a game's "Play in game mode" already did).
+// With programs to close, the list comes first and the user starts; without, it starts at once.
 onMounted(async () => {
   await mode.reload()
   fresh.value = true
-  if (mode.data.value?.phase === 'off') await start()
+  if (mode.data.value?.phase !== 'off') {
+    void apps.reload()
+    return
+  }
+  await apps.reload()
+  if (hasWork.value) previewing.value = true
+  else await start()
 })
+
+// A run that begins (from the button, or from a game) has looked at the PC again.
+watch(
+  () => state.value?.phase,
+  (now, before) => {
+    if ((now === 'review' || now === 'countdown') && before !== 'review' && before !== 'countdown') {
+      previewing.value = false
+      void apps.reload()
+    }
+  },
+)
+
+async function setEnabled(value: boolean) {
+  try {
+    apps.data.value = await api.updateOtherApps({ enabled: value })
+  } catch (reason) {
+    notice.error(errorMessage(reason, 'The switch was not saved'))
+  }
+}
+
+async function setClose(id: string, close: boolean) {
+  try {
+    apps.data.value = await api.updateOtherApps({ app: { id, close } })
+  } catch (reason) {
+    notice.error(errorMessage(reason, 'The choice was not saved'))
+  }
+}
 
 /** Cancels the sequence; false when the api refused, after telling the user. */
 async function cancelSequence(): Promise<boolean> {
@@ -100,10 +148,23 @@ function choose(
   return { id, label, icon, slot, run: async ({ api: rainApi }) => { await rainApi.resolveGameMode(choice) } }
 }
 
+const startAction: RainAction = {
+  id: 'start-game-mode',
+  label: 'Start game mode',
+  icon: 'circle-power',
+  slot: 'primary',
+  run: async ({ api: rainApi }) => {
+    await rainApi.startGameMode()
+    previewing.value = false
+  },
+}
+
 const actions = computed<RainAction[]>(() => {
   const current = state.value
   if (!current) return []
   switch (current.phase) {
+    case 'off':
+      return previewing.value ? [startAction] : []
     case 'review':
       return [
         ...(current.waiting ? [] : [choose('wait', 'Wait for them', 'hourglass', 'primary', 'wait')]),
@@ -120,10 +181,13 @@ const primaryOverride = computed<RainAction[] | null>(() => (actions.value.lengt
 
 useScreen({ target: shallowRef<ActionTarget | null>(null), move: () => false, primaryOverride })
 
-const canCancel = computed(() => phase.value === 'review' || phase.value === 'countdown')
+const canCancel = computed(
+  () => phase.value === 'review' || phase.value === 'countdown' || (phase.value === 'off' && previewing.value),
+)
 
 async function cancel() {
-  if (await cancelSequence()) nav.back()
+  if (phase.value === 'off') nav.back()
+  else if (await cancelSequence()) nav.back()
 }
 
 // ---- what is drawn ----
@@ -148,6 +212,19 @@ const reviewHint = computed(() => {
   return state.value?.waitTimedOut
     ? 'They did not finish in 3 minutes. Stopping them now loses unfinished work.'
     : 'Stopping them now loses unfinished work.'
+})
+
+/** The checklist leaves out the row of the other programs when there are none to close. */
+const rows = computed(() =>
+  (state.value?.items ?? []).filter((item) => item.kind !== 'otherApp' || item.count > 0 || phase.value === 'windingDown'),
+)
+
+/** What the preview says it frees, in one line. */
+const previewHint = computed(() => {
+  const list = apps.data.value
+  return list && list.freedBytes > 0
+    ? `Frees about ${formatBytes(list.freedBytes)}. Apps with open windows are asked first.`
+    : 'Apps with open windows are asked first.'
 })
 
 const heading = computed(() => {
@@ -194,11 +271,36 @@ const remaining = computed(() => {
         </template>
       </div>
 
+      <template v-else-if="phase === 'off' && previewing && apps.data.value">
+        <div class="flex flex-col items-center gap-2 text-center">
+          <component
+            :is="lucideIcon('circle-power')"
+            :size="32"
+            :stroke-width="1.75"
+            class="mb-2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <p class="text-xl font-semibold text-foreground">Ready for game mode</p>
+          <p class="max-w-sm text-13 text-muted-foreground">{{ previewHint }}</p>
+        </div>
+        <OtherAppsList :list="apps.data.value" editable @enabled="setEnabled" @close="setClose" />
+        <div class="flex flex-wrap items-center justify-center gap-2">
+          <Button class="gap-2" tabindex="-1" @mousedown="keepFocus" @click="runAction(startAction)">
+            {{ startAction.label }}
+            <KeyHint keys="Enter" />
+          </Button>
+          <Button variant="ghost" class="gap-2" tabindex="-1" @mousedown="keepFocus" @click="cancel">
+            Cancel
+            <KeyHint keys="Escape" />
+          </Button>
+        </div>
+      </template>
+
       <EmptyState
         v-else-if="phase === 'off'"
         icon="circle-power"
         title="Game mode is off"
-        hint="It stops Rain's jobs and closes the Rain window. Your Claude sessions keep running."
+        hint="It closes your other apps, stops Rain's jobs and closes the Rain window. Your Claude sessions keep running."
         action-label="Start game mode"
         @action="start"
       />
@@ -241,13 +343,21 @@ const remaining = computed(() => {
           class="flex flex-col divide-y divide-border rounded-lg border border-border bg-surface-1"
         >
           <WindDownRow
-            v-for="item in state.items"
+            v-for="item in rows"
             :key="item.id"
             :item="item"
             :phase="state.phase"
             :waiting="state.waiting"
           />
         </div>
+
+        <OtherAppsList
+          v-if="(phase === 'review' || phase === 'countdown') && apps.data.value"
+          :list="apps.data.value"
+          editable
+          @enabled="setEnabled"
+          @close="setClose"
+        />
 
         <p
           v-if="sequenceRunning && nextGame && nextGameIcon"

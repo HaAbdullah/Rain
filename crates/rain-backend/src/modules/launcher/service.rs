@@ -415,6 +415,21 @@ impl Service {
         why
     }
 
+    /// The names of the known programs by the lower-case path of their program file, from the
+    /// list in memory (never a scan). Game mode names the programs it lists with it.
+    pub fn app_names(&self) -> HashMap<String, String> {
+        self.current_apps()
+            .iter()
+            .filter(|app| app.kind == AppKind::Program && !app.exe_path.is_empty())
+            .map(|app| {
+                (
+                    apps::normalise_path(&app.exe_path).to_lowercase(),
+                    app.name.clone(),
+                )
+            })
+            .collect()
+    }
+
     /// `GET /apps`.
     pub async fn list_apps(self: &Arc<Self>) -> ApiResult<Vec<AppEntry>> {
         let state = self.app()?;

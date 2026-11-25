@@ -49,6 +49,35 @@ describe('recapText', () => {
     expect(text).toBe('Game mode stopped 1 job. 2 jobs did not stop.')
   })
 
+  it('counts the other programs that were closed, with the jobs', () => {
+    const text = recapText(
+      recap({
+        items: [
+          item({ kind: 'otherApp', label: 'Other apps', count: 5 }),
+          item({ kind: 'otherApp', label: 'Other apps', count: 2, outcome: 'forced' }),
+          item({ count: 1 }),
+        ],
+      }),
+    )
+    expect(text).toBe('Game mode closed 7 apps and stopped 1 job.')
+  })
+
+  it('says which programs did not close, apart from the Claude sessions that kept running', () => {
+    const text = recapText(
+      recap({
+        items: [
+          item({ kind: 'otherApp', count: 1 }),
+          item({ kind: 'otherApp', count: 1, outcome: 'leftRunning', names: ['Word'] }),
+          item({ kind: 'otherApp', count: 2, outcome: 'failed' }),
+          item({ kind: 'session', count: 2, outcome: 'leftRunning' }),
+        ],
+      }),
+    )
+    expect(text).toBe(
+      'Game mode closed 1 app. 1 app did not close. 2 apps need administrator rights. 2 Claude sessions kept running.',
+    )
+  })
+
   it('says when the game did not start', () => {
     expect(recapText(recap({ launchError: 'It failed.' }))).toBe('Game mode closed Rain. The game did not start.')
   })

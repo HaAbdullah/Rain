@@ -4,7 +4,7 @@
 
 import type {
   ApiError, AppEntry, CalendarEvent, ClaudeSession, CustomGameDraft, DiskNode, DiskScan, Drive, FocusResult, Game,
-  GameLibrary, GameModeChoice, GameModeState, Habit, HabitDay, HabitDraft, HabitStats, HabitSummary, Health, ID, IdleJob, ISODate, JobRun,
+  GameLibrary, GameModeChoice, GameModeState, OtherApps, OtherAppsPatch, Habit, HabitDay, HabitDraft, HabitStats, HabitSummary, Health, ID, IdleJob, ISODate, JobRun,
   LaunchRun, LaunchTarget, LogLine, MachineState, OpenNoteResult, PathCheck, PermissionAnswer, PermissionAnswerResult, PinnableType, Pool, PoolDraft,
   GamePatch, Project, PropertySuggestion, ScheduledJob, SearchItem, SearchType, Settings, SettingsPatch, VaultStatus,
 } from './types'
@@ -107,6 +107,8 @@ export interface RainApi {
   startGameMode(opts?: { thenLaunchGameId?: ID }): Promise<GameModeState>      // POST /game-mode
   resolveGameMode(choice: GameModeChoice): Promise<GameModeState>              // POST /game-mode/choice
   markGameModeRecapSeen(): Promise<void>                                       // POST /game-mode/recap/seen
+  getOtherApps(): Promise<OtherApps>                                           // GET  /game-mode?otherApps=true   looks at the programs of the PC, closes nothing
+  updateOtherApps(patch: OtherAppsPatch): Promise<OtherApps>                   // PATCH /game-mode/other-apps      the master switch, or one program kept or closed
 
   // settings
   getSettings(): Promise<Settings>                                             // GET  /settings

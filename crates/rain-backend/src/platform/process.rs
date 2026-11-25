@@ -22,13 +22,20 @@ use tracing::warn;
 use windows::Win32::Foundation::{
     CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE, WAIT_TIMEOUT,
 };
+use windows::Win32::Security::{
+    GetLengthSid, GetTokenInformation, TOKEN_INFORMATION_CLASS, TOKEN_QUERY, TOKEN_USER,
+    TokenSessionId, TokenUser,
+};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::JobObjects::IsProcessInJob;
+use windows::Win32::System::ProcessStatus::{
+    GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX2,
+};
 use windows::Win32::System::Threading::{
-    CREATE_NO_WINDOW, GetProcessTimes, INFINITE, OpenProcess, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+    CREATE_NO_WINDOW, GetCurrentProcess, GetProcessTimes, INFINITE, OpenProcess, OpenProcessToken,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
     QueryFullProcessImageNameW, RegisterWaitForSingleObject, TerminateProcess, UnregisterWaitEx,
     WT_EXECUTEONLYONCE, WaitForSingleObject,
 };
@@ -200,6 +207,243 @@ pub fn terminate_pid(pid: u32) -> io::Result<()> {
         let ended = TerminateProcess(handle, 1);
         let _ = CloseHandle(handle);
         ended.map_err(io::Error::other)
+    }
+}
+
+// ---- the programs of the signed-in user (game mode) ----
+
+/// Whose process it is, as far as Rain can tell without administrator rights.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Owner {
+    /// The signed-in user, in the session that Rain runs in.
+    Mine,
+    /// Another user, or another session (session 0 is where the services run).
+    Other,
+    /// Windows would not let Rain look: a protected or elevated process, or one that has ended.
+    Unknown,
+}
+
+/// One process with what game mode needs to decide about it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessFacts {
+    pub pid: u32,
+    pub parent_pid: u32,
+    pub name: String,
+    /// The full path of the program file; `None` when the process cannot be opened.
+    pub image: Option<String>,
+    /// The private working set, the number that Task Manager shows as "Memory". 0 when unknown.
+    pub memory_bytes: u64,
+    /// FILETIME of the start. With the pid it names the process even after the pid is reused.
+    pub created: u64,
+    pub owner: Owner,
+}
+
+/// The user and the session of a token, for comparing two processes.
+#[derive(PartialEq, Eq)]
+struct Identity {
+    sid: Vec<u8>,
+    session: u32,
+}
+
+/// Reads one kind of information of a token into a buffer.
+fn token_info(token: HANDLE, class: TOKEN_INFORMATION_CLASS) -> Option<Vec<u8>> {
+    let mut needed = 0u32;
+    // SAFETY: the first call only asks for the size and may fail with "buffer too small"; the
+    // second call gets a buffer of exactly that size.
+    unsafe {
+        let _ = GetTokenInformation(token, class, None, 0, &mut needed);
+        if needed == 0 {
+            return None;
+        }
+        let mut buffer = vec![0u8; needed as usize];
+        GetTokenInformation(
+            token,
+            class,
+            Some(buffer.as_mut_ptr().cast()),
+            needed,
+            &mut needed,
+        )
+        .ok()?;
+        Some(buffer)
+    }
+}
+
+/// The user and the session of the process behind `process`, or `None` when Windows does not
+/// let a normal user read its token (elevated and protected processes).
+fn identity_of(process: HANDLE) -> Option<Identity> {
+    let mut token = HANDLE::default();
+    // SAFETY: `token` is valid for writes; the handle is closed before the function returns.
+    let opened = unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) };
+    opened.ok()?;
+    let user = token_info(token, TokenUser);
+    let session = token_info(token, TokenSessionId);
+    // SAFETY: the token was opened above and is not used again.
+    unsafe {
+        let _ = CloseHandle(token);
+    }
+    let (user, session) = (user?, session?);
+    if user.len() < std::mem::size_of::<TOKEN_USER>() || session.len() < 4 {
+        return None;
+    }
+    // SAFETY: the buffer holds a `TOKEN_USER` that Windows wrote; its SID pointer points into the
+    // same buffer, which is alive for the whole block. The SID bytes are copied out.
+    let sid = unsafe {
+        let record = std::ptr::read_unaligned(user.as_ptr().cast::<TOKEN_USER>());
+        let length = GetLengthSid(record.User.Sid) as usize;
+        if length == 0 || length > user.len() {
+            return None;
+        }
+        std::slice::from_raw_parts(record.User.Sid.0.cast::<u8>(), length).to_vec()
+    };
+    Some(Identity {
+        sid,
+        session: u32::from_ne_bytes([session[0], session[1], session[2], session[3]]),
+    })
+}
+
+/// The private working set of a process in bytes (its working set when Windows will not say).
+fn memory_of(process: HANDLE) -> u64 {
+    let mut counters = PROCESS_MEMORY_COUNTERS_EX2 {
+        cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX2>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: `counters` is a valid `PROCESS_MEMORY_COUNTERS_EX2` with `cb` set; the call takes
+    // a pointer to the shorter base struct and the real size, as its documentation allows.
+    let read = unsafe {
+        GetProcessMemoryInfo(
+            process,
+            std::ptr::from_mut(&mut counters).cast::<PROCESS_MEMORY_COUNTERS>(),
+            counters.cb,
+        )
+    };
+    if read.is_err() {
+        return 0;
+    }
+    let private = counters.PrivateWorkingSetSize;
+    (if private > 0 {
+        private
+    } else {
+        counters.WorkingSetSize
+    }) as u64
+}
+
+/// Every process with its owner, program file, memory and start time. Opens each one with the
+/// right to ask questions only (never to end it). About 15 ms for 300 processes.
+pub fn list_facts() -> Vec<ProcessFacts> {
+    // SAFETY: the pseudo handle of the current process needs no closing.
+    let me = identity_of(unsafe { GetCurrentProcess() });
+    let mut buffer = vec![0u16; 1024];
+    list_processes()
+        .into_iter()
+        .map(|entry| {
+            let mut facts = ProcessFacts {
+                pid: entry.pid,
+                parent_pid: entry.parent_pid,
+                name: entry.name,
+                image: None,
+                memory_bytes: 0,
+                created: 0,
+                owner: Owner::Unknown,
+            };
+            if entry.pid == 0 {
+                return facts;
+            }
+            // SAFETY: the handle is closed before the block ends; `buffer` is valid for the
+            // length that is passed, and the call updates the length to what it wrote.
+            unsafe {
+                let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, entry.pid)
+                else {
+                    return facts;
+                };
+                let mut length = buffer.len() as u32;
+                if QueryFullProcessImageNameW(
+                    handle,
+                    PROCESS_NAME_WIN32,
+                    PWSTR(buffer.as_mut_ptr()),
+                    &mut length,
+                )
+                .is_ok()
+                {
+                    facts.image = Some(String::from_utf16_lossy(&buffer[..length as usize]));
+                }
+                facts.created = creation_time_of(handle).unwrap_or(0);
+                facts.memory_bytes = memory_of(handle);
+                facts.owner = match (identity_of(handle), &me) {
+                    (Some(theirs), Some(mine)) if theirs == *mine => Owner::Mine,
+                    (Some(_), _) => Owner::Other,
+                    (None, _) => Owner::Unknown,
+                };
+                let _ = CloseHandle(handle);
+            }
+            facts
+        })
+        .collect()
+}
+
+/// What `terminate_if_same` did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Terminated {
+    /// `TerminateProcess` was accepted.
+    Ended,
+    /// The process was already gone, or the pid belongs to another process now.
+    Gone,
+    /// Windows refused: the process needs administrator rights, or it is Rain itself.
+    Denied,
+}
+
+/// Whether the process with this pid and start time still runs (a reused pid is another process).
+pub fn alive_since(pid: u32, created: u64) -> bool {
+    // SAFETY: the handle is closed before the function returns.
+    unsafe {
+        let Ok(handle) = OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            false,
+            pid,
+        ) else {
+            return false;
+        };
+        let same = creation_time_of(handle).is_some_and(|actual| actual == created);
+        let running = WaitForSingleObject(handle, 0) == WAIT_TIMEOUT;
+        let _ = CloseHandle(handle);
+        same && running
+    }
+}
+
+/// Ends the process `pid` (`TerminateProcess`), but only when it is the process that started at
+/// `created`. Never ends Rain's own process. One attempt, no retry.
+pub fn terminate_if_same(pid: u32, created: u64) -> Terminated {
+    if pid == std::process::id() {
+        return Terminated::Denied;
+    }
+    // SAFETY: the handle is closed before the function returns.
+    unsafe {
+        let handle = match OpenProcess(
+            PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
+            pid,
+        ) {
+            Ok(handle) => handle,
+            Err(e) => return refused_or_gone(&e),
+        };
+        let same = creation_time_of(handle).is_some_and(|actual| actual == created);
+        let result = if same {
+            match TerminateProcess(handle, 1) {
+                Ok(()) => Terminated::Ended,
+                Err(e) => refused_or_gone(&e),
+            }
+        } else {
+            Terminated::Gone
+        };
+        let _ = CloseHandle(handle);
+        result
+    }
+}
+
+fn refused_or_gone(error: &windows::core::Error) -> Terminated {
+    if error.code() == windows::core::HRESULT::from_win32(ERROR_ACCESS_DENIED as u32) {
+        Terminated::Denied
+    } else {
+        Terminated::Gone
     }
 }
 
@@ -451,6 +695,43 @@ mod tests {
             .expect("this process is listed");
         assert!(mine.name.to_lowercase().ends_with(".exe"));
         assert_ne!(mine.parent_pid, 0);
+    }
+
+    #[test]
+    fn the_facts_describe_this_test_process_as_the_users_own_with_memory_and_a_start_time() {
+        let me = std::process::id();
+        let facts = list_facts();
+        let mine = facts
+            .iter()
+            .find(|p| p.pid == me)
+            .expect("this process is listed");
+        assert_eq!(mine.owner, Owner::Mine);
+        assert!(mine.memory_bytes > 1_000_000, "{}", mine.memory_bytes);
+        assert!(mine.created > 0);
+        let exe = std::env::current_exe()
+            .unwrap()
+            .to_string_lossy()
+            .to_lowercase();
+        assert_eq!(mine.image.as_deref().map(str::to_lowercase), Some(exe));
+        // Windows' own processes are never "mine": the system process (pid 4) cannot be read.
+        assert!(
+            facts
+                .iter()
+                .filter(|p| p.pid == 4)
+                .all(|p| p.owner != Owner::Mine)
+        );
+        assert!(alive_since(me, mine.created));
+        assert!(
+            !alive_since(me, mine.created + 1),
+            "another start time is another process"
+        );
+    }
+
+    #[test]
+    fn rain_never_ends_its_own_process_and_a_gone_process_is_gone() {
+        let me = std::process::id();
+        assert_eq!(terminate_if_same(me, 1), Terminated::Denied);
+        assert_eq!(terminate_if_same(0x7FFF_FFF0, 1), Terminated::Gone);
     }
 
     #[test]

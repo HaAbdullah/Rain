@@ -437,6 +437,8 @@ impl FakeNeighbours {
             rain_backend::modules::gamemode::GameInfo {
                 title: title.to_owned(),
                 installed,
+                exe_path: None,
+                install_path: None,
             },
         ));
         self
@@ -554,5 +556,132 @@ impl PathProbe for FakePathProbe {
     fn exists(&self, path: &Path) -> Option<bool> {
         let text = path.to_string_lossy().to_lowercase();
         Some(!lock(&self.missing).contains(&text))
+    }
+}
+
+// ---- the other programs of the PC (game mode, section 06 6.11) ----
+
+/// What the fake PC "has": processes, windows, and what happens when a window is asked to close.
+#[derive(Default)]
+pub struct PcWorld {
+    pub procs: Vec<rain_backend::platform::process::ProcessFacts>,
+    pub dead: std::collections::HashSet<u32>,
+    pub wins: Vec<rain_backend::platform::windows::TopWindow>,
+    /// The windows that end their process when they are asked to close.
+    pub exit_on_close: std::collections::HashSet<isize>,
+    /// The processes that Windows refuses to end.
+    pub refuse: std::collections::HashSet<u32>,
+    /// `scan`, `close:<pid>`, `terminate:<pid>` in order.
+    pub journal: Vec<String>,
+}
+
+/// A PC with nothing on it unless the test says so. No real program is ever asked or ended.
+#[derive(Default)]
+pub struct FakePc {
+    pub world: Mutex<PcWorld>,
+}
+
+impl FakePc {
+    /// Adds a program of the user (`Owner::Mine`). `created` is derived from the pid.
+    pub fn add_process(&self, pid: u32, parent: u32, name: &str, image: &str, memory: u64) {
+        lock(&self.world)
+            .procs
+            .push(rain_backend::platform::process::ProcessFacts {
+                pid,
+                parent_pid: parent,
+                name: name.to_owned(),
+                image: Some(image.to_owned()),
+                memory_bytes: memory,
+                created: u64::from(pid) * 10,
+                owner: rain_backend::platform::process::Owner::Mine,
+            });
+    }
+
+    pub fn add_window(&self, hwnd: isize, pid: u32, visible: bool, exits_on_close: bool) {
+        let mut world = lock(&self.world);
+        world
+            .wins
+            .push(rain_backend::platform::windows::TopWindow { hwnd, pid, visible });
+        if exits_on_close {
+            world.exit_on_close.insert(hwnd);
+        }
+    }
+
+    pub fn journal(&self) -> Vec<String> {
+        lock(&self.world).journal.clone()
+    }
+
+    pub fn is_dead(&self, pid: u32) -> bool {
+        lock(&self.world).dead.contains(&pid)
+    }
+}
+
+impl rain_backend::modules::gamemode::Pc for FakePc {
+    fn scan(&self) -> rain_backend::modules::gamemode::Scan {
+        let mut world = lock(&self.world);
+        world.journal.push("scan".to_owned());
+        rain_backend::modules::gamemode::Scan {
+            procs: world
+                .procs
+                .iter()
+                .filter(|p| !world.dead.contains(&p.pid))
+                .cloned()
+                .collect(),
+            wins: world
+                .wins
+                .iter()
+                .filter(|w| !world.dead.contains(&w.pid))
+                .copied()
+                .collect(),
+        }
+    }
+
+    fn windows(&self) -> Vec<rain_backend::platform::windows::TopWindow> {
+        let world = lock(&self.world);
+        world
+            .wins
+            .iter()
+            .filter(|w| !world.dead.contains(&w.pid))
+            .copied()
+            .collect()
+    }
+
+    fn post_close(&self, hwnd: isize) -> bool {
+        let mut world = lock(&self.world);
+        let Some(window) = world.wins.iter().find(|w| w.hwnd == hwnd).copied() else {
+            return false;
+        };
+        world.journal.push(format!("close:{}", window.pid));
+        if world.exit_on_close.contains(&hwnd) {
+            // The program ends with its helpers, as a program that quits does.
+            let helpers: Vec<u32> = world
+                .procs
+                .iter()
+                .filter(|p| p.parent_pid == window.pid)
+                .map(|p| p.pid)
+                .collect();
+            world.dead.insert(window.pid);
+            world.dead.extend(helpers);
+        }
+        true
+    }
+
+    fn alive(&self, pid: u32, created: u64) -> bool {
+        let world = lock(&self.world);
+        !world.dead.contains(&pid)
+            && world
+                .procs
+                .iter()
+                .any(|p| p.pid == pid && p.created == created)
+    }
+
+    fn terminate(&self, pid: u32, _created: u64) -> rain_backend::platform::process::Terminated {
+        let mut world = lock(&self.world);
+        world.journal.push(format!("terminate:{pid}"));
+        if world.refuse.contains(&pid) {
+            return rain_backend::platform::process::Terminated::Denied;
+        }
+        world.dead.insert(pid);
+        rain_backend::platform::process::Terminated::Ended
     }
 }

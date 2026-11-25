@@ -40,11 +40,12 @@ pub fn build(record: &RecordRow, rows: &[ItemRow]) -> GameModeRecap {
             line.names.push(row.name.clone());
         }
     }
-    // Sessions first, then jobs, then idle jobs, as on the screen.
+    // Sessions first, then the other programs, then jobs, then idle jobs, as on the screen.
     items.sort_by_key(|item| match item.kind {
         WindDownKind::Session => 0,
-        WindDownKind::Job => 1,
-        _ => 2,
+        WindDownKind::OtherApp => 1,
+        WindDownKind::Job => 2,
+        _ => 3,
     });
     GameModeRecap {
         at: record
@@ -127,6 +128,32 @@ mod tests {
         assert_eq!(recap.items[0].count, 3);
         assert!(recap.items[0].names.is_empty());
         assert_eq!(recap.items[1].names, ["Demo"]);
+    }
+
+    #[test]
+    fn the_other_programs_are_a_line_for_each_outcome_with_their_names() {
+        let rows = [
+            row(WindDownKind::OtherApp, "Discord", RecapOutcome::Stopped, 1),
+            row(WindDownKind::OtherApp, "Spotify", RecapOutcome::Forced, 1),
+            row(WindDownKind::OtherApp, "Word", RecapOutcome::LeftRunning, 1),
+            row(WindDownKind::OtherApp, "Notes", RecapOutcome::Stopped, 1),
+            row(WindDownKind::Job, "Demo", RecapOutcome::Stopped, 1),
+        ];
+        let recap = build(&record(true), &rows);
+        let apps: Vec<_> = recap
+            .items
+            .iter()
+            .filter(|item| item.kind == WindDownKind::OtherApp)
+            .collect();
+        assert_eq!(apps.len(), 3);
+        assert_eq!(apps[0].count, 2);
+        assert_eq!(apps[0].names, ["Discord", "Notes"]);
+        assert_eq!(apps[0].label, "Other apps");
+        assert_eq!(
+            recap.items[0].kind,
+            WindDownKind::OtherApp,
+            "before the jobs"
+        );
     }
 
     #[test]

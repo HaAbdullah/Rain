@@ -13,6 +13,7 @@ use rain_types::{GameModeChoice, GameModePhase, GameModeState, WindDownItem, Win
 use tokio::time::Instant;
 
 use super::items;
+use super::others::CloseTimings;
 
 /// The lengths of time in section 06 6.7.3. A test replaces them with short ones
 /// (`state.seam::<Timings>()`).
@@ -29,6 +30,8 @@ pub struct Timings {
     pub item_budget: Duration,
     /// How long the call that starts the game may take (`GAME_MODE_LAUNCH_BUDGET`).
     pub launch_budget: Duration,
+    /// How long closing the other programs waits at each step (section 06 6.11).
+    pub closing: CloseTimings,
 }
 
 impl Default for Timings {
@@ -39,6 +42,7 @@ impl Default for Timings {
             item_min_visible: Duration::from_millis(400),
             item_budget: Duration::from_secs(5),
             launch_budget: Duration::from_secs(10),
+            closing: CloseTimings::default(),
         }
     }
 }
@@ -80,6 +84,8 @@ pub enum Input {
         id: &'static str,
         status: WindDownStatus,
     },
+    /// The row that closes the other programs says how many are finished.
+    Progress { id: &'static str, done: u32 },
     /// The game could not be started.
     LaunchError(String),
     /// The last step of the wind-down is done.
@@ -160,6 +166,7 @@ impl Machine {
             wait_timed_out: self.wait_timed_out.then_some(true),
             launch_error: self.launch_error.clone(),
             last: None,
+            other_apps: None,
             rev: self.rev,
         }
     }
@@ -199,6 +206,7 @@ impl Machine {
             Input::Tick { now } => Ok(self.tick(now)),
             Input::Items { items, now } => Ok(self.remeasure(items, now)),
             Input::Status { id, status } => Ok(self.set_status(id, status)),
+            Input::Progress { id, done } => Ok(self.set_progress(id, done)),
             Input::LaunchError(message) => {
                 self.launch_error = Some(message);
                 Ok(self.touch())
@@ -325,6 +333,25 @@ impl Machine {
         match self.items.iter_mut().find(|item| item.id == id) {
             Some(item) if item.status != status => {
                 item.status = status;
+                // A count of finished programs belongs to the time the row is stopping.
+                if status != WindDownStatus::Stopping {
+                    item.progress = None;
+                }
+                self.touch()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    fn set_progress(&mut self, id: &str, done: u32) -> Vec<Effect> {
+        if self.phase != GameModePhase::WindingDown {
+            return Vec::new();
+        }
+        match self.items.iter_mut().find(|item| item.id == id) {
+            Some(item)
+                if item.status == WindDownStatus::Stopping && item.progress != Some(done) =>
+            {
+                item.progress = Some(done);
                 self.touch()
             }
             _ => Vec::new(),
@@ -397,11 +424,12 @@ mod tests {
     }
 
     fn quiet() -> Vec<WindDownItem> {
-        items::measure(0, Counts::default(), Counts::default())
+        items::measure(0, 0, Counts::default(), Counts::default())
     }
 
     fn busy() -> Vec<WindDownItem> {
         items::measure(
+            0,
             0,
             Counts {
                 enabled: 1,
@@ -665,6 +693,7 @@ mod tests {
         start(&mut m, now, busy()).unwrap();
         let more = items::measure(
             3,
+            0,
             Counts {
                 enabled: 1,
                 running: 1,
@@ -714,11 +743,59 @@ mod tests {
             status: WindDownStatus::Stopping,
         })
         .unwrap();
-        assert_eq!(m.state().items[1].status, WindDownStatus::Stopping);
+        assert_eq!(m.state().items[2].status, WindDownStatus::Stopping);
         m.step(Input::LaunchError("no".into())).unwrap();
         assert_eq!(m.state().launch_error.as_deref(), Some("no"));
         m.step(Input::Finished).unwrap();
         assert_eq!(m.phase(), GameModePhase::Done);
+    }
+
+    #[test]
+    fn the_other_apps_row_shows_progress_only_while_it_is_stopping() {
+        let (mut m, now) = (machine(), Instant::now());
+        start(&mut m, now, quiet()).unwrap();
+        // Before the wind-down a count of finished programs means nothing.
+        let early = m
+            .step(Input::Progress {
+                id: items::OTHER_APPS,
+                done: 1,
+            })
+            .unwrap();
+        assert!(early.is_empty());
+        choose(&mut m, CloseNow, now).unwrap();
+        let before_stopping = m
+            .step(Input::Progress {
+                id: items::OTHER_APPS,
+                done: 1,
+            })
+            .unwrap();
+        assert!(before_stopping.is_empty(), "the row is still pending");
+        m.step(Input::Status {
+            id: items::OTHER_APPS,
+            status: WindDownStatus::Stopping,
+        })
+        .unwrap();
+        m.step(Input::Progress {
+            id: items::OTHER_APPS,
+            done: 3,
+        })
+        .unwrap();
+        assert_eq!(m.state().items[1].progress, Some(3));
+        let rev = m.state().rev;
+        let same = m
+            .step(Input::Progress {
+                id: items::OTHER_APPS,
+                done: 3,
+            })
+            .unwrap();
+        assert!(same.is_empty());
+        assert_eq!(m.state().rev, rev);
+        m.step(Input::Status {
+            id: items::OTHER_APPS,
+            status: WindDownStatus::Stopped,
+        })
+        .unwrap();
+        assert_eq!(m.state().items[1].progress, None);
     }
 
     #[test]

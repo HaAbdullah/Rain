@@ -6,20 +6,25 @@
 //! process.
 //!
 //! Note what is NOT here: any way to stop a Claude session. Game mode lists them and leaves them
-//! alone (decisions.md section 4).
+//! alone (decisions.md section 4). It only asks for their process ids, to keep their terminals.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures_util::future::BoxFuture;
 
 use crate::core::winddown::WindDownPort;
-use crate::modules::{disk, games, idle, jobs, sessions};
+use crate::modules::{disk, games, idle, jobs, launcher, sessions};
 
 /// A game as game mode needs it: to name it and to know that it can start.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GameInfo {
     pub title: String,
     pub installed: bool,
+    /// The program file of a local game: game mode never closes it.
+    pub exe_path: Option<String>,
+    /// The folder of the game: nothing inside it is closed.
+    pub install_path: Option<String>,
 }
 
 pub trait Neighbours: Send + Sync {
@@ -36,6 +41,16 @@ pub trait Neighbours: Send + Sync {
     /// Starts the game outside Rain's process tree. `Ok(in_job)`: true when the backend itself
     /// runs inside a job and the game may close with Rain. `Err`: the plain message for the user.
     fn launch_game(&self, id: &str) -> BoxFuture<'_, Result<bool, String>>;
+    /// The process ids of the open Claude sessions, so that their terminals are kept when game
+    /// mode closes the other programs. Nothing is ever ended through them.
+    fn live_claude_pids(&self) -> Vec<u32> {
+        Vec::new()
+    }
+    /// The names that the launcher knows for programs, by the lower-case path of the program
+    /// file. Used to name the programs of the Game mode list.
+    fn app_names(&self) -> HashMap<String, String> {
+        HashMap::new()
+    }
 }
 
 /// The real thing: the `Service`s of the other modules.
@@ -45,6 +60,7 @@ pub struct Production {
     idle: Arc<idle::Service>,
     disk: Arc<disk::Service>,
     games: Arc<games::Service>,
+    launcher: Arc<launcher::Service>,
 }
 
 impl Production {
@@ -54,6 +70,7 @@ impl Production {
         idle: Arc<idle::Service>,
         disk: Arc<disk::Service>,
         games: Arc<games::Service>,
+        launcher: Arc<launcher::Service>,
     ) -> Self {
         Self {
             sessions,
@@ -61,6 +78,7 @@ impl Production {
             idle,
             disk,
             games,
+            launcher,
         }
     }
 }
@@ -86,6 +104,8 @@ impl Neighbours for Production {
         self.games.get(id).map(|game| GameInfo {
             title: game.title,
             installed: game.installed,
+            exe_path: game.exe_path,
+            install_path: game.install_path,
         })
     }
 
@@ -98,5 +118,13 @@ impl Neighbours for Production {
                 .map(|launched| launched.in_job)
                 .map_err(|e| e.body.message)
         })
+    }
+
+    fn live_claude_pids(&self) -> Vec<u32> {
+        self.sessions.live_pids()
+    }
+
+    fn app_names(&self) -> HashMap<String, String> {
+        self.launcher.app_names()
     }
 }

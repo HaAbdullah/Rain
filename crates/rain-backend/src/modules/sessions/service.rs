@@ -215,6 +215,11 @@ impl Service {
         u32::try_from(self.book().live_count()).unwrap_or(u32::MAX)
     }
 
+    /// The process ids of the open Claude sessions. Game mode keeps the terminal of each.
+    pub fn live_pids(&self) -> Vec<u32> {
+        self.book().live_pids()
+    }
+
     /// How many transcript tails were read since the start. The tests use it to see that a file
     /// that did not change costs no read.
     pub fn transcript_reads(&self) -> u32 {

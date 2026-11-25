@@ -656,6 +656,15 @@ impl Book {
             .collect()
     }
 
+    /// The process ids of the sessions that run, for game mode (it keeps their terminals).
+    pub fn live_pids(&self) -> Vec<u32> {
+        self.recs
+            .values()
+            .filter(|rec| rec.ended.is_none())
+            .filter_map(|rec| rec.pid)
+            .collect()
+    }
+
     /// Sessions that run, for `open_user_sessions`.
     pub fn live_count(&self) -> usize {
         self.recs.values().filter(|rec| rec.ended.is_none()).count()

@@ -1,4 +1,4 @@
-//! The five rows of the Game mode checklist. Section 06 3.2 and 6.7.4.
+//! The six rows of the Game mode checklist. Section 06 3.2, 6.7.4 and 6.11.
 //!
 //! The ids, labels, icons and kinds are constants, in the order in which the wind-down stops
 //! them. What changes is the count and the effect, which are measured.
@@ -8,6 +8,7 @@ use rain_types::{IconKind, IconRef, WindDownEffect, WindDownItem, WindDownKind, 
 use crate::core::winddown::Counts;
 
 pub const SESSIONS: &str = "wind-sessions";
+pub const OTHER_APPS: &str = "wind-other-apps";
 pub const JOBS: &str = "wind-jobs";
 pub const IDLE_JOBS: &str = "wind-idle-jobs";
 pub const SERVICE: &str = "wind-service";
@@ -17,6 +18,7 @@ pub const WINDOW: &str = "wind-window";
 pub fn label(kind: WindDownKind) -> &'static str {
     match kind {
         WindDownKind::Session => "Claude sessions",
+        WindDownKind::OtherApp => "Other apps",
         WindDownKind::Job => "Scheduled jobs",
         WindDownKind::IdleJob => "Idle jobs",
         WindDownKind::Service => "Background service",
@@ -44,6 +46,7 @@ fn row(
         count,
         effect,
         status: WindDownStatus::Pending,
+        progress: None,
     }
 }
 
@@ -57,9 +60,11 @@ fn effect_of(counts: Counts) -> WindDownEffect {
     }
 }
 
-/// The five rows for the numbers that were just measured. The sessions row is always
-/// `leftRunning`: game mode never stops a session.
-pub fn measure(sessions: u32, jobs: Counts, idle: Counts) -> Vec<WindDownItem> {
+/// The six rows for the numbers that were just measured. The sessions row is always
+/// `leftRunning`: game mode never stops a session. The other programs are closed in the first
+/// step of the wind-down, and never interrupt: a program that shows a window is only asked, and a
+/// program that is asked something stays (section 06 6.11).
+pub fn measure(sessions: u32, other_apps: u32, jobs: Counts, idle: Counts) -> Vec<WindDownItem> {
     vec![
         row(
             SESSIONS,
@@ -67,6 +72,13 @@ pub fn measure(sessions: u32, jobs: Counts, idle: Counts) -> Vec<WindDownItem> {
             "bot",
             sessions,
             WindDownEffect::LeftRunning,
+        ),
+        row(
+            OTHER_APPS,
+            WindDownKind::OtherApp,
+            "layout-grid",
+            other_apps,
+            WindDownEffect::Safe,
         ),
         row(
             JOBS,
@@ -101,11 +113,12 @@ pub fn measure(sessions: u32, jobs: Counts, idle: Counts) -> Vec<WindDownItem> {
 
 /// The rows while game mode is off: nothing is counted and nothing interrupts.
 pub fn idle_rows() -> Vec<WindDownItem> {
-    let mut items = measure(0, Counts::default(), Counts::default());
+    let mut items = measure(0, 0, Counts::default(), Counts::default());
     // The sessions row says "left running" only when sessions are counted.
     items[0].effect = WindDownEffect::Safe;
-    items[3].count = 0;
-    items[4].count = 0;
+    for item in &mut items[4..] {
+        item.count = 0;
+    }
     items
 }
 
@@ -127,28 +140,40 @@ mod tests {
     }
 
     #[test]
-    fn there_are_always_five_rows_in_stop_order() {
-        let ids: Vec<_> = measure(0, counts(0, 0), counts(0, 0))
+    fn there_are_always_six_rows_in_stop_order() {
+        let ids: Vec<_> = measure(0, 0, counts(0, 0), counts(0, 0))
             .into_iter()
             .map(|item| item.id)
             .collect();
-        assert_eq!(ids, [SESSIONS, JOBS, IDLE_JOBS, SERVICE, WINDOW]);
+        assert_eq!(
+            ids,
+            [SESSIONS, OTHER_APPS, JOBS, IDLE_JOBS, SERVICE, WINDOW]
+        );
     }
 
     #[test]
     fn a_row_interrupts_only_when_a_run_is_in_progress() {
-        let items = measure(2, counts(3, 0), counts(1, 1));
-        assert_eq!(items[1].count, 3);
-        assert_eq!(items[1].effect, WindDownEffect::Safe);
-        assert_eq!(items[2].effect, WindDownEffect::Interrupts);
+        let items = measure(2, 5, counts(3, 0), counts(1, 1));
+        assert_eq!(items[2].count, 3);
+        assert_eq!(items[2].effect, WindDownEffect::Safe);
+        assert_eq!(items[3].effect, WindDownEffect::Interrupts);
         assert_eq!(interrupting(&items), 1);
     }
 
     #[test]
     fn the_sessions_row_is_left_running_and_never_counted_as_interrupted() {
-        let items = measure(4, counts(0, 0), counts(0, 0));
+        let items = measure(4, 0, counts(0, 0), counts(0, 0));
         assert_eq!(items[0].count, 4);
         assert_eq!(items[0].effect, WindDownEffect::LeftRunning);
+        assert_eq!(interrupting(&items), 0);
+    }
+
+    #[test]
+    fn the_other_apps_row_counts_programs_and_never_interrupts() {
+        let items = measure(0, 7, counts(0, 0), counts(0, 0));
+        assert_eq!(items[1].kind, WindDownKind::OtherApp);
+        assert_eq!(items[1].count, 7);
+        assert_eq!(items[1].effect, WindDownEffect::Safe);
         assert_eq!(interrupting(&items), 0);
     }
 

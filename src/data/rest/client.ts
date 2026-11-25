@@ -3,7 +3,7 @@
 import type { Bridge, HttpMethod } from '@/shell/bridge'
 import type { RainApi } from '../api'
 import type {
-  AppEntry, CalendarEvent, ClaudeSession, DiskNode, DiskScan, Drive, FocusResult, Game, GameLibrary, GameModeState,
+  AppEntry, CalendarEvent, ClaudeSession, DiskNode, DiskScan, Drive, FocusResult, Game, GameLibrary, GameModeState, OtherApps,
   Habit, HabitDay, HabitStats, HabitSummary, Health, IdleJob, JobRun, LaunchRun, LogLine, MachineState, OpenNoteResult,
   PathCheck, PathsCheckBody, PermissionAnswerResult, Pool, Project, PropertySuggestion, RevealBody,
   ScheduledJob, SearchItem, Settings, StartScanBody, VaultStatus,
@@ -166,5 +166,12 @@ export function createRestApi(
       return stream.deliver?.('gameMode', state) ?? state
     },
     markGameModeRecapSeen: () => call<void>('POST', '/game-mode/recap/seen'),
+    // The list is not a topic: it is asked for by the screen, because it looks at every process.
+    getOtherApps: async () => {
+      const state = await call<GameModeState>('GET', `/game-mode${query({ otherApps: 'true' })}`)
+      if (!state.otherApps) throw toRainError(new Error('The list of programs is missing'))
+      return state.otherApps
+    },
+    updateOtherApps: (patch) => call<OtherApps>('PATCH', '/game-mode/other-apps', patch),
   }
 }
