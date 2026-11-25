@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// The Disk screen (spec 7.7). Three states: the list of drives, a scan in progress, and
-// the result, where the folder list and the treemap share one selection.
+// The Disk screen (spec 7.7), opened from the Disk tile of Hardware. Three states: the list of
+// drives, a scan in progress, and the result, where the folder list and the treemap share one
+// selection. Esc and Backspace on its top level go back to the Hardware grid.
 import { computed, watch } from 'vue'
 import { runAction, runPrimary } from '@/actions/context'
 import type { ActionTarget } from '@/actions/types'
@@ -19,7 +20,7 @@ import { api } from '@/data'
 import type { DiskNode, Drive } from '@/data/types'
 import { keepFocus } from '@/lib/focus'
 import { formatBytes } from '@/lib/format'
-import { routeByName } from '@/nav/routes'
+import { useNav } from '@/nav/useNav'
 import { matches } from '@/lib/score'
 import { cancelScanAction, diskView, scanAction } from './actions'
 import { keepTreeWhileAway } from './diskCache'
@@ -29,11 +30,12 @@ import NotAccessible from './NotAccessible.vue'
 import { isInside, shareOf, trailTo } from './folders'
 import TreemapCanvas from './TreemapCanvas.vue'
 
-const { icon } = routeByName.disk
+const DISK_ICON = 'hard-drive'
+const nav = useNav()
 
 keepTreeWhileAway()
 
-const filter = useSectionQuery('disk')
+const filter = useSectionQuery('hardware')
 const drives = useResource('drives', () => api.listDrives())
 const { scan, folderPath } = diskView
 
@@ -95,11 +97,25 @@ useScreen({
   page: (dir) => (folder.value ? rowSelection.page(dir) : driveSelection.page(dir)),
   stepOut() {
     const parent = trail.value.at(-2)
-    if (!parent) return false
-    folderPath.value = parent.path
+    if (parent) {
+      folderPath.value = parent.path
+      return true
+    }
+    // The top level: back to the tiles.
+    backToHardware()
+    return true
+  },
+  back() {
+    // A filter text goes first (the Esc ladder clears it), and a deep folder is left with Backspace.
+    if (filter.value !== '' || trail.value.length > 1) return false
+    backToHardware()
     return true
   },
 })
+
+function backToHardware() {
+  nav.setSub('devices')
+}
 
 // ---- actions from the mouse ----
 
@@ -132,9 +148,18 @@ function sharePercent(node: DiskNode, parent: DiskNode): string {
 
 <template>
   <ScreenFrame>
-    <template v-if="folder" #strip>
+    <template #strip>
       <Breadcrumb class="min-w-0 flex-1 px-4">
         <BreadcrumbList class="flex-nowrap gap-1 text-13">
+          <BreadcrumbItem class="shrink-0">
+            <BreadcrumbLink as="button" type="button" tabindex="-1" @mousedown="keepFocus" @click="backToHardware">
+              Hardware
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem v-if="!folder" class="shrink-0">
+            <BreadcrumbPage>Disk</BreadcrumbPage>
+          </BreadcrumbItem>
           <template v-for="(crumb, index) in trail" :key="crumb.path">
             <BreadcrumbSeparator v-if="index > 0" />
             <BreadcrumbItem class="min-w-0">
@@ -154,8 +179,8 @@ function sharePercent(node: DiskNode, parent: DiskNode): string {
           </template>
         </BreadcrumbList>
       </Breadcrumb>
-      <NotAccessible v-if="trail.length === 1 && scan?.notAccessible" :count="scan.notAccessible" class="px-2" />
-      <span class="shrink-0 px-4 font-mono text-xs text-muted-foreground">{{ formatBytes(folder.sizeBytes) }}</span>
+      <NotAccessible v-if="folder && trail.length === 1 && scan?.notAccessible" :count="scan.notAccessible" class="px-2" />
+      <span v-if="folder" class="shrink-0 px-4 font-mono text-xs text-muted-foreground">{{ formatBytes(folder.sizeBytes) }}</span>
     </template>
 
     <!-- Result -->
@@ -202,7 +227,7 @@ function sharePercent(node: DiskNode, parent: DiskNode): string {
       <div v-else-if="drives.error.value && !drives.data.value" class="mx-auto w-full max-w-[560px] p-2 pt-6">
         <ErrorRow message="Drives unavailable" :detail="drives.error.value.message" @retry="drives.reload()" />
       </div>
-      <EmptyState v-else-if="drives.data.value?.length === 0" :icon="icon" title="No drives found" />
+      <EmptyState v-else-if="drives.data.value?.length === 0" :icon="DISK_ICON" title="No drives found" />
       <DriveList
         v-else-if="drives.data.value"
         :groups="driveGroups"

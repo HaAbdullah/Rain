@@ -92,4 +92,5 @@ rayon = "1.12"                    # the disk walker's thread pool, built for one
 croner = "5.0.0"
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
 chrono-tz = "0.10.4"              # dev-dependency of rain-backend only: DST tests of the schedule
-yaml-rust2 = "0.13.2"              # TEST ONLY (life): an independent YAML parser that checks the frontmatter editor
+hidapi = { version = "2.6", default-features = false, features = ["windows-native"] }   # hardware (section 05): lists HID devices and reads them. The windows-native backend needs no C compiler
+yaml-rust2 = "0.13.2"            # TEST ONLY (life): an independent YAML parser that checks the frontmatter editor

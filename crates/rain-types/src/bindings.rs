@@ -57,6 +57,8 @@ pub fn single_file(config: &Config) -> String {
         // disk and machine (section 05)
         FileCategory, NodeKind, ScanStatus, Drive, DiskNode, DiskScan, MachineState, StartScanBody,
         RevealBody, PathsCheckBody, PathKind, PathCheck,
+        // hardware (section 05)
+        HardwareKind, HardwareLink, HardwareBattery, HardwareOpenKind, HardwareOpens, HardwareTile,
         // game mode (section 06)
         GameModePhase, GameModeChoice, WindDownKind, WindDownEffect, WindDownStatus, WindDownItem,
         RecapOutcome, RecapItem, GameModeRecap, GameModeState, StartGameModeBody, GameModeChoiceBody,

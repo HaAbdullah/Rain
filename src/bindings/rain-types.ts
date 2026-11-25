@@ -182,6 +182,18 @@ export type PathKind = "dir" | "file";
 
 export type PathCheck = { path: string, exists: boolean, kind?: "dir" | "file", };
 
+export type HardwareKind = "disk" | "keyboard" | "mouse";
+
+export type HardwareLink = "usb" | "receiver" | "bluetooth";
+
+export type HardwareBattery = { percent: number, charging?: boolean, estimated: boolean, };
+
+export type HardwareOpenKind = "disk" | "app" | "url" | "none";
+
+export type HardwareOpens = { kind: "disk" | "app" | "url" | "none", label?: string, };
+
+export type HardwareTile = { id: string, kind: "disk" | "keyboard" | "mouse", name: string, found: boolean, product?: string, connection?: "usb" | "receiver" | "bluetooth", battery?: HardwareBattery, drives: Array<Drive>, opens: HardwareOpens, problem?: string, };
+
 export type GameModePhase = "off" | "review" | "countdown" | "windingDown" | "done";
 
 export type GameModeChoice = "wait" | "stopAnyway" | "closeNow" | "cancel";

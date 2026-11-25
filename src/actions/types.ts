@@ -12,6 +12,7 @@ import type {
   DiskNode,
   Drive,
   Game,
+  HardwareTile,
   HabitSummary,
   ID,
   IdleJob,
@@ -37,6 +38,7 @@ export type ItemType =
   | 'habit'
   | 'habitDay'
   | 'drive'
+  | 'hardware'
   | 'diskNode'
   | 'setting'
 
@@ -64,6 +66,7 @@ export type ActionTarget =
   | { type: 'habit'; id: ID; item: HabitSummary }
   | { type: 'habitDay'; id: ID; item: HabitDayItem }
   | { type: 'drive'; id: ID; item: Drive }
+  | { type: 'hardware'; id: ID; item: HardwareTile }
   | { type: 'diskNode'; id: ID; item: DiskNode }
   | { type: 'setting'; id: ID; item: SettingDef }
 

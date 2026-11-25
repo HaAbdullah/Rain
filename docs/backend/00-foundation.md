@@ -1806,6 +1806,8 @@ This table is the contract between the REST client and the modules. Comments in 
 | `runIdleJob` | `POST /idle-jobs/{id}/run` | idle | 03 | |
 | `getIdleJobLog` | `GET /idle-jobs/{id}/log` | idle | 03 | |
 | `getMachineState` | `GET /machine` | machine | 05 | |
+| `listHardware` | `GET /hardware` | hardware | 05 | read at the call, no cache (section 05, 13) |
+| `openHardware` | `POST /hardware/{id}/open` | hardware | 05 | starts what a tile of the last read opens |
 | `getScanNode` (new) | `GET /scans/{id}/node` | disk | 05 | lazy subtree route |
 | `getVaultStatus` | `GET /vault` | life | 04 | |
 | `listHabits` | `GET /habits` | life | 04 | |

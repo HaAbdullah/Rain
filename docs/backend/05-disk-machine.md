@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Area | disk (drives, scan, subtree, reveal, path check) and machine (user idle time) |
-| Modules | `disk`, `machine` (foundation section 11.2). The route `POST /paths/check` is owned and built here, in `disk` (open point 1); section 06 does not define it |
+| Modules | `disk`, `machine` (foundation section 11.2), and `hardware` (section 13, added later).  The route `POST /paths/check` is owned and built here, in `disk` (open point 1); section 06 does not define it |
 | Stage | 3, "Read-only sources" (foundation section 14.3). |
 | Author | feature designer for disk and machine |
 | Date | 2026-11-22 |
@@ -1289,3 +1289,31 @@ Only what cannot be decided inside this area.
 | 6 | SETTLED: section 06 calls `disk().cancel_running()` in its silent step 1b (6.7.5) when game mode starts. Original text: the wind-down must call `disk::Service::cancel_running()` and `is_scanning()` (public, section 7). `state.activity` is the way `ping.busy` learns about the scan; the exact method name is core's (this section assumes a guard that counts while it lives). | section 06, architect | `cancel_running()` and the guard exist | nothing |
 | 7 | SETTLED by foundation 8.6: `MockApi = Omit<RainApi, RetiredMockMethod>` (created in stage 2 by section 06, extended here, 9.8); no stub is kept, the disk slice and seed are deleted in stage 3. The side effect: `VITE_RAIN_MOCK=1` has no Disk screen from stage 3 until stage 10. If the all-mock mode must keep working, the architect keeps `seed/disk.ts` and the slice and only changes the routing rows. | architect | the stub of 9.8 | nothing |
 | 8 | OneDrive: a file kept on the device may carry the placeholder reparse point and then be skipped, so its size is missing from the total (UNPROVEN, section 6.3). The check 4 compares a folder with Explorer. If the difference is large, the options are to count reparse FILES that are not marked "recall on access" (needs the attribute bits `0x400000` and `0x40000`), at the price of a little more code; the user decides whether the OneDrive folder matters. | the user, after check 4 | all reparse points are skipped and counted; the count is logged at `info` | nothing |
+
+---------------------------------------------------------------------------------------------------
+
+## 13. Hardware (module `hardware`)
+
+The Hardware screen shows the disks, the keyboard and the mouse, one tile each. The screen is opened rarely, so the module costs nothing in between: no thread, no timer, no cache, no watcher of devices, and nothing at start except opening `hardware.toml`. Every read happens inside the call that asks for it.
+
+**Routes.** `GET /hardware` returns `HardwareTile[]` (`listHardware`). `POST /hardware/{id}/open` (`openHardware`, 204) starts what the tile of the last read opens. Errors of the open route: 409 `hardwareNotRead` (no read yet, or an old id), 409 `nothingToOpen`, 500 `openFailed`. The Disk tile needs no call: the screen shows its own Disk screen.
+
+**One read.** The drives (through `disk::Service::list_drives`), the HID device list and the list of installed programs run side by side. Then every Logitech channel is asked, side by side. Each part has its own limit of 1.5 s (`DEVICE_LIMIT`). A part that is late gives `None`: its tile is empty with a `problem` text, the others are not touched. The blocking readers get a deadline of 85 % of the limit, so what they have read by then is returned and not thrown away.
+
+**Files of the module.**
+- `inputs.rs`: sorts HID collections into keyboards, mice and HID++ channels. A device that has a keyboard interface of its own and a mouse collection on the same interface (mouse keys) is a keyboard. A vendor with `hidpp` in the table (Logitech) is never listed from its plain interfaces, because a receiver has a keyboard and a mouse interface whatever is paired.
+- `hidpp.rs`: the HID++ 2.0 conversation, over a `Port` trait.
+- `vendor.rs`: the vendor table (Logitech now; one row more for a new vendor) and how a program is found in the installed programs of Windows (`DisplayIcon`, else `InstallLocation` plus the file name; the file must exist).
+- `model.rs`: `hardware.toml`. `source.rs`: the `Source` seam. `platform/hid.rs`: the only file that touches HID.
+
+**HID.** The `hidapi` crate (feature `windows-native`: no C compiler, no DLL) lists the devices and opens one path. It was chosen over raw `windows` calls because it already handles enumeration, the report descriptor and reads with a timeout, which would be about 300 lines of unsafe code here. Listing opens no device. A channel is opened in the shared mode, so G HUB and VIA keep working.
+
+**HID++ requests (read only).** Long report `0x11`, 20 bytes, software id `0xA`. The channel is the collection with usage page `0xFF00` usage 2 (USB, receivers) or `0xFF43` usage `0x0202` (Bluetooth LE). A ping (root function 1) goes to device 255 (a cable or Bluetooth) and to slots 1 to 6 (a receiver) at once; whoever answers is read: root `GetFeature` for `0x0005`, then the name (functions 0 and 1) and the type (function 2); then the battery from the first feature the device has: `0x1004` function 1, else `0x1001` function 0, else `0x1000` function 0. Nothing else is sent: no function that sets a value, lights an LED or changes a threshold. A test checks that every request is on this list. A percent from `0x1001` is worked out from the voltage and is marked `estimated`.
+
+**Tiles.** Ids: `disk`, `keyboard`, `mouse`, then `keyboard-2` and so on. A kind with no device keeps a tile with `found: false`. The default of Enter: the vendor program, else the vendor download page; a keyboard with the VIA raw HID interface (`0xFF60`, `0x61`): the VIA program, else `https://usevia.app`. Programs and pages start through `state.opener()` (`ShellExec`).
+
+**`hardware.toml`.** `[[tile]]` with `id` (a tile id or a kind), `name`, `hidden`, `opens` (a program path, a web address, "disk" or "none"). A rule by id beats a rule by kind. A broken file keeps the last good copy and shows in `/health`. A program path that does not exist leaves the tile with nothing to open and a `problem`.
+
+**Left out.** Earbuds and headphones: Windows keeps a Bluetooth battery value, but on this PC its time stamp was three days old, so it is a guess. A tile is shown only when a clean reading exists.
+
+**Tests.** Pure: HID++ answers from byte fixtures, the vendor table, `hardware.toml`, the sorting of HID collections (unit tests in the module). On a backend with a fake PC (`tests/hardware.rs`): tiles, the slow device, the rules, the open route, and "no read at start, a new read for every call". One test (`real_pc`, ignored) reads this PC.

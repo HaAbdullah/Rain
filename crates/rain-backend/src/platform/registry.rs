@@ -48,6 +48,52 @@ fn read_value<T: FromRegValue>(hive: Hive, key: &str, name: &str) -> io::Result<
     }
 }
 
+// ---- installed programs ----
+
+/// One program from the "installed programs" list of Windows.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UninstallEntry {
+    pub display_name: String,
+    /// `DisplayIcon`: often the path of the program itself, sometimes with `,0` after it.
+    pub display_icon: String,
+    pub install_location: String,
+}
+
+const UNINSTALL_KEY: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
+const UNINSTALL_KEY_32: &str = r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
+
+/// The installed programs (machine-wide, 32-bit and per user) that have a name. Reads a few
+/// dozen small keys; an unreadable key is skipped.
+pub fn uninstall_entries() -> Vec<UninstallEntry> {
+    let places = [
+        (Hive::LocalMachine, UNINSTALL_KEY),
+        (Hive::LocalMachine, UNINSTALL_KEY_32),
+        (Hive::CurrentUser, UNINSTALL_KEY),
+    ];
+    let mut found = Vec::new();
+    for (hive, path) in places {
+        let Ok(root) = hive.root().open_subkey_with_flags(path, KEY_READ) else {
+            continue;
+        };
+        for name in root.enum_keys().flatten() {
+            let Ok(key) = root.open_subkey_with_flags(&name, KEY_READ) else {
+                continue;
+            };
+            let text = |value: &str| key.get_value::<String, _>(value).unwrap_or_default();
+            let display_name = text("DisplayName");
+            if display_name.trim().is_empty() {
+                continue;
+            }
+            found.push(UninstallEntry {
+                display_name,
+                display_icon: text("DisplayIcon"),
+                install_location: text("InstallLocation"),
+            });
+        }
+    }
+    found
+}
+
 // ---- start with Windows ----
 
 /// `HKCU\...\Run`: a value here is started at logon.

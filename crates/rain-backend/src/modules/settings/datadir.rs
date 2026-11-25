@@ -23,7 +23,7 @@ use crate::machine_file;
 
 /// The files and the folder that Rain keeps in a data folder (foundation 10.2). A folder holds
 /// "Rain files" when it has any of them.
-const KNOWN_FILES: [&str; 9] = [
+const KNOWN_FILES: [&str; 10] = [
     "settings.toml",
     "pins.toml",
     "pools.toml",
@@ -33,6 +33,7 @@ const KNOWN_FILES: [&str; 9] = [
     "jobs.toml",
     "idle-jobs.toml",
     "habits.toml",
+    "hardware.toml",
 ];
 /// The folder of the covers that the user picked for games.
 const MEDIA_FOLDER: &str = "media";

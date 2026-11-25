@@ -2,7 +2,7 @@
 //!
 //! Every module is one folder with the same files (`mod.rs`, `routes.rs`, `service.rs`,
 //! `store.rs`). Modules call each other only through the other module's public `Service`.
-//! All twelve modules are built. The table below holds the entry of each one (name, migrations,
+//! All thirteen modules are built. The table below holds the entry of each one (name, migrations,
 //! router, init, start, stop); a feature section only changes the files of its own folder.
 
 use std::time::Duration;
@@ -22,6 +22,7 @@ use crate::store::migrations::{self, Migration, MigrationError};
 pub mod disk;
 pub mod gamemode;
 pub mod games;
+pub mod hardware;
 pub mod idle;
 pub mod jobs;
 pub mod launcher;
@@ -56,6 +57,7 @@ pub const MODULES: &[ModuleEntry] = &[
     lifecycle::ENTRY,
     machine::ENTRY,
     disk::ENTRY,
+    hardware::ENTRY,
     launcher::ENTRY,
     projects::ENTRY,
     games::ENTRY,
@@ -248,7 +250,7 @@ mod tests {
         let count = names.len();
         names.dedup();
         assert_eq!(names.len(), count);
-        assert_eq!(count, 12);
+        assert_eq!(count, 13);
     }
 
     #[tokio::test]
@@ -264,6 +266,7 @@ mod tests {
         state.lifecycle();
         state.machine();
         state.disk();
+        state.hardware();
         state.launcher();
         state.projects();
         state.games();
