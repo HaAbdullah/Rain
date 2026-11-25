@@ -41,11 +41,7 @@ impl ShellFactsCell {
     /// Stores a report. Returns true when it differs from the previous one.
     pub fn set(&self, facts: ShellFacts) -> bool {
         let visible = facts.window_visible;
-        let mut stored = self
-            .0
-            .facts
-            .write()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut stored = self.0.facts.write().unwrap_or_else(PoisonError::into_inner);
         let changed = stored.as_ref() != Some(&facts);
         *stored = Some(facts);
         drop(stored);

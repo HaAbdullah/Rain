@@ -882,7 +882,10 @@ async fn sessions_a_hidden_window_reads_no_transcript_and_the_next_show_catches_
     backend.state.shell_facts.set(window_facts(false));
     let reads = service.transcript_reads();
     for n in 2..5 {
-        append(&path, &assistant_line(n, "While hidden.", 100 * u64::from(n)));
+        append(
+            &path,
+            &assistant_line(n, "While hidden.", 100 * u64::from(n)),
+        );
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
     }
     assert_eq!(service.transcript_reads(), reads, "no read while hidden");
@@ -891,7 +894,11 @@ async fn sessions_a_hidden_window_reads_no_transcript_and_the_next_show_catches_
     backend.state.shell_facts.set(window_facts(true));
     let mut caught_up = false;
     for _ in 0..100 {
-        if service.list().iter().any(|s| s.last_message == "While hidden.") {
+        if service
+            .list()
+            .iter()
+            .any(|s| s.last_message == "While hidden.")
+        {
             caught_up = true;
             break;
         }

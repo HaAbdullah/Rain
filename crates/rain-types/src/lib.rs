@@ -75,10 +75,10 @@ pub use sessions::{
 pub use settings::{
     CountdownSeconds, MonitorClaudeState, ResetAfterSeconds, SUMMON_HOTKEY, Settings, SettingsPatch,
 };
-pub use themes::{VsCodeCurrentTheme, VsCodeTheme, VsCodeThemeTokens};
 pub use system::{
     ConfigIssue, Health, Ping, ShellFacts, ShellStatus, ShutdownBody, SourceState, SourceStatus,
 };
+pub use themes::{VsCodeCurrentTheme, VsCodeTheme, VsCodeThemeTokens};
 
 /// Helpers shared by the unit tests of every module of this crate.
 #[cfg(test)]
