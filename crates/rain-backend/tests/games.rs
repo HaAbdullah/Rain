@@ -17,7 +17,7 @@ use common::{PATIENCE, TestBackend};
 use futures_util::future::BoxFuture;
 use hyper::{Method, StatusCode};
 use rain_backend::core::launch_contract::{ItemSource, LaunchPlanner, OpenRequest, StepAction};
-use rain_backend::modules::games::{ProcessWaiter, SteamRegistry};
+use rain_backend::modules::games::{ProcessWaiter, ProgramIconRenderer, SteamRegistry};
 use rain_types::limits::API_PREFIX;
 use rain_types::{
     Game, GameLibrary, GameSource, LaunchRun, LaunchTarget, LaunchType, RunStatus, SourceState,
@@ -78,10 +78,36 @@ const SETTINGS: &str = "schema_version = 1\n\
     epic_path = '{TEMP}\\Epic'\n\
     game_folders = ['{TEMP}\\Games']\n";
 
+/// Draws no icon: it hands out a fixed PNG and says which programs it was asked about.
+#[derive(Default)]
+struct FakeProgramIcons {
+    drawn: Mutex<Vec<PathBuf>>,
+}
+
+impl FakeProgramIcons {
+    fn count(&self) -> usize {
+        self.drawn.lock().unwrap().len()
+    }
+}
+
+impl ProgramIconRenderer for FakeProgramIcons {
+    fn render<'a>(&'a self, exe: &'a Path) -> BoxFuture<'a, Option<Vec<u8>>> {
+        self.drawn.lock().unwrap().push(exe.to_path_buf());
+        Box::pin(async { Some(ICON_PNG.to_vec()) })
+    }
+}
+
+const ICON_PNG: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 9, 9, 9];
+
 fn builder() -> common::TestBackendBuilder {
+    builder_with_icons(Arc::new(FakeProgramIcons::default()))
+}
+
+fn builder_with_icons(icons: Arc<FakeProgramIcons>) -> common::TestBackendBuilder {
     TestBackend::builder()
         .file("settings.toml", SETTINGS)
         .with::<dyn SteamRegistry>(Arc::new(FakeSteamRegistry { active: Some(1111) }))
+        .with::<dyn ProgramIconRenderer>(icons)
 }
 
 fn temp_of(backend: &TestBackend) -> PathBuf {
@@ -580,7 +606,8 @@ async fn a_folder_game_can_be_corrected_and_returned_to_the_guess() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["title"], "Fixture Quest");
     assert_eq!(body["exeGuessed"], true);
-    assert!(body.get("coverUrl").is_none());
+    // No cover of its own again: the icon of the guessed program stands in for it.
+    assert_eq!(body["coverIsIcon"], true);
     assert!(!games_toml(&backend).contains("Fixture Quest: Remastered"));
     assert_eq!(
         fs::read_dir(backend.data_dir.join("media"))
@@ -1054,6 +1081,105 @@ async fn covers_are_served_with_an_etag_and_unknown_ids_are_not_found() {
             .unwrap();
         assert_eq!(missing.status, StatusCode::NOT_FOUND, "{id}");
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_local_game_without_a_cover_shows_the_icon_of_its_program_drawn_once() {
+    let icons = Arc::new(FakeProgramIcons::default());
+    let backend = builder_with_icons(Arc::clone(&icons)).start().await;
+    let temp = temp_of(&backend);
+    make_steam(&temp);
+    make_folder_games(&temp);
+    touch(
+        &temp
+            .join("Games")
+            .join("Fixture Quest")
+            .join("alt")
+            .join("Other.exe"),
+        5,
+    );
+    let get = |url: String, headers: Vec<(&'static str, String)>| {
+        let backend = &backend;
+        async move {
+            let headers: Vec<(&str, &str)> =
+                headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            backend
+                .client
+                .request(Method::GET, &format!("{API_PREFIX}/{url}"), None, &headers)
+                .await
+                .unwrap()
+        }
+    };
+
+    // Listing and rescanning only look at the program file: nothing is drawn.
+    let library = refreshed(&backend).await;
+    let quest = game(&library, "game-dir-fixture-quest");
+    assert_eq!(quest.cover_is_icon, Some(true));
+    let url = quest.cover_url.clone().unwrap();
+    assert!(game(&library, "game-dir-fixture-arena").cover_is_icon == Some(true));
+    assert!(
+        game(&library, "game-steam-1000001").cover_is_icon.is_none(),
+        "a Steam cover is a cover"
+    );
+    refreshed(&backend).await;
+    assert_eq!(icons.count(), 0, "a scan draws nothing");
+
+    // The first request for the picture draws it; every later one reads the file.
+    let first = get(url.clone(), vec![]).await;
+    assert_eq!(first.status, StatusCode::OK);
+    assert_eq!(first.headers["content-type"], "image/png");
+    assert_eq!(first.body.as_ref(), ICON_PNG);
+    assert_eq!(icons.count(), 1);
+    let etag = first.headers["etag"].to_str().unwrap().to_owned();
+    let again = get(url.clone(), vec![("if-none-match", etag)]).await;
+    assert_eq!(again.status, StatusCode::NOT_MODIFIED);
+    get(url.clone(), vec![]).await;
+    let rescanned = refreshed(&backend).await;
+    assert_eq!(
+        game(&rescanned, "game-dir-fixture-quest").cover_url,
+        Some(url.clone())
+    );
+    get(url.clone(), vec![]).await;
+    assert_eq!(icons.count(), 1, "drawn once, kept in the cache");
+
+    // Correcting the program changes the picture and its address.
+    let (status, body) = backend
+        .send(
+            "PATCH",
+            "/games/game-dir-fixture-quest",
+            Some(json!({ "exePath": "alt\\Other.exe" })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let corrected = body["coverUrl"].as_str().unwrap().to_owned();
+    assert_ne!(corrected, url);
+    assert_eq!(get(corrected, vec![]).await.status, StatusCode::OK);
+    assert_eq!(icons.count(), 2);
+    assert!(icons.drawn.lock().unwrap()[1].ends_with("alt\\Other.exe"));
+
+    // Back to the guess: its icon is still in the cache.
+    let (_, body) = backend
+        .send(
+            "PATCH",
+            "/games/game-dir-fixture-quest",
+            Some(json!({ "exePath": "" })),
+        )
+        .await;
+    assert_eq!(body["coverUrl"].as_str(), Some(url.as_str()));
+    get(url, vec![]).await;
+    assert_eq!(icons.count(), 2);
+
+    // A cover that the user picks wins over the icon.
+    fs::write(temp.join("pic.png"), PNG).unwrap();
+    let (_, body) = backend
+        .send(
+            "PATCH",
+            "/games/game-dir-fixture-quest",
+            Some(json!({ "coverPath": temp.join("pic.png").to_string_lossy() })),
+        )
+        .await;
+    assert!(body.get("coverIsIcon").is_none());
+    assert!(body["coverUrl"].is_string());
 }
 
 // ---- size ----

@@ -124,6 +124,7 @@ Exceptions: on the Game mode screen Esc cancels game mode and returns to the pre
 ### 2.6 While hidden
 
 - `<html data-hidden>` is set. CSS pauses the spinner; `useNow` and every interval of the page stop. The backend keeps running, and so does game mode: hiding the window never cancels it.
+- The shell tells the backend when the window is shown or hidden (`PUT /internal/shell`, `windowVisible`). While it is hidden the backend reads no Claude transcript and no daily note; on show it reads what moved (see 03 and 00 section 6.5). The status spinner turns in 8 steps a second, not smoothly.
 - Two one-shot timers are allowed: reset to Home after `resetAfterSeconds`, and drop the disk tree 5 minutes after leaving Disk.
 - Only the active screen is mounted (`<component :is>`, no KeepAlive).
 
@@ -175,6 +176,7 @@ Width 56, background `--sidebar`, right border `--sidebar-border`.
 - Tooltip to the right after 300 ms: name + keycap.
 - Workflows badge: amber pill (min 16x16, 12 px / 600, top-right) with the count of sessions waiting on you. With no waiting session and at least one job whose last run failed: an 8 px `--status-failed` dot instead.
 - No labels, no digit overlay.
+- The top icons can be reordered: drag one up or down (pointer events; a line shows the gap it will land in) or use Settings, Appearance, "Sidebar order" (move up and down, "Reset order"). The order is kept in localStorage `rain.rail-order` (a list of route names; unknown names are dropped and new sections are appended). The keys follow it: Ctrl+1 is the first icon from the top, Ctrl+2 the second, up to Ctrl+9. Tooltips, the shortcut sheet and the "Go to" commands show the current keys. Game mode (Ctrl+G) and Settings (Ctrl+,) stay at the bottom with their keys. The logic is in `src/nav/rail-order.ts` (pure), the state in `src/nav/useRailOrder.ts`.
 
 ### 3.4 Routes
 
@@ -189,6 +191,7 @@ No vue-router. `src/nav/routes.ts` holds the table; `useNav()` holds `route: { n
 | `/workflows/:sub` | `workflows` | Workflows | `workflow` | Ctrl+5 | top | `sessions`, `jobs`, `idle` |
 | `/life` | `life` | Life | `calendar-check` | Ctrl+6 | top | none |
 | `/hardware/:sub` | `hardware` | Hardware | `cpu` | Ctrl+7 | top | `devices`, `disk` (never remembered: Ctrl+7 always shows the tiles) |
+| `/claude/:sub` | `claude` | Claude | `library` | Ctrl+8 | top | `skills`, `memory`, `instructions`, `agents`, `setup` |
 | `/game-mode` | `gameMode` | Game mode | `circle-power` | Ctrl+G | bottom | none |
 | `/settings` | `settings` | Settings | `settings` | Ctrl+, | bottom | none |
 
@@ -280,7 +283,7 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 | Window | Ctrl+= or Ctrl+Num+ | Zoom in | Always |
 | Window | Ctrl+- or Ctrl+Num- | Zoom out | Always |
 | Window | Ctrl+0 | Reset zoom | Always |
-| Go | Ctrl+1 .. Ctrl+7 | Home, Apps, Projects, Games, Workflows, Life, Hardware | Always |
+| Go | Ctrl+1 .. Ctrl+9 | The sections in the order of the rail (by default Home, Apps, Projects, Games, Workflows, Life, Hardware, Claude) | Always |
 | Go | Ctrl+, | Settings | Always |
 | Go | Ctrl+G | Game mode | Always |
 | Go | Alt+← , the mouse's back button, a keyboard's Back key | Back: leave the open habit or folder, else the screen before. Never hides Rain | Always |
@@ -318,6 +321,7 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 | Session, job, idle job | Home | Show in Workflows | (none) | Transcript / log, Run now |
 | Habit | Life list | Tick / untick today | Open habit | Edit habit, Open today's note, Re-read vault, Delete habit (confirm) |
 | Habit day | Life, open habit | Tick / untick that day (last 31 days) | Open that day's note | Open today's note, Edit habit, Re-read vault |
+| Claude file | Claude | Open in editor (the editor of the projects) | Reveal in Explorer | Copy path |
 | Hardware tile | Hardware | Open what the tile opens (Disk screen, a program, or a web page) | (none) | Read devices again, Copy name |
 | Drive | Disk | Scan | (none) | (none) |
 | Disk node | Disk | Open folder (folders only) | Reveal in Explorer | Rescan, Copy path |
@@ -370,6 +374,8 @@ Five themes. Each one is a full set of the same colour tokens, chosen by `data-t
 | Light | `light` | Light surfaces, dark text, `color-scheme: light` |
 
 The choice lives in the window, not in the backend: `localStorage` key `rain.theme`. A small inline script in `index.html` sets `data-theme` before the first paint, so there is no flash. `src/composables/useTheme.ts` exports `theme` (readonly ref), `themes` (id, name, the three swatch colours) and `setTheme(id)`. An unknown stored value means Dark. Settings, group Appearance, has the picker (7.9).
+
+**Themes from VS Code.** The owner's VS Code themes (for example Bearded Theme) can be used as a sixth kind of theme. They are not in `tokens.css`: the backend reads the installed extensions at run time (`docs/backend/07-vscode-themes.md`; no theme file is copied into the repository, because such themes may be GPL) and returns one value for every token. The window sets them as CSS variables on `<html>` (`data-theme="vscode"`, `color-scheme` and the `dark` class follow the theme's kind). The values are kept in `localStorage` (`rain.theme` is `vscode`, `rain.theme.vscode` holds `{ id, label, dark, tokens }`), and the inline script of `index.html` sets them before the first paint, so the next start does not wait for the backend. Choosing a built-in theme removes them again. "Follow VS Code" (`rain.theme.follow`) asks the backend which theme VS Code uses now (`workbench.colorTheme`) and applies it when it differs; it asks when Rain starts, each time the window is summoned and each time the Settings screen opens, never on a timer, and only while the switch is on. Picking a theme by hand, or a built-in one, turns the switch off. When VS Code uses a theme that is not an installed extension (a built-in one of VS Code), the current theme stays and a waiting glyph says why. `useTheme.ts` also exports `chooseVsCodeTheme(id)`, `setFollowVsCode(on)`, `checkFollowVsCode()`, `vscodeTheme` and `followVsCode`.
 
 ### 5.1 `src/styles/tokens.css`
 
@@ -712,6 +718,7 @@ Layout: `ScreenFrame pane="md"` with a strip.
 - Strip: All, Steam, Epic, Local (`box`), Installed, and Hidden (`eye-off`, only while a game is hidden), each with a count. A source that is not installed or switched off has no tab. A source that failed to load shows `warn` (a `triangle-alert` 12 px in `--status-waiting`) and its message (for example "Game folder not found: D:\Games") in an `ErrorRow` with Retry; the other sources still show. Tab cycles.
 - "Local" holds the games Rain finds in the folders of Settings > Game folders (every direct subfolder is one game; the title is the folder name; the program file is guessed) and the games added by hand.
 - Main: `ItemGrid` `minCol=132`, gap 12 (6 columns at default size). Groups: "Recent" (the last-played games that fit one row, by the live column count), then "Library" A to Z. Hidden games are left out of every tab except Hidden; in Hidden, Enter shows the game again.
+- A local game (game folder or added by hand) that has no cover shows the icon of its program file (`coverIsIcon`): centred at 60% of the tile on `--surface-2`, not stretched, in the tile and in the detail pane. A cover of the user, or one found next to the game, wins. The icon follows a corrected program file.
 - Tile (`GameTile`): cover `aspect-ratio: 2 / 3`, radius 8, `object-fit: cover`, `loading="lazy" decoding="async"`; source badge 20 px bottom-left on a `--surface-1` disc; title on one 12 px line under the cover, truncated.
   - A local game whose program file is gone is dimmed (cover at 45% opacity) and its Enter reads "Choose program". Steam and Epic games are listed only while installed.
   - Running: `Tile ring="success"`.
@@ -812,6 +819,16 @@ The screen for the things plugged into the PC. It is opened rarely, so it reads 
 - Reveal shows the item selected in Explorer and then hides Rain, unless Keep open is on.
 - The tree is kept in a module-level cache for 5 minutes after leaving Disk (one-shot timer), then dropped on the client and in the backend.
 
+### 7.7b Claude (`features/claude/ClaudeScreen.vue`)
+
+One place to see what the Claude setup of the owner contains. Read only: nothing here changes a file under the Claude folder. `ScreenFrame pane="wide"` with a strip: Skills (`sparkles`), Memory (`brain`), Instructions (`scroll-text`), Agents (`bot`, agents and commands together) and Setup (`wrench`), each with a count. Route `/claude/:sub`, rail icon `library`, key Ctrl+8 (by default).
+
+- **List sub-views** (`LibraryView.vue`). The files are grouped by scope: "You", "Project <name>" (the memory folders are turned back into project names) and "Plugin <name>". A row has the icon of its kind, the name, one line of description, and two quiet labels (kind or memory type, scope). The search field filters by name, description and scope. Memory shows the `MEMORY` index first in its project.
+- **Pane** (`ItemDetail.vue`). The description, the facts (kind, scope, file, change time, size, then every other front matter key), and the text as markdown. The text is read when a file is selected. The markdown is drawn by `markdown.ts` and `MarkdownBody.ts` into Vue nodes (headings, lists, tables, code blocks, `code`, bold, italic); a link is shown as text with its address as the tooltip. There is no `v-html`. Buttons: "Open in editor" (Enter), "Reveal in Explorer" (Ctrl+Enter), "Copy path".
+- **Setup** (`SetupView.vue`). Plugins (name, version, "Off"), MCP server names (with stdio or http), hooks (event, matcher, command) and output styles. Names and short facts only: the backend never sends the command, address, `env` or `headers` of an MCP server, and it replaces token-like words in a hook command by `***`. Nothing in Setup is selectable.
+- **States.** Loading: grey rows after 150 ms. Error: `ErrorRow` "Claude library unavailable" with Retry. No Claude folder: `EmptyState` `library` "No Claude folder found". A sub-view with no files has its own empty text; a filter with no hit shows "No match".
+- Data loads when the screen opens and again with Ctrl+R. Nothing is read in the background.
+
 ### 7.8 Game mode (`features/game-mode/GameModeScreen.vue`)
 
 Takes the content area; a centred 480 px column. Ctrl+G (or the rail icon) goes here. "Play in game mode" calls `api.startGameMode({ thenLaunchGameId })` first and then goes here. When there are other programs to close, Ctrl+G shows the **preview** and waits for Start (see below); with none, or with the switch off, it calls `api.startGameMode()` at once, as before. The search field is disabled while the phase is `review`, `countdown` or `windingDown`. Hide on blur is held. Leaving the screen with Ctrl+digit cancels, with the notice "Game mode cancelled". Going Home by the 'return to Home' timer never cancels game mode (it does nothing while game mode runs). Shift+Esc hides the window and game mode goes on.
@@ -843,6 +860,8 @@ Layout: `ScreenFrame pane="none"`, one 640 px column, 24 px padding, scrolls. No
 | Group | Row | Control |
 |---|---|---|
 | Appearance | Theme | `ThemePicker`: five swatch cards (surface, text, accent colour and the name), a radio group. Applied at once and kept in `localStorage`, not in the backend. Enter focuses the chosen card, Left and Right switch theme, Enter returns to the search field |
+| Appearance | VS Code theme | `VsCodeThemeControl`: the switch "Follow VS Code" and a button with the name of the VS Code theme in use. The button opens a popover with a search field and the list of the themes of the installed VS Code extensions (a moon or a sun by each name; the list is read when the popover opens). A click or Enter applies the theme at once. Enter on the row opens the list. Palette: "Theme: follow VS Code", "Theme: stop following VS Code", "Theme: pick one from VS Code" |
+| Appearance | Sidebar order | `SidebarOrderControl`: the sections in rail order, each with move up and move down, and "Reset order". Built on `useRailOrder`; kept in `localStorage` `rain.rail-order`. Enter focuses the group, Left and Right choose a section, Shift+Up and Shift+Down move it, Enter returns to the search field |
 | Appearance | Zoom | `ZoomControl`: zoom out, the level ("125%"), zoom in and reset buttons, built on `useZoom`. Enter focuses the group, Left and Right step the level, Enter returns to the search field |
 | General | Summon hotkey | `KeyHint` Ctrl ` (read-only), hint "Takes this chord from other apps while Rain runs"; a failed dot when another app holds the chord |
 | General | Hide when focus is lost | `Switch` |
@@ -916,6 +935,7 @@ src/
                 sessions/ SessionsView.vue SessionRow.vue SessionDetail.vue RequestCard.vue
                 jobs/     JobsView.vue JobRow.vue JobDetail.vue RunStrip.vue
                 idle/     IdleView.vue IdleRow.vue IdleJobDetail.vue
+    claude/     ClaudeScreen.vue  LibraryView.vue  SetupView.vue  ItemRow.vue  ItemDetail.vue  MarkdownBody.ts  markdown.ts  model.ts  actions.ts
     life/       LifeScreen.vue  HabitRow.vue  HabitStrip.vue  HabitView.vue  HabitYear.vue  HabitEditorDialog.vue  HeatCell.vue
                 useOpenHabit.ts  rows.ts  yearGrid.ts  habitForm.ts  actions.ts
     hardware/   HardwareScreen.vue  HardwareGrid.vue  HardwareCard.vue  model.ts  actions.ts

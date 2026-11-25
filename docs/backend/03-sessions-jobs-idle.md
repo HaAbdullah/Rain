@@ -1,3 +1,5 @@
+
+**While the window is hidden** (the shell reports `windowVisible: false`, foundation 6.5) no transcript is read: the folder watches still fire, but the reads wait. When the window is shown, one look at every live transcript (size and time first, so a quiet file costs one `metadata` call) brings the list up to date before the first paint. A transcript tail is up to 256 KB, so a hidden Rain with a busy Claude session used to read about 70 KB/s. The registry scan stays (small files, only when a file changes) and the exit watches stay, because game mode counts the open sessions.
 # Rain backend, section 03: Claude sessions, scheduled jobs, idle jobs
 
 | | |
@@ -2071,3 +2073,19 @@ The owner's first job is put into the owner's data folder by hand (4.1.4); the s
 - A job stopped by game mode or shutdown shows a neutral square and runs once more at the next start (6.11.5, 6.11.7).
 - A headless Claude job strips every `CLAUDE*` and `ANTHROPIC*` variable from its environment (foundation 11.6); a user who runs jobs with an API key cannot pass it through `env` (secrets never go in TOML). If that matters, a later round adds a Credential Manager reference in the job.
 - Idle jobs freeze (suspend) instead of stopping when the user comes back (6.12.5).
+
+## 13. Claude library (`modules/claude_library/`)
+
+A read only view of the Claude setup of the owner, for the Claude screen. It has no tables, no background work, no watcher, no cache and no service slot: every route scans the few known folders again, on a blocking thread, when it is called. It finds the Claude folder through `ClaudePaths` (so a test or a sandbox with its own folder works).
+
+| Method | Path | Does |
+|---|---|---|
+| GET | `/claude/library` | `ClaudeLibrary`: `found`, `items` (id, kind, name, description, scope, path, modifiedAt, size, memoryType), `setup` (plugins, mcpServers, hooks, outputStyles), `truncated` |
+| GET | `/claude/library/item?id=` | `LibraryText`: the front matter as facts, the body, `truncated`. At most 512 KB |
+| POST | `/claude/library/open` | body `{ id }`. Starts the editor of the projects (`Service::editor_program`) with the file, through `state.opener()` |
+
+- **What is listed.** Skills (`skills/*/SKILL.md`), agents (`agents/*.md`) and commands (`commands/**/*.md`, depth 4) in the Claude folder, in installed plugins and in the `.claude` folder of each known project (`projects.list_cached()`, at most 200); `CLAUDE.md` of the Claude folder and `CLAUDE.md` and `.claude/CLAUDE.md` of each project; `projects/*/memory/*.md`. Scope is "You", "Plugin <name>" or "Project <name>". A memory folder is named after a project when its folder name equals the folder name of a known project; else the drive and the profile folder are cut from it. At most 2500 files; the answer says `truncated` beyond that.
+- **Plugins** come from `plugins/installed_plugins.json` (an `installPath` must lie inside the plugins folder), else from `plugins/cache/<market>/<plugin>/<version>`. The catalogs in `plugins/marketplaces` are not installed plugins and are not read.
+- **Only listed files open.** The id is a hash of the path. The text and open routes look the id up in a fresh scan, so no other path can be read or started. A bad id is `notListed` (404).
+- **Secrets.** The credentials file is never opened. The settings file and the state file of Claude Code are read into a shape that holds only `hooks`, `enabledPlugins` and `mcpServers`. An MCP server gives its name and kind (stdio, http, sse); its command, address, `env` and `headers` are dropped. A hook command is cut to 200 characters and secret-looking words (`sk-`, `ghp_`, `NAME_KEY=value`, `Bearer x`, long tokens) become `***`. `tests/claude_library.rs` proves that a secret planted in these files never appears in any answer.
+- The one place that names `.claude` and the settings file stays `claude_paths.rs` and `hooks_install.rs` (`tests/source_rules.rs`): the library asks them for the project folder (`project_claude_dir`), the state file (`state_file`) and the settings path (`settings_file`).

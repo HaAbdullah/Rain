@@ -11,6 +11,7 @@ export type RouteName =
   | 'workflows'
   | 'life'
   | 'hardware'
+  | 'claude'
   | 'gameMode'
   | 'settings'
 
@@ -118,6 +119,18 @@ export const routes: readonly RouteDef[] = [
     rememberSub: false,
     filterable: true,
     component: () => import('@/features/hardware/HardwareScreen.vue'),
+  },
+  {
+    name: 'claude',
+    path: '/claude/:sub',
+    title: 'Claude',
+    icon: 'library',
+    combo: 'Ctrl+Digit8',
+    rail: 'top',
+    subs: ['skills', 'memory', 'instructions', 'agents', 'setup'],
+    defaultSub: 'skills',
+    filterable: true,
+    component: () => import('@/features/claude/ClaudeScreen.vue'),
   },
   {
     name: 'gameMode',

@@ -98,7 +98,7 @@ export type LayoutSave = { items: Array<LayoutItem>, all: boolean, };
 
 export type GameSource = "steam" | "epic" | "riot" | "custom";
 
-export type Game = { id: string, title: string, source: "steam" | "epic" | "riot" | "custom", coverUrl?: string, installed: boolean, running: boolean, sizeBytes?: number, playtimeMinutes: number, lastPlayedAt?: string, pinned: boolean, hidden: boolean, exePath?: string, exeGuessed?: boolean, installPath?: string, removable?: boolean, };
+export type Game = { id: string, title: string, source: "steam" | "epic" | "riot" | "custom", coverUrl?: string, coverIsIcon?: boolean, installed: boolean, running: boolean, sizeBytes?: number, playtimeMinutes: number, lastPlayedAt?: string, pinned: boolean, hidden: boolean, exePath?: string, exeGuessed?: boolean, installPath?: string, removable?: boolean, };
 
 export type GameSourceStatus = { source: "steam" | "epic" | "riot" | "custom", state: "ok" | "off" | "failed", message?: string, };
 
@@ -239,5 +239,33 @@ export type OtherApps = { enabled: boolean, apps: Array<OtherApp>, alwaysKept: n
 export type OtherAppsPatch = { enabled?: boolean, app?: OtherAppChoice, };
 
 export type OtherAppChoice = { id: string, close: boolean, };
+
+export type LibraryKind = "skill" | "memory" | "instruction" | "agent" | "command";
+
+export type LibraryItem = { id: string, kind: "skill" | "memory" | "instruction" | "agent" | "command", name: string, description: string, scope: string, path: string, modifiedAt?: string, size: number, memoryType?: string, };
+
+export type LibraryPlugin = { name: string, version?: string, enabled?: boolean, };
+
+export type LibraryMcp = { name: string, scope: string, transport?: string, };
+
+export type LibraryHook = { event: string, matcher?: string, command: string, scope: string, };
+
+export type LibraryOutputStyle = { name: string, scope: string, };
+
+export type LibrarySetup = { plugins: Array<LibraryPlugin>, mcpServers: Array<LibraryMcp>, hooks: Array<LibraryHook>, outputStyles: Array<LibraryOutputStyle>, };
+
+export type ClaudeLibrary = { found: boolean, items: Array<LibraryItem>, setup: LibrarySetup, truncated: boolean, };
+
+export type LibraryFact = { key: string, value: string, };
+
+export type LibraryText = { id: string, facts: Array<LibraryFact>, body: string, truncated: boolean, };
+
+export type LibraryOpenBody = { id: string, };
+
+export type VsCodeTheme = { id: string, label: string, extension: string, dark: boolean, };
+
+export type VsCodeThemeTokens = { id: string, label: string, dark: boolean, tokens: Record<string, string>, };
+
+export type VsCodeCurrentTheme = { label?: string, id?: string, };
 
 export const TOPIC_NAMES = ["sessions", "jobs", "idleJobs", "launch", "scan", "gameMode", "settings", "health", "projects", "games", "habits"] as const;

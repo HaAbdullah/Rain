@@ -21,6 +21,8 @@ const REPORT_TIMEOUT: Duration = Duration::from_secs(2);
 /// The facts of the shell that can change while it runs.
 pub struct Facts {
     hotkey: Mutex<Result<(), String>>,
+    /// The visibility that the last snapshot carried, so a report is sent only when it changes.
+    visible: Mutex<Option<bool>>,
 }
 
 impl Facts {
@@ -28,6 +30,7 @@ impl Facts {
     pub fn new() -> Self {
         Self {
             hotkey: Mutex::new(Err("not registered yet".to_owned())),
+            visible: Mutex::new(None),
         }
     }
 
@@ -51,8 +54,14 @@ impl Facts {
         changed
     }
 
+    /// True when the backend was last told another visibility than `visible`.
+    pub fn visibility_changed(&self, visible: bool) -> bool {
+        *self.visible.lock().unwrap_or_else(PoisonError::into_inner) != Some(visible)
+    }
+
     /// The facts as the backend expects them. `window_visible` is read from the window by the caller.
     pub fn snapshot(&self, window_visible: bool) -> ShellFacts {
+        *self.visible.lock().unwrap_or_else(PoisonError::into_inner) = Some(window_visible);
         let hotkey = self.hotkey.lock().unwrap_or_else(PoisonError::into_inner);
         ShellFacts {
             hotkey_registered: hotkey.is_ok(),
@@ -81,6 +90,17 @@ pub async fn report(client: &PipeClient, facts: &ShellFacts) -> Result<(), ApiEr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_visibility_is_news_only_when_the_backend_was_told_another() {
+        let facts = Facts::new();
+        assert!(facts.visibility_changed(true), "nothing was reported yet");
+        facts.snapshot(true);
+        assert!(!facts.visibility_changed(true));
+        assert!(facts.visibility_changed(false));
+        facts.snapshot(false);
+        assert!(!facts.visibility_changed(false));
+    }
 
     #[test]
     fn before_the_hotkey_is_registered_the_facts_say_it_is_not() {

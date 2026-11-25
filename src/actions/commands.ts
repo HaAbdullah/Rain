@@ -2,12 +2,13 @@
 // them with lib/score.ts and merges them into the result list, so "sett" finds
 // Settings.
 import { useCheatSheet } from '@/composables/useCheatSheet'
-import { setTheme, themes } from '@/composables/useTheme'
+import { followVsCodeProblem, setFollowVsCode, setTheme, themes } from '@/composables/useTheme'
 import { resetZoom, zoomIn, zoomOut } from '@/composables/useZoom'
 import { poolEditor, rescanApps } from '@/features/apps/actions'
 import { scanDrive } from '@/features/disk/actions'
 import { habitEditor, openTodaysNote } from '@/features/life/actions'
 import { routes, type RouteName } from '@/nav/routes'
+import { routeCombo } from '@/nav/useRailOrder'
 import { toggleKeepOpen } from './common'
 import type { ActionContext, ActionProvider, TargetOf } from './types'
 
@@ -31,6 +32,7 @@ const ROUTE_KEYWORDS: Record<RouteName, string[]> = {
   workflows: ['claude', 'sessions', 'jobs', 'idle', 'cron'],
   life: ['habits', 'streak', 'vault', 'daily note'],
   hardware: ['disk', 'storage', 'space', 'drives', 'keyboard', 'mouse', 'battery', 'devices'],
+  claude: ['skills', 'memory', 'instructions', 'agents', 'commands', 'plugins', 'mcp', 'hooks', 'claude.md'],
   gameMode: ['wind down', 'close everything', 'shut down', 'quit'],
   settings: ['preferences', 'options', 'configuration'],
 }
@@ -41,7 +43,10 @@ const goCommands: CommandDef[] = routes.map((def) => ({
   title: def.name === 'gameMode' ? 'Start game mode' : `Go to ${def.title}`,
   icon: def.icon,
   keywords: ROUTE_KEYWORDS[def.name],
-  keys: def.combo,
+  // Read each time: the key of a section follows the order of the rail.
+  get keys() {
+    return routeCombo(def)
+  },
   run: ({ nav }) => nav.go(def.name),
 }))
 
@@ -53,6 +58,36 @@ const themeCommands: CommandDef[] = themes.map((entry) => ({
   keywords: ['theme', 'colours', 'colors', 'appearance', 'look', 'dark', 'light', entry.name.toLowerCase()],
   run: () => setTheme(entry.id),
 }))
+
+/** The theme of the owner's VS Code. The ids do not start with "theme-" (those are the built-in themes). */
+const vsCodeThemeCommands: CommandDef[] = [
+  {
+    id: 'vscode-theme-follow',
+    title: 'Theme: follow VS Code',
+    icon: 'palette',
+    keywords: ['theme', 'colours', 'colors', 'vscode', 'vs code', 'bearded', 'editor', 'match'],
+    async run({ notice }) {
+      await setFollowVsCode(true)
+      if (followVsCodeProblem.value) notice.error(followVsCodeProblem.value)
+      else notice.success('Following the VS Code theme')
+    },
+  },
+  {
+    id: 'vscode-theme-unfollow',
+    title: 'Theme: stop following VS Code',
+    icon: 'palette',
+    keywords: ['theme', 'vscode', 'vs code', 'unfollow', 'off'],
+    run: () => void setFollowVsCode(false),
+  },
+  {
+    id: 'vscode-theme-pick',
+    title: 'Theme: pick one from VS Code',
+    icon: 'palette',
+    keywords: ['theme', 'vscode', 'vs code', 'list', 'choose', 'bearded'],
+    // The list is on the Appearance row of Settings.
+    run: ({ nav }) => nav.go('settings'),
+  },
+]
 
 export const commands: CommandDef[] = [
   ...goCommands,
@@ -163,6 +198,7 @@ export const commands: CommandDef[] = [
     run: () => resetZoom(),
   },
   ...themeCommands,
+  ...vsCodeThemeCommands,
 ]
 
 /** A command has one action: run it. */

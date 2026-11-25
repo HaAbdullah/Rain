@@ -28,6 +28,10 @@ pub struct Game {
     // "media/game-cover/<id>?v=<hex>"; absent = no art, the UI draws the title tile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
+    // True when the picture is the icon of the game's program file, not a cover: the UI shows it
+    // small and centred instead of filling the tile. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_is_icon: Option<bool>,
     // Steam, Epic and Riot: always true (only installed games are listed). Local game: true while its
     // program file exists; a folder game without any program file is true too.
     pub installed: bool,
@@ -116,6 +120,7 @@ mod tests {
             title: "Fixture Quest".into(),
             source: GameSource::Steam,
             cover_url: Some("media/game-cover/game-steam-1?v=ab".into()),
+            cover_is_icon: None,
             installed: true,
             running: false,
             size_bytes: Some(1024),
@@ -136,6 +141,7 @@ mod tests {
             title: "X".into(),
             source: GameSource::Custom,
             cover_url: None,
+            cover_is_icon: None,
             installed: true,
             running: false,
             size_bytes: None,

@@ -998,6 +998,16 @@ impl Service {
         list
     }
 
+    /// The editor program that opens a project, when one is found. The Claude library opens its
+    /// files with it.
+    pub fn editor_program(&self) -> Option<std::path::PathBuf> {
+        let overrides = self.file.get().overrides();
+        match tools::find(Tool::Editor, &overrides, self.tools.as_ref()) {
+            ToolFound::At(path) => Some(path),
+            _ => None,
+        }
+    }
+
     /// The project that holds `cwd`: its folder is `cwd` or the longest folder that `cwd` is
     /// inside of. Missing projects count (section 03 shows the sessions of a vanished folder).
     pub fn project_id_for_path(&self, cwd: &str) -> Option<String> {

@@ -224,6 +224,9 @@ pub struct Game {
     /// "media/game-cover/<id>?v=<hex>"; absent = no art, the UI draws the title tile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
+    /// True when the picture is the icon of the program file, not a cover (the UI draws it small and centred).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_is_icon: Option<bool>,
     /// Steam, Epic: always true (only installed games are listed).
     /// Local game: true while its program file exists; a folder game without any program file is true too.
     pub installed: bool,
@@ -510,6 +513,16 @@ Defaults when the file is missing: no corrections, no hand-added games.
 ### 4.3 The folder `media\`
 
 `<data>\media\<id>-<8 hex>.<ext>`: covers the user picked. The 8 hex digits are the FNV-1a hash of the file content, so a new picture has a new name and the cached `media/game-cover/...?v=` URL changes. Files are written by `games::covers::import` (temp file, `sync_all`, rename). The folder is created on the first import. Rain removes only files it wrote itself and that no entry refers to any more (checked at each import and each delete).
+
+### 4.3a The icons of program files
+
+A local game (a game folder or one added by hand) with no cover of its own uses its program file as the picture: `library.rs` sets `cover` to the file, `covers::cover_version` makes the address version (size and modified time of the file, plus a hash of its path), and `Game.coverIsIcon` is `true`. The media provider `game-cover` sees an `.exe` and asks `games::program_icon`.
+
+- **When it is drawn:** only when somebody asks for the picture (`GET /media/game-cover/{id}`), which is when a screen that shows the game is open. A library scan, a rescan and a refresh only read the program file's size and time; nothing is drawn at start or while the window is hidden.
+- **Cache:** `<local>\cache\games\icons\<8 hex of the path>-<8 hex of the version>.png`. Drawn once; the file is read afterwards. A changed program, a corrected program file or a new `RENDER_VERSION` gives a new name; the older file of the same program is removed when the new one is written, and at most 300 files stay (the oldest go).
+- **Size:** Windows is asked for 256 px (`SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK`), so the largest icon the file has is used. One drawing at a time. A program that cannot be drawn is remembered in memory until the next refresh, and its tile shows the title.
+- **Folder scans:** unchanged: a game folder's direct children are listed, the program guess is kept while the folder's top-level signature stays equal (`games_guess_cache`), and no subfolder is read for the icon.
+- **Tests:** `ProgramIconRenderer` is a seam (`state.seam`), tests give a fake that counts calls.
 
 ### 4.4 Settings keys used
 

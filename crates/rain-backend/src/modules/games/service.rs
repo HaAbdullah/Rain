@@ -16,6 +16,7 @@ use super::config::{GamesDoc, canonical_key};
 use super::folders;
 use super::library::{Library, game_of};
 use super::model::Found;
+use super::program_icon::{ProgramIconRenderer, ProgramIcons, ShellProgramIcons};
 use super::running::ProcessWaiter;
 use super::steam::SteamRegistry;
 use super::store::{self, Play};
@@ -64,6 +65,8 @@ pub struct Service {
     pub(super) lister: Arc<dyn ProcessLister>,
     pub(super) waiter: Arc<dyn ProcessWaiter>,
     pub(super) throttle: Throttle<Games>,
+    /// The icons of program files, which stand in for missing covers.
+    pub(super) program_icons: ProgramIcons,
     pub(super) cache: Mutex<Cache>,
     /// Held while the library is assembled, so that one scan serves every waiting request.
     pub(super) build_lock: tokio::sync::Mutex<()>,
@@ -102,6 +105,12 @@ impl Service {
                 .seam::<dyn ProcessWaiter>()
                 .unwrap_or_else(|| Arc::new(super::running::SystemWaiter)),
             throttle: Throttle::new(state.bus.clone(), 1),
+            program_icons: ProgramIcons::new(
+                &state.config.local_dir,
+                state
+                    .seam::<dyn ProgramIconRenderer>()
+                    .unwrap_or_else(|| Arc::new(ShellProgramIcons)),
+            ),
             cache: Mutex::default(),
             build_lock: tokio::sync::Mutex::new(()),
             sizes: Mutex::default(),
@@ -295,6 +304,12 @@ impl Service {
     pub async fn cover_file(&self, id: &str) -> Option<PathBuf> {
         let library = self.library(false).await.ok()?;
         library.find(id)?.cover.clone()
+    }
+
+    /// The icon of a program file that is a game's picture (PNG bytes and the version of its
+    /// address). This is where an icon is drawn: the first time a screen asks for the picture.
+    pub async fn program_icon(&self, exe: &std::path::Path) -> Option<(Vec<u8>, String)> {
+        self.program_icons.get(exe).await
     }
 }
 

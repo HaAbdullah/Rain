@@ -10,6 +10,8 @@
 //! - `launch` and `running`: starting a game, play time, which games run;
 //! - `covers` and `ico`: cover pictures (and the biggest picture of an icon file) and the media
 //!   provider `game-cover`;
+//! - `program_icon`: the icon of a local game's program file, drawn once and cached, for a game
+//!   that has no cover;
 //! - `store`: the SQLite tables (play time, running sessions, caches).
 //!
 //! The launcher (section 01) uses `Service` through the launch contract (`ItemSource`,
@@ -27,6 +29,7 @@ mod launch;
 mod library;
 mod model;
 mod names;
+mod program_icon;
 mod riot;
 mod routes;
 mod running;
@@ -39,6 +42,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 
+pub use program_icon::ProgramIconRenderer;
 pub use running::ProcessWaiter;
 pub use service::{LaunchedAfterGameMode, Service};
 pub use steam::SteamRegistry;

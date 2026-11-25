@@ -5,7 +5,8 @@ import { keysOf, orderActions, targetName } from '@/actions/display'
 import { lucideIcon } from '@/lib/icon-map'
 import { useScreenState } from '@/composables/useScreen'
 import { useNav } from '@/nav/useNav'
-import { routeByName } from '@/nav/routes'
+import { routeByName, type RouteName } from '@/nav/routes'
+import { railRank } from '@/nav/useRailOrder'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { useCheatSheet } from '@/composables/useCheatSheet'
 import { combosOf, keymap, type KeyBinding, type KeyGroup } from '@/keys/keymap'
@@ -24,10 +25,20 @@ const itemTitle = computed(() => {
 })
 
 const GROUPS: KeyGroup[] = ['Window', 'Go', 'Move', 'Act', 'Command']
-const sections = GROUPS.map((title) => ({
-  title,
-  bindings: keymap.filter((binding) => binding.group === title),
-}))
+// The sections of "Go" are listed the way the rail shows them, so the keys read 1, 2, 3 ...
+const GO_PREFIX = 'go-'
+function goRank(binding: KeyBinding, fallback: number): number {
+  const name = binding.id.startsWith(GO_PREFIX) ? binding.id.slice(GO_PREFIX.length) : ''
+  return name in routeByName ? railRank(name as RouteName) : 100 + fallback
+}
+const sections = computed(() =>
+  GROUPS.map((title) => {
+    const bindings = keymap.filter((binding) => binding.group === title)
+    if (title !== 'Go') return { title, bindings }
+    const ranked = bindings.map((binding, index) => ({ binding, rank: goRank(binding, index) }))
+    return { title, bindings: ranked.sort((a, b) => a.rank - b.rank).map((entry) => entry.binding) }
+  }),
+)
 
 /** The combos to draw for a binding. A long run (Alt+1 .. Alt+9) shows its two ends. */
 function isRange(binding: KeyBinding): boolean {

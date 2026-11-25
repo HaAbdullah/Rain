@@ -37,11 +37,12 @@ const glyphs: Record<StatusKind, Component> = {
   queued: CircleDotIcon,
 }
 
-// The spinner is the only loop in the app; tokens.css pauses it while Rain is hidden.
+// The spinner is the only loop in the app. It turns in 8 steps a second, not 60 smooth frames
+// (a smooth turn cost about 9 % of a core), and tokens.css pauses it while Rain is hidden.
 const glyphProps = computed(() => ({
   size: props.size,
   strokeWidth: 1.75,
-  class: props.status === 'running' ? 'animate-spin' : undefined,
+  class: props.status === 'running' ? 'status-spin' : undefined,
 }))
 </script>
 

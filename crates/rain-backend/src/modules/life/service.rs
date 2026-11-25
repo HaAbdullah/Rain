@@ -738,6 +738,7 @@ impl Service {
         let mut settings = state.settings().watch();
         let mut habits_file = self.file.subscribe();
         let mut watch = self.watch_notes(&state);
+        let mut visible = state.shell_facts.watch_visible();
         loop {
             tokio::select! {
                 () = stop.cancelled() => return,
@@ -759,6 +760,15 @@ impl Service {
                     self.apply_file(&value);
                     self.publish_if_changed().await;
                 }
+                changed = visible.changed() => {
+                    if changed.is_err() {
+                        return;
+                    }
+                    // Shown again: the notes that changed while it was hidden are read now.
+                    if *visible.borrow_and_update() {
+                        self.publish_if_changed().await;
+                    }
+                }
                 _ = next_change(&watch) => {
                     // The notes folder changed (Obsidian saved, a sync tool wrote). Correctness
                     // does not depend on this: a read looks again by itself.
@@ -766,6 +776,10 @@ impl Service {
                         continue;
                     }
                     self.dirty.store(true, Ordering::SeqCst);
+                    if !state.shell_facts.window_visible() {
+                        // Nobody looks: the notes are read when the window is shown.
+                        continue;
+                    }
                     self.publish_if_changed().await;
                 }
             }

@@ -37,8 +37,18 @@ const state = computed(() => {
   <DetailPane :title="game.title" :status="game.running ? 'running' : undefined">
     <div class="flex flex-col gap-4">
       <div class="aspect-[2/3] w-[200px] overflow-hidden rounded-lg border border-border bg-surface-2">
+        <div v-if="game.coverUrl && !cover.failed.value && game.coverIsIcon" class="flex size-full items-center justify-center">
+          <img
+            :src="game.coverUrl"
+            alt=""
+            decoding="async"
+            draggable="false"
+            class="size-3/5 object-contain"
+            @error="cover.onError"
+          >
+        </div>
         <img
-          v-if="game.coverUrl && !cover.failed.value"
+          v-else-if="game.coverUrl && !cover.failed.value"
           :src="game.coverUrl"
           alt=""
           decoding="async"

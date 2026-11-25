@@ -2,6 +2,7 @@
 // Each feature folder owns the providers for its item types; this file only
 // routes by type and is not edited after the foundation phase.
 import { appActions, poolActions } from '@/features/apps/actions'
+import { claudeItemActions } from '@/features/claude/actions'
 import { diskNodeActions, driveActions } from '@/features/disk/actions'
 import { gameActions } from '@/features/games/actions'
 import { hardwareActions } from '@/features/hardware/actions'
@@ -27,6 +28,7 @@ const providers: { [K in ItemType]: ActionProvider<TargetOf<K>> } = {
   hardware: hardwareActions,
   diskNode: diskNodeActions,
   setting: settingActions,
+  claudeItem: claudeItemActions,
 }
 
 /**

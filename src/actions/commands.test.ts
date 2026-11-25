@@ -65,3 +65,17 @@ describe('theme commands', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 })
+
+describe('VS Code theme commands', () => {
+  beforeEach(() => vi.unstubAllGlobals())
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('has "Theme: follow VS Code" and keeps its id out of the built-in theme ids', async () => {
+    stubPage()
+    const { commands } = await load()
+    const follow = commands.find((command) => command.title === 'Theme: follow VS Code')
+    expect(follow?.id).toBe('vscode-theme-follow')
+    expect(commands.filter((command) => command.id.startsWith('theme-')).every((c) => !c.id.includes('vscode'))).toBe(true)
+    expect(commands.some((command) => command.title === 'Theme: stop following VS Code')).toBe(true)
+  })
+})

@@ -13,7 +13,9 @@ import { useOverlay } from '@/composables/useOverlay'
 import { useSearch } from '@/composables/useSearch'
 import { keepFocus } from '@/lib/focus'
 import ThemePicker from './ThemePicker.vue'
+import SidebarOrderControl from './SidebarOrderControl.vue'
 import ZoomControl from './ZoomControl.vue'
+import VsCodeThemeControl from './VsCodeThemeControl.vue'
 import { settingActivation } from './actions'
 import type { SettingValue } from './settingValues'
 import { selectChoices } from './settingDefs'
@@ -45,8 +47,14 @@ const root = useTemplateRef<HTMLElement>('root')
 const isTheme = computed(() => props.def.id === 'theme')
 const picker = useTemplateRef<InstanceType<typeof ThemePicker>>('picker')
 // The Zoom row is the same: the window keeps the level (useZoom).
+// The VS Code theme row: the list and the "Follow VS Code" switch live in the window too.
+const isVsCode = computed(() => props.def.id === 'vscode-theme')
+const vsCodeControl = useTemplateRef<InstanceType<typeof VsCodeThemeControl>>('vsCodeControl')
 const isZoom = computed(() => props.def.id === 'zoom')
 const zoomControl = useTemplateRef<InstanceType<typeof ZoomControl>>('zoomControl')
+// The Sidebar order row too: the window keeps the order (useRailOrder).
+const isSidebarOrder = computed(() => props.def.id === 'sidebar-order')
+const sidebarOrderControl = useTemplateRef<InstanceType<typeof SidebarOrderControl>>('sidebarOrderControl')
 
 const selectOpen = ref(false)
 useOverlay(selectOpen)
@@ -92,7 +100,9 @@ watch(settingActivation, (activation) => {
   if (activation?.def.id !== props.def.id) return
   if (props.def.kind === 'switch') emit('change', props.value !== true)
   else if (isTheme.value) picker.value?.focus()
+  else if (isVsCode.value) vsCodeControl.value?.focus()
   else if (isZoom.value) zoomControl.value?.focus()
+  else if (isSidebarOrder.value) sidebarOrderControl.value?.focus()
   else if (props.def.kind === 'select') selectOpen.value = true
   else root.value?.querySelector('input')?.focus()
 })
@@ -136,7 +146,11 @@ watch(settingActivation, (activation) => {
 
       <ThemePicker v-if="isTheme" ref="picker" />
 
+      <VsCodeThemeControl v-else-if="isVsCode" ref="vsCodeControl" />
+
       <ZoomControl v-else-if="isZoom" ref="zoomControl" />
+
+      <SidebarOrderControl v-else-if="isSidebarOrder" ref="sidebarOrderControl" />
 
       <Switch
         v-else-if="def.kind === 'switch'"

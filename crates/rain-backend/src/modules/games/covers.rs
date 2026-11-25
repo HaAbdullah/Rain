@@ -14,7 +14,8 @@ use axum::body::Bytes;
 use futures_util::future::BoxFuture;
 
 use super::model::image_content_type;
-use super::names::{fnv8_bytes, slug};
+use super::names::{fnv8, fnv8_bytes, path_key, slug};
+use super::program_icon::is_program;
 use crate::core::blocking;
 use crate::core::error::ApiResult;
 use crate::core::media::{Media, MediaProvider};
@@ -176,6 +177,18 @@ pub fn version_of(path: &Path) -> Option<String> {
     Some(format!("{seconds:x}{:x}", meta.len()))
 }
 
+/// The version of a game's picture: `version_of`, and for a program file (whose icon is the
+/// picture) also a hash of its path, so a corrected program file gives a new address even when the
+/// two files happen to share a size and a time.
+pub fn cover_version(path: &Path) -> Option<String> {
+    let version = version_of(path)?;
+    Some(if is_program(path) {
+        format!("{version}{}", fnv8(&path_key(&path.to_string_lossy())))
+    } else {
+        version
+    })
+}
+
 // ---- the media provider ----
 
 /// Serves `GET /media/game-cover/<game id>`. It maps the id to a file through the library, never
@@ -194,6 +207,17 @@ impl MediaProvider for GameCovers {
             let Some(path) = state.games().cover_file(&id).await else {
                 return Ok(None);
             };
+            // A program file stands in for a missing cover: its icon is the picture.
+            if is_program(&path) {
+                let Some((bytes, version)) = state.games().program_icon(&path).await else {
+                    return Ok(None);
+                };
+                return Ok(Some(Media {
+                    bytes: Bytes::from(bytes),
+                    content_type: "image/png",
+                    version,
+                }));
+            }
             let is_icon = path
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("ico"));

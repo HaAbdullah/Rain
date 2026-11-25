@@ -21,8 +21,24 @@ const cover = useImageFallback(() => props.game.coverUrl)
     <div class="aspect-[2/3]">
       <Tile :selected="selected" :ring="game.running ? 'success' : 'none'">
         <div class="relative h-full overflow-hidden rounded-lg">
+          <!-- The icon of a program file is a small square picture: centred on a plain tile, not stretched over it. -->
+          <div
+            v-if="game.coverUrl && !cover.failed.value && game.coverIsIcon"
+            class="flex size-full items-center justify-center bg-surface-2"
+          >
+            <img
+              :src="game.coverUrl"
+              alt=""
+              loading="lazy"
+              decoding="async"
+              draggable="false"
+              class="size-3/5 object-contain transition-opacity"
+              :class="{ 'opacity-45': !game.installed }"
+              @error="cover.onError"
+            >
+          </div>
           <img
-            v-if="game.coverUrl && !cover.failed.value"
+            v-else-if="game.coverUrl && !cover.failed.value"
             :src="game.coverUrl"
             alt=""
             loading="lazy"

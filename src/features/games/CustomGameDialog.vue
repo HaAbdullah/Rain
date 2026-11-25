@@ -139,7 +139,7 @@ async function reset(patch: GamePatch) {
           <Label for="custom-game-cover">Cover image (optional)</Label>
           <Input id="custom-game-cover" v-model="coverPath" autocomplete="off" placeholder="D:\Games\Example Game\cover.png" />
           <button
-            v-if="editing?.coverUrl"
+            v-if="editing?.coverUrl && !editing.coverIsIcon"
             type="button"
             class="w-fit text-xs text-muted-foreground underline-offset-2 hover:underline"
             @click="reset({ coverPath: '' })"

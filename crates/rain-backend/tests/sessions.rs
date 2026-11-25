@@ -847,3 +847,57 @@ async fn sessions_a_transcript_folder_that_appears_late_is_followed() {
     wait_for_message(&mut stream, ID_A, "Later.").await;
     backend.stop().await;
 }
+
+fn window_facts(window_visible: bool) -> rain_types::ShellFacts {
+    rain_types::ShellFacts {
+        hotkey_registered: true,
+        shell_exe: "rain.exe".into(),
+        shell_version: "0.1.0".into(),
+        window_visible,
+        ..rain_types::ShellFacts::default()
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sessions_a_hidden_window_reads_no_transcript_and_the_next_show_catches_up() {
+    let home = ClaudeHome::new();
+    let probe = Arc::new(FakeProbe::default());
+    probe.add(5303, "claude.exe", 1);
+    home.write_registry(5303, ID_A, json!({}));
+    let path = home.write_transcript(r"C:\work\demo", ID_A, &[assistant_line(1, "Hello.", 10)]);
+    let backend = start_following(&home, &probe, Arc::new(NoExits)).await;
+    let service = backend.state.sessions();
+    let mut found = false;
+    for _ in 0..100 {
+        if find(&sessions(&backend).await, ID_A).last_message == "Hello." {
+            found = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(found, "the first read");
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+
+    // The window is hidden; Claude goes on writing. The watch fires, and nothing is read.
+    backend.state.shell_facts.set(window_facts(false));
+    let reads = service.transcript_reads();
+    for n in 2..5 {
+        append(&path, &assistant_line(n, "While hidden.", 100 * u64::from(n)));
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+    assert_eq!(service.transcript_reads(), reads, "no read while hidden");
+
+    // Shown: the list is right at once, without a timer and without anybody asking for it.
+    backend.state.shell_facts.set(window_facts(true));
+    let mut caught_up = false;
+    for _ in 0..100 {
+        if service.list().iter().any(|s| s.last_message == "While hidden.") {
+            caught_up = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(caught_up, "the show reads what moved");
+    assert!(service.transcript_reads() > reads);
+    backend.stop().await;
+}

@@ -139,7 +139,9 @@ pub fn local_games(
             .cover
             .as_deref()
             .map(|value| covers::cover_path(data_dir, value))
-            .or_else(|| covers::find_in_folder(&game.path));
+            .or_else(|| covers::find_in_folder(&game.path))
+            // No picture of its own: the icon of the program file (drawn when it is first shown).
+            .or_else(|| exe.clone());
 
         let signature = folders::signature(&game.path);
         let known_size = sizes.get(&folder_key);
@@ -194,7 +196,8 @@ fn custom_game(custom: &Custom, data_dir: &Path) -> Found {
         cover: custom
             .cover
             .as_deref()
-            .map(|value| covers::cover_path(data_dir, value)),
+            .map(|value| covers::cover_path(data_dir, value))
+            .or_else(|| Some(exe.clone())),
         playtime_minutes: 0,
         last_played_unix: None,
         hidden: custom.hidden,
@@ -243,7 +246,7 @@ pub fn finish(mut entries: Vec<Found>, parsed: &Parsed) -> Vec<Found> {
         {
             entry.hidden = correction.hidden;
         }
-        entry.cover_version = entry.cover.as_deref().and_then(covers::version_of);
+        entry.cover_version = entry.cover.as_deref().and_then(covers::cover_version);
         if entry.cover_version.is_none() {
             entry.cover = None;
         }
@@ -668,6 +671,8 @@ impl Service {
     pub async fn refresh(&self) -> ApiResult<GameLibrary> {
         let app = self.app()?;
         store::clear_caches(&app.db).await?;
+        // A program whose icon could not be drawn may be tried again.
+        self.program_icons.forget_failures();
         self.invalidate();
         let library = self.library(true).await?;
         let answer = self.compose(&library).await?;
@@ -726,6 +731,11 @@ pub fn game_of(entry: &Found, live: &Live) -> Game {
             .cover_version
             .as_ref()
             .map(|version| format!("media/game-cover/{}?v={version}", entry.id)),
+        cover_is_icon: entry
+            .cover
+            .as_deref()
+            .is_some_and(super::program_icon::is_program)
+            .then_some(true),
         installed: local.is_none_or(|local| local.installed),
         running: live.running.contains(&entry.id),
         size_bytes: entry.size_bytes,
@@ -972,6 +982,104 @@ mod tests {
             Some(77),
             "the old size shows until the new one arrives"
         );
+    }
+
+    #[test]
+    fn a_local_game_without_a_cover_shows_the_icon_of_its_program_and_a_cover_wins() {
+        let temp = tempfile::tempdir().unwrap();
+        touch(&temp.path().join("Plain").join("p.exe"), 5);
+        touch(&temp.path().join("Plain").join("other.exe"), 7);
+        touch(&temp.path().join("Covered").join("c.exe"), 5);
+        touch(&temp.path().join("Covered").join("cover.png"), 5);
+        let (plain, covered) = (
+            folder_game(temp.path(), "Plain"),
+            folder_game(temp.path(), "Covered"),
+        );
+        let guesses = HashMap::from([
+            (
+                path_key(&plain.path.to_string_lossy()),
+                Some("p.exe".to_owned()),
+            ),
+            (
+                path_key(&covered.path.to_string_lossy()),
+                Some("c.exe".to_owned()),
+            ),
+        ]);
+        let list = |parsed: &Parsed| {
+            finish(
+                local_games(
+                    &[plain.clone(), covered.clone()],
+                    &guesses,
+                    parsed,
+                    temp.path(),
+                    &HashMap::new(),
+                    "",
+                )
+                .games,
+                parsed,
+            )
+        };
+        let live = || Live {
+            running: Arc::default(),
+            plays: Arc::default(),
+            pinned: HashSet::new(),
+        };
+        let found = list(&Parsed::default());
+        let (covered_game, plain_game) = (&found[0], &found[1]);
+        assert!(covered_game.cover.as_ref().unwrap().ends_with("cover.png"));
+        assert!(game_of(covered_game, &live()).cover_is_icon.is_none());
+        assert!(plain_game.cover.as_ref().unwrap().ends_with("p.exe"));
+        let api = game_of(plain_game, &live());
+        assert_eq!(api.cover_is_icon, Some(true));
+        assert!(
+            api.cover_url
+                .unwrap()
+                .starts_with("media/game-cover/game-dir-plain?v=")
+        );
+        let before = plain_game.cover_version.clone();
+
+        // The user corrects the program: the icon, and with it the address, follows.
+        let key = plain.path.to_string_lossy().replace('\\', "\\\\");
+        let corrected = parsed(&format!(
+            "[[game]]\nkey = \"dir:{key}\"\nexe = \"other.exe\"\n"
+        ));
+        let found = list(&corrected);
+        let now = found
+            .iter()
+            .find(|entry| entry.id == "game-dir-plain")
+            .unwrap();
+        assert!(now.cover.as_ref().unwrap().ends_with("other.exe"));
+        assert_ne!(now.cover_version, before);
+
+        // A program that is gone leaves no picture: the tile shows the title.
+        fs::remove_file(plain.path.join("p.exe")).unwrap();
+        let found = list(&Parsed::default());
+        let gone = found
+            .iter()
+            .find(|entry| entry.id == "game-dir-plain")
+            .unwrap();
+        assert!(gone.cover.is_none() && gone.cover_version.is_none());
+    }
+
+    #[test]
+    fn a_hand_added_game_shows_the_icon_of_its_program_unless_it_has_a_cover() {
+        let temp = tempfile::tempdir().unwrap();
+        let exe = temp.path().join("x").join("x.exe");
+        touch(&exe, 5);
+        let text = format!(
+            "[[custom]]\nid = \"game-x\"\ntitle = \"X\"\nexe = \"{}\"\n",
+            exe.to_string_lossy().replace('\\', "\\\\")
+        );
+        let parsed = parsed(&text);
+        let out = local_games(
+            &[],
+            &HashMap::new(),
+            &parsed,
+            temp.path(),
+            &HashMap::new(),
+            "",
+        );
+        assert_eq!(out.games[0].cover.as_deref(), Some(exe.as_path()));
     }
 
     #[test]

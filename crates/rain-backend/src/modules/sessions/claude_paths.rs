@@ -106,14 +106,36 @@ impl ClaudePaths {
     /// The transcript of a session when the hook did not tell the path: the working folder with
     /// every character that is not a letter or a digit replaced by `-`, then `<id>.jsonl`.
     pub fn guess_transcript(&self, cwd: &str, session_id: &str) -> PathBuf {
-        let folder: String = cwd
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-            .collect();
         self.projects_dir()
-            .join(folder)
+            .join(project_folder_name(cwd))
             .join(format!("{session_id}.jsonl"))
     }
+
+    /// The file where Claude Code keeps its own state (the MCP servers of the user among it).
+    /// It lies next to the Claude folder, or inside a Claude folder that was chosen by hand.
+    /// Only the file name is built here: the library reads the names of the MCP servers from it.
+    pub fn state_file(&self) -> Option<PathBuf> {
+        let inside = self.root.join(".claude.json");
+        if inside.is_file() {
+            return Some(inside);
+        }
+        let named_dot_claude = self.root.file_name().is_some_and(|name| name == ".claude");
+        let beside = self.root.parent()?.join(".claude.json");
+        (named_dot_claude && beside.is_file()).then_some(beside)
+    }
+}
+
+/// The folder of Claude Code for a working folder: every character that is not a letter or a
+/// digit is replaced by `-`.
+pub fn project_folder_name(cwd: &str) -> String {
+    cwd.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
+}
+
+/// The Claude folder inside a project folder (skills, agents, commands, instructions).
+pub fn project_claude_dir(project: &Path) -> PathBuf {
+    project.join(".claude")
 }
 
 #[cfg(test)]

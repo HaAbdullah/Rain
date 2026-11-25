@@ -2,7 +2,8 @@
 // Settings (spec 7.9): one 640 px column of rows, grouped. No Save button: a change is
 // sent to the api at once. The rows are selectable with the shared selection, so Enter,
 // Ctrl+Enter and Ctrl+K act on the selected row (see actions.ts).
-import { computed, useTemplateRef } from 'vue'
+import { computed, onMounted, useTemplateRef } from 'vue'
+import { checkFollowVsCode } from '@/composables/useTheme'
 import type { ActionTarget, SettingDef } from '@/actions/types'
 import EmptyState from '@/components/rain/EmptyState.vue'
 import ErrorRow from '@/components/rain/ErrorRow.vue'
@@ -39,6 +40,9 @@ const notice = useNotice()
 const query = useSectionQuery('settings')
 const resource = useResource('settings', () => api.getSettings(), { live: 'settings' })
 const settings = computed(() => resource.data.value)
+
+// "Follow VS Code" looks at VS Code's theme each time this screen opens (never on a timer).
+onMounted(() => void checkFollowVsCode())
 
 // Config files the backend could not read (it keeps the last good values). A failed health
 // call adds nothing: Settings itself already shows its own error row.

@@ -4,7 +4,7 @@ import { pathOf, routeByName, routeOfPath, routes } from './routes'
 describe('the Hardware route', () => {
   it('takes the place of Disk in the rail, on the same key', () => {
     const names = routes.filter((def) => def.rail === 'top').map((def) => def.name)
-    expect(names).toEqual(['home', 'apps', 'projects', 'games', 'workflows', 'life', 'hardware'])
+    expect(names).toEqual(['home', 'apps', 'projects', 'games', 'workflows', 'life', 'hardware', 'claude'])
     expect(routeByName.hardware.combo).toBe('Ctrl+Digit7')
     expect(routeByName.hardware.icon).toBe('cpu')
     expect(routes.some((def) => def.path.startsWith('/disk'))).toBe(false)

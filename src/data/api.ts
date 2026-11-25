@@ -7,6 +7,8 @@ import type {
   GameLibrary, GameModeChoice, GameModeState, HardwareTile, OtherApps, OtherAppsPatch, Habit, HabitDay, HabitDraft, HabitStats, HabitSummary, Health, ID, IdleJob, ISODate, JobRun,
   LaunchRun, LaunchTarget, LogLine, MachineState, OpenNoteResult, PathCheck, PermissionAnswer, PermissionAnswerResult, PinnableType, Pool, PoolDraft,
   GamePatch, LayoutSave, Project, ProjectLayout, PropertySuggestion, ScheduledJob, SearchItem, SearchType, Settings, SettingsPatch, VaultStatus,
+  ClaudeLibrary, LibraryText,
+  VsCodeCurrentTheme, VsCodeTheme, VsCodeThemeTokens,
 } from './types'
 
 /** What every rejected call carries: the backend's error body (or one the bridge made in its shape). */
@@ -99,6 +101,11 @@ export interface RainApi {
   listEvents(from: ISODate, to: ISODate): Promise<CalendarEvent[]>             // GET  /calendar/events?from=&to=  (always [] for now)
   openDailyNote(date: ISODate): Promise<OpenNoteResult>                        // POST /daily-notes/:date/open
 
+  // Claude library (read only)
+  getClaudeLibrary(): Promise<ClaudeLibrary>                                   // GET  /claude/library
+  getClaudeLibraryItem(id: ID): Promise<LibraryText>                           // GET  /claude/library/item?id=
+  openClaudeLibraryItem(id: ID): Promise<void>                                 // POST /claude/library/open   body { id }
+
   // disk
   listDrives(): Promise<Drive[]>                                               // GET  /drives
   startScan(driveId: ID): Promise<DiskScan>                                    // POST /scans            body { driveId }
@@ -120,6 +127,11 @@ export interface RainApi {
   getSettings(): Promise<Settings>                                             // GET  /settings
   updateSettings(patch: SettingsPatch): Promise<Settings>                        // PATCH /settings
   getHealth(): Promise<Health>                                                  // GET  /health (config issues, source states)
+
+  // colour themes of the installed VS Code: read from its files when called, nothing is kept
+  listVsCodeThemes(): Promise<VsCodeTheme[]>                                    // GET  /themes/vscode
+  getVsCodeTheme(id: ID): Promise<VsCodeThemeTokens>                            // GET  /themes/vscode/theme?id=  (Rain's colour tokens)
+  getVsCodeCurrentTheme(): Promise<VsCodeCurrentTheme>                          // GET  /themes/vscode/current   (workbench.colorTheme)
 
   // live updates (one server-sent stream, GET /stream)
   subscribe<T extends Topic>(topic: T, cb: (payload: TopicPayload[T]) => void): () => void

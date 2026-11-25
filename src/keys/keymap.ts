@@ -16,6 +16,7 @@ import { openAddGame } from '@/features/games/actions'
 import { habitEditor, openTodaysNote } from '@/features/life/actions'
 import { errorMessage } from '@/lib/errors'
 import { routeByName, routes, type Route } from '@/nav/routes'
+import { routeCombo } from '@/nav/useRailOrder'
 import { useNav } from '@/nav/useNav'
 import { shell } from '@/shell'
 
@@ -161,9 +162,13 @@ export const summonBinding: KeyBinding = {
   run: () => void (shell.hidden.value ? shell.show() : shell.hide()),
 }
 
+// The key of a section follows the order of the rail (Ctrl+1 is the icon at the top), so the
+// combo is read each time it is asked for. A section past the ninth has no key.
 const goBindings: KeyBinding[] = routes.map((def) => ({
   id: `go-${def.name}`,
-  combo: def.combo,
+  get combo() {
+    return routeCombo(def) ?? []
+  },
   group: 'Go',
   label: def.title,
   run: () => nav.go(def.name),

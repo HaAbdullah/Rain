@@ -7,6 +7,8 @@ import type {
   Habit, HabitDay, HabitStats, HabitSummary, Health, IdleJob, JobRun, LaunchRun, LogLine, MachineState, OpenNoteResult,
   PathCheck, PathsCheckBody, PermissionAnswerResult, Pool, Project, ProjectLayout, PropertySuggestion, RevealBody,
   ScheduledJob, SearchItem, Settings, StartScanBody, VaultStatus,
+  ClaudeLibrary, LibraryOpenBody, LibraryText,
+  VsCodeCurrentTheme, VsCodeTheme, VsCodeThemeTokens,
 } from '../types'
 import { toRainError } from './errors'
 import { resolveMedia } from './media'
@@ -64,6 +66,10 @@ export function createRestApi(
     updateSettings: (patch) => call<Settings>('PATCH', '/settings', patch),
     // ---- health and streaming ----
     getHealth: () => call<Health>('GET', '/health'),
+    // ---- VS Code themes ----
+    listVsCodeThemes: () => call<VsCodeTheme[]>('GET', '/themes/vscode'),
+    getVsCodeTheme: (id) => call<VsCodeThemeTokens>('GET', `/themes/vscode/theme${qs({ id })}`),
+    getVsCodeCurrentTheme: () => call<VsCodeCurrentTheme>('GET', '/themes/vscode/current'),
     // ---- projects ----
     listProjects: () => call<Project[]>('GET', '/projects'),
     getProjectLayout: (id) => call<ProjectLayout>('GET', `/projects/${enc(id)}/layout`),
@@ -154,6 +160,10 @@ export function createRestApi(
       call<HabitSummary>('PUT', `/habits/${encodeURIComponent(id)}/days/${encodeURIComponent(date)}`, { done }),
     listEvents: (from, to) => call<CalendarEvent[]>('GET', `/calendar/events${query({ from, to })}`),
     openDailyNote: (date) => call<OpenNoteResult>('POST', `/daily-notes/${encodeURIComponent(date)}/open`),
+    // ---- Claude library ----
+    getClaudeLibrary: () => call<ClaudeLibrary>('GET', '/claude/library'),
+    getClaudeLibraryItem: (id) => call<LibraryText>('GET', `/claude/library/item${qs({ id })}`),
+    openClaudeLibraryItem: (id) => call<void>('POST', '/claude/library/open', { id } satisfies LibraryOpenBody),
 
     // ---- game mode ----
     // The state in the answer reaches the subscribers before the call resolves, and a state

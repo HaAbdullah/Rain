@@ -71,11 +71,33 @@ fn summon(window: &WebviewWindow) {
     let _ = window.show();
     let _ = window.set_focus();
     let _ = window.emit(EVENT_SUMMONED, ());
+    report_visibility(window.app_handle());
 }
 
 fn dismiss(window: &WebviewWindow) {
     let _ = window.hide();
     let _ = window.emit(EVENT_HIDDEN, ());
+    report_visibility(window.app_handle());
+}
+
+/// Tells the backend that the window was shown or hidden, when that is news to it. The backend
+/// reads no session files and no notes while nobody can look at the window, and catches up on
+/// show. The page hides the window itself too (hide on blur, Escape), so this also runs when the
+/// focus changes.
+fn report_visibility(app: &AppHandle) {
+    let Some(facts) = app.try_state::<Arc<Facts>>() else {
+        return;
+    };
+    let facts = Arc::clone(&facts);
+    let app = app.clone();
+    in_background(&app.clone(), move |backend| async move {
+        // Read inside the task, so the newest of several quick reports tells the truth.
+        let visible = window_is_visible(&app);
+        if !facts.visibility_changed(visible) {
+            return Ok(());
+        }
+        facts::report(&backend.client(), &facts.snapshot(visible)).await
+    });
 }
 
 /// Hides the window if the user is looking at it, otherwise brings it forward.
@@ -284,6 +306,10 @@ pub fn run() {
                 api.prevent_close();
                 let _ = window.hide();
                 let _ = window.emit(EVENT_HIDDEN, ());
+                report_visibility(window.app_handle());
+            }
+            if let WindowEvent::Focused(_) = event {
+                report_visibility(window.app_handle());
             }
         })
         .build(context)

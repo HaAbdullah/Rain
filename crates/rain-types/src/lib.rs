@@ -5,6 +5,7 @@
 //! The rules every type follows are in docs/backend/00-foundation.md section 9.2.
 
 mod bindings;
+mod claude_library;
 mod common;
 mod disk;
 pub mod env;
@@ -21,9 +22,14 @@ mod projects;
 mod sessions;
 mod settings;
 mod system;
+mod themes;
 pub mod time;
 
 pub use bindings::single_file;
+pub use claude_library::{
+    ClaudeLibrary, LibraryFact, LibraryHook, LibraryItem, LibraryKind, LibraryMcp, LibraryOpenBody,
+    LibraryOutputStyle, LibraryPlugin, LibrarySetup, LibraryText,
+};
 pub use common::{ApiError, ErrorCode, IconKind, IconRef, Status};
 pub use disk::{
     DiskNode, DiskScan, Drive, FileCategory, MachineState, NodeKind, PathCheck, PathKind,
@@ -69,6 +75,7 @@ pub use sessions::{
 pub use settings::{
     CountdownSeconds, MonitorClaudeState, ResetAfterSeconds, SUMMON_HOTKEY, Settings, SettingsPatch,
 };
+pub use themes::{VsCodeCurrentTheme, VsCodeTheme, VsCodeThemeTokens};
 pub use system::{
     ConfigIssue, Health, Ping, ShellFacts, ShellStatus, ShutdownBody, SourceState, SourceStatus,
 };

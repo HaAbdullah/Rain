@@ -19,7 +19,7 @@ mod book;
 pub(crate) mod claude_paths;
 mod focus;
 mod hook_wire;
-mod hooks_install;
+pub(crate) mod hooks_install;
 mod registry;
 mod routes;
 mod seams;

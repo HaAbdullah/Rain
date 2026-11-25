@@ -835,6 +835,8 @@ The shell keeps registering the hotkey (decision C6). After every `hello` it rep
 { "hotkeyRegistered": true, "hotkeyError": "optional text", "shellExe": "C:\\...\\rain.exe", "shellVersion": "0.1.0", "windowVisible": false }
 ```
 
+The shell sends the facts again whenever the window is shown or hidden (only when that value changed). The backend keeps it as a watch (`state.shell_facts.window_visible()` and `watch_visible()`), true until a shell reports, so a plain browser tab counts as looked at. Modules that read files for a screen (sessions transcripts, daily notes) skip those reads while it is false and catch up on the change to true. Scheduled jobs, the idle sampler and game mode never look at it.
+
 The backend keeps this in memory (`state.shell_facts`, an `Option<ShellFacts>` that is `None` until the first report; not persisted). `GET /settings` merges `hotkeyAvailable` from it (`true` when no shell ever reported, so a plain browser shows no false warning). The shell repeats the call when a fact changes (hotkey re-registered).
 
 ### 6.6 Errors the shell creates itself

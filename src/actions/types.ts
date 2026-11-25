@@ -16,6 +16,7 @@ import type {
   HabitSummary,
   ID,
   IdleJob,
+  LibraryItem,
   Pool,
   Project,
   ScheduledJob,
@@ -41,6 +42,7 @@ export type ItemType =
   | 'hardware'
   | 'diskNode'
   | 'setting'
+  | 'claudeItem'
 
 /** One row of the Settings screen (spec 7.9). `key` names the Settings field it edits, if any. */
 export interface SettingDef {
@@ -69,6 +71,7 @@ export type ActionTarget =
   | { type: 'hardware'; id: ID; item: HardwareTile }
   | { type: 'diskNode'; id: ID; item: DiskNode }
   | { type: 'setting'; id: ID; item: SettingDef }
+  | { type: 'claudeItem'; id: ID; item: LibraryItem }
 
 /** The target variant for one item type, for example TargetOf<'app'>. */
 export type TargetOf<K extends ItemType> = Extract<ActionTarget, { type: K }>

@@ -5,8 +5,24 @@ import type { SettingDef } from '@/actions/types'
 export const settingDefs: SettingDef[] = [
   // The picker is drawn by SettingRow (ThemePicker). The choice lives in the window, not in the backend's settings.
   { id: 'theme', group: 'Appearance', label: 'Theme', hint: 'Colours of the whole window', kind: 'select' },
+  // Drawn by SettingRow (VsCodeThemeControl): "From VS Code" list and the "Follow VS Code" switch. Lives in the window too.
+  {
+    id: 'vscode-theme',
+    group: 'Appearance',
+    label: 'VS Code theme',
+    hint: 'Use the colours of a theme from your VS Code, or follow the one it uses',
+    kind: 'select',
+  },
   // Drawn by SettingRow (ZoomControl). The level lives in the window, like the theme.
   { id: 'zoom', group: 'Appearance', label: 'Zoom', hint: 'Size of the whole window', kind: 'select' },
+  // Drawn by SettingRow (SidebarOrderControl). The order lives in the window, like the theme.
+  {
+    id: 'sidebar-order',
+    group: 'Appearance',
+    label: 'Sidebar order',
+    hint: 'Or drag the icons. The keys Ctrl+1, Ctrl+2 ... follow the order',
+    kind: 'select',
+  },
 
   {
     id: 'hotkey',

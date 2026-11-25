@@ -636,6 +636,15 @@
   .selectable {
     user-select: text;
   }
+  /* The status spinner: 8 steps a second. A smooth turn repaints 60 times a second for a 16 px glyph. */
+  @keyframes status-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .status-spin {
+    animation: status-spin 1s steps(8, end) infinite;
+  }
   /* The window is hidden, not closed: stop every animation while it is. */
   html[data-hidden] * {
     animation-play-state: paused !important;

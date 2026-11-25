@@ -4,6 +4,7 @@
 import { nextTick, onMounted, onScopeDispose, watch } from 'vue'
 import { refreshResources, resetResources, useResource } from '@/composables/useResource'
 import { useSearch } from '@/composables/useSearch'
+import { checkFollowVsCode } from '@/composables/useTheme'
 import { resetViewState } from '@/composables/useViewState'
 import { api } from '@/data'
 import { settingDefaults } from '@/features/settings/actions'
@@ -42,6 +43,8 @@ export function useSummon(): void {
     search.setScope(null)
     search.clear()
     refreshResources()
+    // "Follow VS Code" is checked at each summon, and only then.
+    void checkFollowVsCode()
     // After the next render: in the browser the frame comes back from behind the placeholder first.
     void nextTick(() => search.focus())
   })

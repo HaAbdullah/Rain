@@ -192,6 +192,41 @@ impl Service {
         self.inner.state.upgrade()
     }
 
+    /// Whether anybody can see the window. While nobody does, the transcripts (up to 256 KB a
+    /// read, and Claude writes to them all the time) are not read; `catch_up` reads them on show.
+    fn looking(&self) -> bool {
+        self.app()
+            .is_none_or(|app| app.shell_facts.window_visible())
+    }
+
+    /// The window was shown: read the transcripts that moved while it was hidden (a file whose
+    /// size and time are as before costs one `metadata` call) and publish what changed.
+    async fn catch_up(&self) {
+        self.sync_transcript_watches();
+        let live = self.live_transcripts();
+        futures_util::future::join_all(
+            live.iter()
+                .map(|(id, _)| self.read_transcript_tail(id, true)),
+        )
+        .await;
+    }
+
+    async fn run_visibility(self, mut watch: tokio::sync::watch::Receiver<bool>) {
+        loop {
+            tokio::select! {
+                () = self.inner.cancel.cancelled() => break,
+                changed = watch.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                    if *watch.borrow_and_update() {
+                        self.catch_up().await;
+                    }
+                }
+            }
+        }
+    }
+
     fn now(&self) -> SystemTime {
         self.app()
             .map_or_else(SystemTime::now, |app| app.clock.now())
@@ -288,6 +323,10 @@ impl Service {
         self.scan_registry().await;
         let status = self.hooks_status(&app, app.settings().resolved().monitor_claude);
         self.report_hooks_source(&app, &status);
+
+        let visible = app.shell_facts.watch_visible();
+        let task = spawn_named("sessions-visible", self.clone().run_visibility(visible));
+        lock(&self.inner.tasks).push(task);
 
         if let Some(receiver) = lock(&self.inner.exit_rx).take() {
             let service = self.clone();
@@ -625,6 +664,10 @@ impl Service {
     /// Reads the end of the transcript of a session and adds what it says (model, tokens,
     /// branch, title, last message), without blocking the caller.
     fn spawn_transcript_read(&self, id: String) {
+        if !self.looking() {
+            // Nobody looks: the tail is read when the window is shown (`catch_up`).
+            return;
+        }
         let service = self.clone();
         let task = spawn_named("sessions-transcript", async move {
             service.read_transcript_tail(&id, false).await;
@@ -782,6 +825,9 @@ impl Service {
 
     /// Reads again the transcripts of the live sessions in `folder` that changed.
     async fn read_folder(&self, folder: &Path) {
+        if !self.looking() {
+            return;
+        }
         for (id, path) in self.live_transcripts() {
             if path.parent() == Some(folder) {
                 self.read_transcript_tail(&id, true).await;

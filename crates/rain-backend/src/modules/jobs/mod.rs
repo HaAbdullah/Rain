@@ -61,8 +61,11 @@ pub const ENTRY: ModuleEntry = ModuleEntry {
         Box::pin(async move {
             let jobs = state.jobs();
             jobs.start(&state).await?;
-            // Once, so the first frame of the topic already has the tasks of the Claude app.
-            jobs.refresh_claude_app().await;
+            // Once, so the first frame of the topic already has the tasks of the Claude app. Not
+            // when the window starts hidden: `GET /jobs` reads them when the screen is opened.
+            if state.shell_facts.window_visible() {
+                jobs.refresh_claude_app().await;
+            }
             Ok(())
         })
     },

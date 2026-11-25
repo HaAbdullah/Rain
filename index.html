@@ -9,9 +9,28 @@
     <script>
       try {
         var theme = localStorage.getItem('rain.theme')
-        if (['dark', 'high-contrast', 'dim', 'midnight', 'light'].indexOf(theme) < 0) theme = 'dark'
-        document.documentElement.dataset.theme = theme
-        document.documentElement.classList.toggle('dark', theme !== 'light')
+        var root = document.documentElement
+        var applied = false
+        // A theme from VS Code: its resolved colours were stored the last time it was applied.
+        if (theme === 'vscode') {
+          var saved = JSON.parse(localStorage.getItem('rain.theme.vscode') || 'null')
+          if (saved && saved.tokens && saved.tokens.background) {
+            for (var name in saved.tokens) {
+              if (/^[a-z0-9-]+$/.test(name) && typeof saved.tokens[name] === 'string') {
+                root.style.setProperty('--' + name, saved.tokens[name])
+              }
+            }
+            root.style.setProperty('color-scheme', saved.dark === false ? 'light' : 'dark')
+            root.dataset.theme = 'vscode'
+            root.classList.toggle('dark', saved.dark !== false)
+            applied = true
+          }
+        }
+        if (!applied) {
+          if (['dark', 'high-contrast', 'dim', 'midnight', 'light'].indexOf(theme) < 0) theme = 'dark'
+          root.dataset.theme = theme
+          root.classList.toggle('dark', theme !== 'light')
+        }
       } catch (error) {}
     </script>
   </head>

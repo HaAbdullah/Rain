@@ -2,13 +2,14 @@
 // `window` looks the pressed combo up in the key table. Screens never listen
 // for keys themselves; they receive moves through their ScreenController.
 import { useEventListener } from '@vueuse/core'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { runAction } from '@/actions/context'
 import { useNotice } from '@/composables/useNotice'
 import { isOverlayOpen } from '@/composables/useOverlay'
 import { useScreenState } from '@/composables/useScreen'
 import { searchFieldElement, useSearch } from '@/composables/useSearch'
 import { useNav } from '@/nav/useNav'
+import { railOrder } from '@/nav/useRailOrder'
 import { shell } from '@/shell'
 import {
   canonicalCombo,
@@ -88,13 +89,20 @@ function isBlocked(combo: string, inOverlay: boolean): boolean {
 }
 
 /** Every binding by each of its combos. Several bindings may share one; `when` picks. */
-const byCombo = new Map<string, KeyBinding[]>()
-for (const binding of keymap) {
-  for (const combo of combosOf(binding)) {
-    const key = canonicalCombo(combo)
-    byCombo.set(key, [...(byCombo.get(key) ?? []), binding])
+let byCombo = new Map<string, KeyBinding[]>()
+function indexBindings() {
+  const index = new Map<string, KeyBinding[]>()
+  for (const binding of keymap) {
+    for (const combo of combosOf(binding)) {
+      const key = canonicalCombo(combo)
+      index.set(key, [...(index.get(key) ?? []), binding])
+    }
   }
+  byCombo = index
 }
+indexBindings()
+// The keys of the sections follow the order of the rail: the table is read again when it changes.
+watch(railOrder, indexBindings, { flush: 'sync' })
 
 function isTextField(target: EventTarget | null): target is HTMLElement {
   return target instanceof HTMLElement && target.matches('input, textarea, select, [contenteditable="true"]')

@@ -19,6 +19,7 @@ use crate::core::error::ApiError;
 use crate::core::state::AppState;
 use crate::store::migrations::{self, Migration, MigrationError};
 
+pub mod claude_library;
 pub mod disk;
 pub mod gamemode;
 pub mod games;
@@ -32,6 +33,7 @@ pub mod machine;
 pub mod projects;
 pub mod sessions;
 pub mod settings;
+pub mod vscode_themes;
 
 /// What the backend needs to know about one module.
 pub struct ModuleEntry {
@@ -66,6 +68,8 @@ pub const MODULES: &[ModuleEntry] = &[
     idle::ENTRY,
     life::ENTRY,
     gamemode::ENTRY,
+    claude_library::ENTRY,
+    vscode_themes::ENTRY,
 ];
 
 /// An `init` or `start` that has nothing to do yet.
@@ -250,7 +254,7 @@ mod tests {
         let count = names.len();
         names.dedup();
         assert_eq!(names.len(), count);
-        assert_eq!(count, 13);
+        assert_eq!(count, 15);
     }
 
     #[tokio::test]
