@@ -62,6 +62,7 @@ pub struct RecordRow {
 fn kind_text(kind: WindDownKind) -> &'static str {
     match kind {
         WindDownKind::Session => "session",
+        WindDownKind::OtherApp => "otherApp",
         WindDownKind::Job => "job",
         WindDownKind::IdleJob => "idleJob",
         WindDownKind::Service => "service",
@@ -72,6 +73,7 @@ fn kind_text(kind: WindDownKind) -> &'static str {
 fn kind_of(text: &str) -> WindDownKind {
     match text {
         "session" => WindDownKind::Session,
+        "otherApp" => WindDownKind::OtherApp,
         "job" => WindDownKind::Job,
         "idleJob" => WindDownKind::IdleJob,
         "service" => WindDownKind::Service,
@@ -271,6 +273,11 @@ mod tests {
                 id: 2,
                 name: "launch_in_job",
                 sql: include_str!("migrations/0002_launch_in_job.sql"),
+            },
+            Migration {
+                id: 3,
+                name: "other_apps",
+                sql: include_str!("migrations/0003_other_apps.sql"),
             },
         ];
         db.call(move |conn| {

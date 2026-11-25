@@ -2,11 +2,12 @@
 
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
-use rain_types::{GameModeChoiceBody, GameModeState, StartGameModeBody};
+use rain_types::{GameModeChoiceBody, GameModeState, OtherApps, OtherAppsPatch, StartGameModeBody};
+use serde::Deserialize;
 
-use crate::core::error::{ApiJson, ApiResult};
+use crate::core::error::{ApiJson, ApiQuery, ApiResult};
 use crate::core::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -14,10 +15,34 @@ pub fn router() -> Router<AppState> {
         .route("/game-mode", get(read).post(start))
         .route("/game-mode/choice", post(choose))
         .route("/game-mode/recap/seen", post(recap_seen))
+        .route("/game-mode/other-apps", patch(other_apps))
 }
 
-async fn read(State(state): State<AppState>) -> Json<GameModeState> {
-    Json(state.gamemode().read())
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReadQuery {
+    /// `true`: add the list of the programs that would be closed (this scans the processes).
+    #[serde(default)]
+    other_apps: bool,
+}
+
+async fn read(
+    State(state): State<AppState>,
+    ApiQuery(query): ApiQuery<ReadQuery>,
+) -> Json<GameModeState> {
+    if query.other_apps {
+        Json(state.gamemode().read_with_apps().await)
+    } else {
+        Json(state.gamemode().read())
+    }
+}
+
+/// The master switch and the choice for one program.
+async fn other_apps(
+    State(state): State<AppState>,
+    ApiJson(body): ApiJson<OtherAppsPatch>,
+) -> ApiResult<Json<OtherApps>> {
+    state.gamemode().patch_other_apps(body).await.map(Json)
 }
 
 /// Starts game mode. While a run is under way it answers with that run and ignores the body.

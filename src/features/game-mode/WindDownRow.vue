@@ -39,7 +39,10 @@ const progress = computed<StatusKind | null>(() => {
   <div class="flex h-(--row-h) items-center gap-3 px-3">
     <RIcon :icon="item.icon" :size="20" />
     <span class="min-w-0 flex-1 truncate text-sm text-foreground">{{ item.label }}</span>
-    <span class="text-13 text-muted-foreground tabular-nums">{{ item.count }}</span>
+    <!-- While the other programs are closing, the count says how many are finished. -->
+    <span class="text-13 text-muted-foreground tabular-nums">
+      {{ item.status === 'stopping' && item.progress !== undefined ? `${item.progress} / ${item.count}` : item.count }}
+    </span>
     <Badge
       variant="secondary"
       class="w-24 text-muted-foreground"

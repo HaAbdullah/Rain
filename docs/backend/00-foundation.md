@@ -1227,6 +1227,7 @@ First run: if the data folder does not exist the backend creates it (and its par
 | `jobs.toml` | 03 | scheduled job definitions, including `enabled` (the owner's first job, a Claude job at 06:00 that is switched off, is a definition in the owner's data folder, never in code or fixtures: decisions.md section 4) |
 | `idle-jobs.toml` | 03 | idle job definitions, including `enabled` |
 | `habits.toml` | 04 | habit definitions |
+| `gamemode.toml` | 06 | game mode: `close_other_apps` (the master switch) and `keep`, the programs the user never wants closed (06 6.11) |
 | `media\` (folder) | 02 | covers the user picked for games, copied here |
 
 A new file needs an architect decision (a row here). Exact schemas belong to the owning section. What applies to all (section 10.3).

@@ -10,16 +10,17 @@
 //! - The wind-down (`wind_down`) is a second task that runs the stops in order, writes the
 //!   record, publishes `done` and then ends Rain.
 //!
-//! The one rule that matters most: game mode ends only what Rain itself started, and only
-//! through `WindDownPort`. It never stops a Claude session; it only counts them.
+//! The one rule that matters most: game mode never stops a Claude session; it only counts them.
+//! What Rain started is ended through `WindDownPort`. The other programs of the PC are closed
+//! by `others` (section 06 6.11), in the first step of the wind-down, politely first.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use rain_types::time::iso_from_system_time;
 use rain_types::{
-    GameMode, GameModeChoice, GameModePhase, GameModeRecap, GameModeState, StartGameModeBody,
-    StopReason, WindDownKind, WindDownStatus,
+    GameMode, GameModeChoice, GameModePhase, GameModeRecap, GameModeState, OtherApps,
+    OtherAppsPatch, StartGameModeBody, StopReason, WindDownKind, WindDownStatus,
 };
 use tokio::sync::Notify;
 use tokio::time::Instant;
@@ -28,6 +29,7 @@ use tracing::{info, warn};
 use super::items;
 use super::machine::{Effect, Input, Machine, Refusal, Timings};
 use super::neighbours::Neighbours;
+use super::others::{CloseResult, Others};
 use super::recap;
 use super::store::{self, Finish, ItemRow, NewRecord};
 use crate::core::error::{ApiError, ApiResult};
@@ -65,10 +67,17 @@ pub struct Service {
     last: Mutex<Option<GameModeRecap>>,
     /// The title of the game to start afterwards, for the record.
     launch_title: Mutex<Option<String>>,
+    /// Closing the other programs of the PC.
+    others: Others,
 }
 
 impl Service {
-    pub fn new(state: &AppState, neighbours: Arc<dyn Neighbours>, timings: Timings) -> Self {
+    pub fn new(
+        state: &AppState,
+        neighbours: Arc<dyn Neighbours>,
+        timings: Timings,
+        others: Others,
+    ) -> Self {
         let countdown = state.settings().resolved().countdown_seconds;
         Self {
             state: state.downgrade(),
@@ -81,6 +90,7 @@ impl Service {
             start_lock: tokio::sync::Mutex::new(()),
             last: Mutex::new(None),
             launch_title: Mutex::new(None),
+            others,
         }
     }
 
@@ -103,6 +113,41 @@ impl Service {
     /// `GET /game-mode`.
     pub fn read(&self) -> GameModeState {
         self.snapshot(&lock(&self.machine))
+    }
+
+    /// `GET /game-mode?otherApps=true`: the state with the list of the programs that would be
+    /// closed. This is the only read that looks at the processes of the PC, and it is the screen
+    /// that asks for it. No list once the wind-down has begun (the closing is looking itself).
+    pub async fn read_with_apps(&self) -> GameModeState {
+        let mut state = self.read();
+        if matches!(
+            state.phase,
+            GameModePhase::WindingDown | GameModePhase::Done
+        ) {
+            return state;
+        }
+        state.other_apps = Some(self.others.preview(&*self.neighbours).await);
+        state
+    }
+
+    /// `PATCH /game-mode/other-apps`: the master switch and the choice for one program. Both are
+    /// written to `gamemode.toml`. While game mode waits or counts down, the row of the
+    /// checklist follows at once.
+    pub async fn patch_other_apps(&self, patch: OtherAppsPatch) -> ApiResult<OtherApps> {
+        if matches!(
+            self.phase(),
+            GameModePhase::WindingDown | GameModePhase::Done
+        ) {
+            return Err(refusal_error(Refusal::WindingDown));
+        }
+        let list = self.others.patch(&*self.neighbours, patch).await?;
+        if matches!(
+            self.phase(),
+            GameModePhase::Review | GameModePhase::Countdown
+        ) {
+            self.wake.notify_one();
+        }
+        Ok(list)
     }
 
     /// `POST /game-mode`: starts game mode, or returns the run that is under way.
@@ -149,6 +194,15 @@ impl Service {
         // A scan with several threads must not run through the review and the countdown: that
         // is what game mode frees.
         self.neighbours.cancel_scan();
+        // The programs that would be closed are looked at once here, so that the row of the
+        // checklist has its number. The driver only reads that number afterwards.
+        if self.others.enabled() {
+            self.others
+                .look(&*self.neighbours, body.then_launch_game_id.as_deref())
+                .await;
+        } else {
+            self.others.forget();
+        }
 
         let measured = self.measure();
         let countdown_seconds = app.settings().resolved().countdown_seconds;
@@ -227,10 +281,11 @@ impl Service {
         state
     }
 
-    /// The five rows with their numbers as they are now.
+    /// The six rows with their numbers as they are now.
     fn measure(&self) -> Vec<rain_types::WindDownItem> {
         items::measure(
             self.neighbours.open_user_sessions(),
+            self.others.count(),
             self.neighbours.jobs().counts(),
             self.neighbours.idle().counts(),
         )
@@ -274,6 +329,7 @@ impl Service {
 
     /// Game mode is over without the wind-down: clear the flag, then let the jobs run again.
     fn resume(&self, app: &AppState) {
+        self.others.forget();
         app.set_game_mode_active(false);
         self.neighbours.jobs().pause(false);
         self.neighbours.idle().pause(false);
@@ -285,6 +341,7 @@ impl Service {
     async fn drive(self: Arc<Self>, app: AppState) {
         let mut jobs_running = self.neighbours.jobs().running_watch();
         let mut idle_running = self.neighbours.idle().running_watch();
+        let mut file_changes = self.others.changes();
         let token = app.shutdown.token().clone();
         loop {
             let due = lock(&self.machine).next_wake();
@@ -294,6 +351,8 @@ impl Service {
                 () = sleep_until_or_never(due) => timer = true,
                 Ok(()) = jobs_running.changed() => {}
                 Ok(()) = idle_running.changed() => {}
+                // A hand edit of gamemode.toml changes what the row counts.
+                Ok(()) = file_changes.changed() => {}
                 () = token.cancelled() => {
                     self.driver_running.store(false, Ordering::SeqCst);
                     return;
@@ -352,6 +411,14 @@ impl Service {
                 )
                 .await;
         }
+
+        // 1b. The other programs of the PC, politely first. This is before Rain winds down its
+        // own things, and before the game starts (the game's launcher is kept).
+        if app.shutdown.shutting_down() {
+            return self.abandon_wind_down();
+        }
+        self.close_other_apps(&app, &mut keeper, first.then_launch_game_id.as_deref())
+            .await;
 
         // 2 and 3. The jobs Rain started.
         let jobs = self.neighbours.jobs();
@@ -415,6 +482,42 @@ impl Service {
     /// next start reports as "did not finish".
     fn abandon_wind_down(&self) {
         warn!("the backend is stopping for another reason; the game mode wind-down ends here");
+    }
+
+    /// Closes the other programs and records what happened to each. Never fails: a program
+    /// that does not close is a line of the recap, not an error.
+    async fn close_other_apps(
+        self: &Arc<Self>,
+        app: &AppState,
+        keeper: &mut Keeper,
+        game: Option<&str>,
+    ) {
+        self.set_status(app, items::OTHER_APPS, WindDownStatus::Stopping);
+        let progress = |done: u32| {
+            let _ = self.run_input(
+                app,
+                Input::Progress {
+                    id: items::OTHER_APPS,
+                    done,
+                },
+            );
+        };
+        let closing = self.others.close(&*self.neighbours, game, &progress);
+        let (outcomes, ()) =
+            tokio::join!(closing, tokio::time::sleep(self.timings.item_min_visible));
+        info!(programs = outcomes.len(), "other programs were closed");
+        for outcome in &outcomes {
+            let recap = match outcome.result {
+                CloseResult::Closed => RecapOutcome::Stopped,
+                CloseResult::Ended => RecapOutcome::Forced,
+                CloseResult::StillOpen => RecapOutcome::LeftRunning,
+                CloseResult::Denied => RecapOutcome::Failed,
+            };
+            keeper
+                .add(WindDownKind::OtherApp, &outcome.name, recap, 1)
+                .await;
+        }
+        self.set_status(app, items::OTHER_APPS, WindDownStatus::Stopped);
     }
 
     /// Stops every run of one group through its port. Returns true when something was stopped.

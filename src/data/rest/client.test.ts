@@ -515,6 +515,25 @@ describe('REST client: game mode', () => {
     ])
   })
 
+  it('asks for the list of programs with the query, and sends the choice by PATCH', async () => {
+    const { bridge, api } = setup()
+    const list = { enabled: true, apps: [], alwaysKept: 3, freedBytes: 0 }
+    bridge.answerWith({ ...state, otherApps: list })
+    expect(await api.getOtherApps()).toEqual(list)
+    bridge.answerWith(list)
+    await api.updateOtherApps({ app: { id: 'discord.exe', close: false } })
+    expect(bridge.calls).toEqual([
+      { method: 'GET', path: '/game-mode?otherApps=true', body: undefined },
+      { method: 'PATCH', path: '/game-mode/other-apps', body: { app: { id: 'discord.exe', close: false } } },
+    ])
+  })
+
+  it('refuses an answer that has no list', async () => {
+    const { bridge, api } = setup()
+    bridge.answerWith(state)
+    await expect(api.getOtherApps()).rejects.toBeDefined()
+  })
+
   it('gives the returned state to the stream before the call resolves', async () => {
     const bridge = createFakeBridge()
     const delivered: unknown[] = []

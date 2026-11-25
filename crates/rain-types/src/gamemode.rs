@@ -36,6 +36,8 @@ pub enum WindDownKind {
     IdleJob,
     Service,
     Window,
+    // Every other program on the PC that game mode closes.
+    OtherApp,
 }
 
 /// What stopping the row does: nothing bad (`safe`), loses unfinished work (`interrupts`), or
@@ -59,6 +61,7 @@ pub enum WindDownStatus {
 /// One row of the checklist.
 #[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
 pub struct WindDownItem {
     pub id: String,
     pub label: String,
@@ -70,9 +73,14 @@ pub struct WindDownItem {
     pub effect: WindDownEffect,
     #[ts(inline)]
     pub status: WindDownStatus,
+    // Only on the row of the other programs while it is `stopping`: how many are finished.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<u32>,
 }
 
-/// What happened to one kind of thing in the last game mode.
+/// What happened to one kind of thing in the last game mode. For other programs `stopped` is
+/// "closed", `forced` is "ended", `failed` is "could not be closed (needs administrator rights)"
+/// and `leftRunning` is "did not close" (it still shows a window, so it probably asks the user).
 #[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum RecapOutcome {
@@ -138,8 +146,61 @@ pub struct GameModeState {
     // Only in phase `off`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last: Option<GameModeRecap>,
+    // The other programs that game mode would close. Only in the answer to `GET /game-mode` with
+    // `?otherApps=true` (the screen asks): a process scan never runs for a topic frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub other_apps: Option<OtherApps>,
     // Grows with every change within one backend process, so a client can drop a late state.
     pub rev: u64,
+}
+
+/// One program of the signed-in user that game mode may close, grouped by its program file.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OtherApp {
+    // The lower-case file name of the program, `discord.exe`. It is also what `gamemode.toml` holds.
+    pub id: String,
+    pub name: String,
+    pub icon: IconRef,
+    // How many processes the program has.
+    pub processes: u32,
+    pub memory_bytes: u64,
+    // The program shows a window now, so it is asked to close and never forced.
+    pub has_window: bool,
+    // True: game mode closes it. False: the user keeps it.
+    pub close: bool,
+}
+
+/// The preview of what game mode would close on the whole PC.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OtherApps {
+    // The master switch. `false`: game mode closes only what Rain started.
+    pub enabled: bool,
+    pub apps: Vec<OtherApp>,
+    // Programs that are never touched: Windows, drivers, launchers, Claude, Rain and the like.
+    pub always_kept: u32,
+    // The memory of the programs that will be closed (0 while the switch is off).
+    pub freed_bytes: u64,
+}
+
+/// `PATCH /game-mode/other-apps`: the master switch and the choice for one program.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[ts(optional_fields)]
+pub struct OtherAppsPatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<OtherAppChoice>,
+}
+
+/// Whether game mode closes the program with this id.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OtherAppChoice {
+    pub id: String,
+    pub close: bool,
 }
 
 #[derive(Serialize, Deserialize, TS, Clone, Debug, Default, PartialEq)]
@@ -178,6 +239,7 @@ mod tests {
             count: 2,
             effect: WindDownEffect::LeftRunning,
             status: WindDownStatus::Pending,
+            progress: None,
         }
     }
 
@@ -192,8 +254,36 @@ mod tests {
             wait_timed_out: None,
             launch_error: None,
             last: None,
+            other_apps: None,
             rev: 1,
         }
+    }
+
+    #[test]
+    fn the_other_apps_preview_uses_the_wire_names_and_the_patch_rejects_unknown_fields() {
+        let mut state = minimal();
+        state.other_apps = Some(OtherApps {
+            enabled: true,
+            apps: vec![OtherApp {
+                id: "discord.exe".into(),
+                name: "Discord".into(),
+                icon: IconRef::letter("Discord"),
+                processes: 6,
+                memory_bytes: 600_000_000,
+                has_window: true,
+                close: true,
+            }],
+            always_kept: 12,
+            freed_bytes: 600_000_000,
+        });
+        let json = round_trip(&state);
+        assert_eq!(json["otherApps"]["apps"][0]["memoryBytes"], 600_000_000u64);
+        assert_eq!(json["otherApps"]["alwaysKept"], 12);
+        assert!(serde_json::from_value::<OtherAppsPatch>(json!({ "nope": true })).is_err());
+        let patch: OtherAppsPatch =
+            serde_json::from_value(json!({ "app": { "id": "a.exe", "close": false } })).unwrap();
+        assert_eq!(patch.app.map(|a| a.close), Some(false));
+        assert_eq!(patch.enabled, None);
     }
 
     #[test]

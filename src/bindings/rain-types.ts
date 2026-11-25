@@ -198,24 +198,32 @@ export type GameModePhase = "off" | "review" | "countdown" | "windingDown" | "do
 
 export type GameModeChoice = "wait" | "stopAnyway" | "closeNow" | "cancel";
 
-export type WindDownKind = "session" | "job" | "idleJob" | "service" | "window";
+export type WindDownKind = "session" | "job" | "idleJob" | "service" | "window" | "otherApp";
 
 export type WindDownEffect = "safe" | "interrupts" | "leftRunning";
 
 export type WindDownStatus = "pending" | "stopping" | "stopped";
 
-export type WindDownItem = { id: string, label: string, icon: IconRef, kind: "session" | "job" | "idleJob" | "service" | "window", count: number, effect: "safe" | "interrupts" | "leftRunning", status: "pending" | "stopping" | "stopped", };
+export type WindDownItem = { id: string, label: string, icon: IconRef, kind: "session" | "job" | "idleJob" | "service" | "window" | "otherApp", count: number, effect: "safe" | "interrupts" | "leftRunning", status: "pending" | "stopping" | "stopped", progress?: number, };
 
 export type RecapOutcome = "stopped" | "forced" | "failed" | "leftRunning";
 
-export type RecapItem = { kind: "session" | "job" | "idleJob" | "service" | "window", label: string, count: number, outcome: "stopped" | "forced" | "failed" | "leftRunning", names: Array<string>, };
+export type RecapItem = { kind: "session" | "job" | "idleJob" | "service" | "window" | "otherApp", label: string, count: number, outcome: "stopped" | "forced" | "failed" | "leftRunning", names: Array<string>, };
 
 export type GameModeRecap = { at: string, complete: boolean, items: Array<RecapItem>, launchedTitle?: string, launchError?: string, launchedInJob?: boolean, seen: boolean, };
 
-export type GameModeState = { phase: "off" | "review" | "countdown" | "windingDown" | "done", waiting: boolean, secondsLeft: number, countdownSeconds: number, items: Array<WindDownItem>, thenLaunchGameId?: string, waitTimedOut?: boolean, launchError?: string, last?: GameModeRecap, rev: number, };
+export type GameModeState = { phase: "off" | "review" | "countdown" | "windingDown" | "done", waiting: boolean, secondsLeft: number, countdownSeconds: number, items: Array<WindDownItem>, thenLaunchGameId?: string, waitTimedOut?: boolean, launchError?: string, last?: GameModeRecap, otherApps?: OtherApps, rev: number, };
 
 export type StartGameModeBody = { thenLaunchGameId?: string, };
 
 export type GameModeChoiceBody = { choice: "wait" | "stopAnyway" | "closeNow" | "cancel", };
+
+export type OtherApp = { id: string, name: string, icon: IconRef, processes: number, memoryBytes: number, hasWindow: boolean, close: boolean, };
+
+export type OtherApps = { enabled: boolean, apps: Array<OtherApp>, alwaysKept: number, freedBytes: number, };
+
+export type OtherAppsPatch = { enabled?: boolean, app?: OtherAppChoice, };
+
+export type OtherAppChoice = { id: string, close: boolean, };
 
 export const TOPIC_NAMES = ["sessions", "jobs", "idleJobs", "launch", "scan", "gameMode", "settings", "health", "projects", "games", "habits"] as const;

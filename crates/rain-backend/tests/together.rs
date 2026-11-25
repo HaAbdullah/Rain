@@ -27,7 +27,7 @@ use common::{PATIENCE, StreamReader, TestBackend};
 use futures_util::future::BoxFuture;
 use hyper::StatusCode;
 use rain_backend::core::launch_contract::{OpenError, OpenRequest, Opener, Started};
-use rain_backend::modules::gamemode::Timings;
+use rain_backend::modules::gamemode::{CloseTimings, Timings};
 use rain_backend::modules::games::{ProcessWaiter, SteamRegistry};
 use rain_backend::modules::idle::MachineIdle;
 use rain_backend::modules::jobs::Tuning;
@@ -185,6 +185,11 @@ fn fast_game_mode() -> Arc<Timings> {
         item_min_visible: Duration::from_millis(10),
         item_budget: Duration::from_secs(3),
         launch_budget: Duration::from_secs(3),
+        closing: CloseTimings {
+            polite_wait: Duration::from_millis(100),
+            hidden_wait: Duration::from_millis(50),
+            poll: Duration::from_millis(5),
+        },
     })
 }
 

@@ -86,7 +86,8 @@ Paths are after `/api/v1`. "Idempotent" follows foundation 4.6.
 |---|---|---|---|---|---|---|---|
 | GET | `/settings` | none | `Settings` | 200 | `unavailable` `moduleFailed` | yes | none |
 | PATCH | `/settings` | `SettingsPatch` body | `Settings` (the new state) | 200 | see 8.1: `invalid` `badBody`, `onePerRequest`, `tooMany`, `tooLong`, `badText`, `badFormat`, `badFolder`, `badPath`, `notAFolder`, `nested`, `notWritable`; `conflict` `configBroken`, `configNewer`, `configChanged`, `sandbox`, `noShell`, `environment`, `busy`, `gameMode`; `failed` `saveFailed`, `registry`, `copyFailed`; `unavailable` `notBuilt` | yes for equal values (a `monitorClaude: true` while it is true repairs the entry and is safe to repeat) | topic `settings` (own write) |
-| GET | `/game-mode` | none | `GameModeState` | 200 | `unavailable` `moduleFailed` | yes | none |
+| GET | `/game-mode` | query `otherApps=true` (optional) | `GameModeState`; with the query it holds `otherApps`, the programs that would be closed (6.11) | 200 | `unavailable` `moduleFailed` | yes | none |
+| PATCH | `/game-mode/other-apps` | `OtherAppsPatch` `{ enabled? , app?: { id, close } }` | `OtherApps` | 200 | `invalid` `badBody`, `badName`, `tooMany`; `conflict` `windingDown`, `configBroken`, `configNewer`, `configChanged` | yes | none (a hand edit or a write reaches the row of the checklist through the next frame) |
 | POST | `/game-mode` | `StartGameModeBody` | `GameModeState` | 200 | `notFound` `unknownGame` (source `games`); `conflict` `notInstalled`, `stopping`; `unavailable` `shuttingDown` | yes: when a run is under way it returns that run unchanged and ignores the body | topic `gameMode` |
 | POST | `/game-mode/choice` | `GameModeChoiceBody` | `GameModeState` | 200 | `conflict` `notRunning`, `windingDown`; `invalid` `badBody` | yes (table 6.7.2: a choice already satisfied or overtaken returns the current state) | topic `gameMode` |
 | POST | `/game-mode/recap/seen` | none | none | 204 | none | yes | topic `gameMode` (the recap loses its unseen mark) |
@@ -509,8 +510,8 @@ CREATE INDEX idx_gamemode_record_started ON gamemode_record (started_at);
 CREATE TABLE gamemode_record_item (
   record_id INTEGER NOT NULL REFERENCES gamemode_record (id) ON DELETE CASCADE,
   seq       INTEGER NOT NULL,
-  kind      TEXT    NOT NULL CHECK (kind IN ('session', 'job', 'idleJob', 'service', 'window')),
-  name      TEXT    NOT NULL,                              -- a job name, or the label of a group
+  kind      TEXT    NOT NULL CHECK (kind IN ('session', 'otherApp', 'job', 'idleJob', 'service', 'window')),   -- 'otherApp': migration 3
+  name      TEXT    NOT NULL,                              -- a job or program name, or the label of a group
   outcome   TEXT    NOT NULL CHECK (outcome IN ('stopped', 'forced', 'failed', 'leftRunning')),
   count     INTEGER NOT NULL DEFAULT 1,                    -- sessions: how many were left running
   PRIMARY KEY (record_id, seq)
@@ -831,6 +832,7 @@ Runs in one task. Each stop is independent: a failure is recorded and the next s
 |---|---|---|---|---|---|
 | 0 | begin | none | | `begin_record` (SQL); `rev` up | row `running` |
 | 1 | sessions | `wind-sessions` | 0 | nothing is stopped; the open sessions are only counted | item `leftRunning`, count N (only if N > 0) |
+| 1a | other programs | `wind-other-apps` | about 14 s | closes the other programs of the PC, politely first (6.11); the row shows `progress` | one item of kind `otherApp` per program |
 | 1b | scan | none (silent) | 2 s | runs when `game_mode_active` is set at start (not at the wind-down): `disk().cancel_running()`; a scan with 8 threads must not run through the countdown and the review, which is what game mode frees. No row, no record item | none |
 | 2 | scheduled jobs | `wind-jobs` | 5 s | `jobs().wind_down().stop_all(5 s)`; row `stopping` for at least 400 ms, then `stopped` | one item per stopped run (name, outcome) |
 | 3 | idle jobs | `wind-idle-jobs` | 5 s | the same with `idle()` | the same |
@@ -926,6 +928,42 @@ backend.set_exit_task(handle.abort_handle());
 Reset to Home must not cancel game mode. Today the mock freezes its timers while the window is hidden, so the reset to Home after `resetAfterSeconds` never meets a running game mode. The real backend keeps counting. The reset unmounts the Game mode screen, whose `onBeforeUnmount` then calls `cancel`. Fix: the reset timer does nothing while the phase is `review`, `countdown` or `windingDown`. Shift+Esc (hide now) stays allowed: game mode goes on while the window is hidden, and the shell exits at the end. Reading the phase uses the shared `gameMode` resource that the app frame keeps alive, so no fetch is needed when the timer fires.
 
 Late states are dropped. A response and a pushed frame travel on different channels, so the push may arrive after the response and after the screen has left. The stream client applies the state returned by `startGameMode` and `resolveGameMode` to its `gameMode` listeners before the call resolves (the same order the mock had), and drops any pushed or returned state whose `rev` is not higher than the highest it has applied since the last `hello` (a new `startId` resets it). `getGameMode` raises the mark but is never dropped.
+
+### 6.11 Other programs: game mode for the whole PC
+
+Added after the first version: game mode also closes the other programs of the PC. The code is in `modules/gamemode/others/`. It extends the machine, the checklist and the recap; it does not build beside them.
+
+**Which programs.** The processes of the signed-in user in Rain's session, grouped by program file name (`discord.exe`), with the memory (private working set), the number of processes and whether a visible top-level window exists. The name is the launcher's name for the program when it has one, else the file name. The icon is the media kind `proc-icon` (`/media/proc-icon/<hash of the path>`). Never listed, never touched (`select.rs`, one table test for each rule):
+
+| Rule | What is kept |
+|---|---|
+| Not mine | another user, another session (session 0), a process Windows will not let Rain open (services, elevated programs, protected processes). Rain never asks for administrator rights |
+| Windows | any program file under `%WINDIR%`, and the shell programs by name (`keep::SHELL`: explorer, dwm, sihost, ctfmon, ...) |
+| Rain | the folder of the running backend, the names `rain`, `rain-backend`, `rain-hook`, this process and the programs it was started from (a terminal in a development run), and everything these started (the WebView) |
+| Claude | every program named `claude*` with what it started, and for each open session (`sessions().live_pids()`) the terminal that holds it, with its whole tree |
+| The game | the program file and the folder of the game that is started (`GameInfo`), with its tree |
+| Built-in list | `keep::GROUPS`, one table with a comment for each group: anti-cheat, game launchers, graphics and audio drivers, keyboard and mouse tools, overlays and capture, password and security tools. What these started stays too (a game that a launcher started) |
+
+A process without a start time is never offered (its pid could be a later program). Rain shows the programs it keeps as one quiet count, `alwaysKept`, which does not count Windows' own.
+
+**What the user decides.** `gamemode.toml` in the data folder (hub file, comment header, hand-editable, reloaded at once): `close_other_apps = true` (the master switch; `false` means game mode behaves as before) and `keep = ["discord.exe"]` (names, any case, `.exe` optional). The screen unticks a program with `PATCH /game-mode/other-apps` (`{ enabled }` or `{ app: { id, close } }`, answer: the list). The list stays visible, unticked.
+
+**The scan.** `GET /game-mode?otherApps=true` is the only read that looks at the processes (20 ms for 300). A plain `GET`, the topic frames and the start of the backend never scan. A scan is also made at `POST /game-mode` (it gives the row its count; the driver only reads that number) and at the start of the closing. A scan under 5 seconds old answers the screen again.
+
+**The closing** (`closing.rs`, step 1a of the wind-down, before the jobs and before the game starts):
+
+| # | What | Time |
+|---|---|---|
+| a | `WM_CLOSE` is posted to every visible top-level window of a program that has one (never a child window; a Store app is found through its `ApplicationFrameWindow`) | wait up to 10 s |
+| b | a program that is alive and still shows a visible window is left alone: "did not close". A program with a visible window is never ended | |
+| c | a program with no visible window (it had none, or it went to the tray) gets `WM_CLOSE` on its hidden top-level windows, then `TerminateProcess` on what is alive, children first. A window that shows up before that makes it "did not close" | 3 s |
+| d | a process that cannot be ended is "could not be closed (needs administrator rights)". Nothing is tried twice | |
+
+The countdown and the cancel choice are unchanged: nothing is closed before the countdown ends, and a cancel closes nothing. The row `wind-other-apps` (kind `otherApp`, effect `safe`, never a reason for `review`) shows `progress` (finished programs) while it is `stopping`. It is left out of the screen when its count is 0.
+
+**The record.** One item of kind `otherApp` per program (migration 3): `stopped` = closed, `forced` = ended, `leftRunning` = did not close, `failed` = needs administrator rights. The recap line shows at most 5 names per outcome. Programs never carry a path or a window title.
+
+**Tests.** The rules and the order are tested with fakes (`closing.rs`, `select.rs`, `tests/gamemode.rs` with `FakePc`). A backend in a test or in a sandbox run has a PC with nothing on it unless the test says so (`NoPc`), so no test can close a real program. One test ends real processes: a child that the test started itself.
 
 ---------------------------------------------------------------------------------------------------
 

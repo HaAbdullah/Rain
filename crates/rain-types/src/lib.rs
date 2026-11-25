@@ -36,8 +36,9 @@ pub use events::{
 // projects (section 02)
 pub use events::Projects;
 pub use gamemode::{
-    GameModeChoice, GameModeChoiceBody, GameModePhase, GameModeRecap, GameModeState, RecapItem,
-    RecapOutcome, StartGameModeBody, WindDownEffect, WindDownItem, WindDownKind, WindDownStatus,
+    GameModeChoice, GameModeChoiceBody, GameModePhase, GameModeRecap, GameModeState, OtherApp,
+    OtherAppChoice, OtherApps, OtherAppsPatch, RecapItem, RecapOutcome, StartGameModeBody,
+    WindDownEffect, WindDownItem, WindDownKind, WindDownStatus,
 };
 pub use games::{CustomGameDraft, Game, GameLibrary, GamePatch, GameSource, GameSourceStatus};
 pub use hardware::{
