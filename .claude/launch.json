@@ -2,15 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "rain-web",
+      "name": "rain-live",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 1420
     },
     {
-      "name": "rain-live",
+      "name": "rain-empty",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:mydata"],
+      "runtimeArgs": ["run", "dev:empty"],
       "port": 1420
     }
   ]

@@ -1,8 +1,18 @@
 // The checklist every stage must pass (foundation section 12.4). Runs the checks in order and
 // stops at the first one that fails.   npm run check
+//
+//   npm run check:quick    the half-minute version for the edit loop: it compiles (Rust and
+//                          TypeScript) and runs the frontend tests. No lints, no Rust tests,
+//                          no build, no start of the app.
 import { spawnSync } from 'node:child_process'
 
-const checks = [
+const quickChecks = [
+  ['cargo check --workspace --all-targets', 'the Rust code compiles'],
+  ['npm run typecheck', 'the TypeScript code compiles'],
+  ['npm test', 'frontend tests'],
+]
+
+const fullChecks = [
   ['cargo fmt --all --check', 'formatting'],
   ['cargo build --workspace', 'everything compiles'],
   ['cargo clippy --workspace --all-targets -- -D warnings', 'lints'],
@@ -16,6 +26,8 @@ const checks = [
   ['node scripts/frontend-checks.mjs --dist', 'the built output holds no mock code'],
   ['npm run smoke', 'the app starts'],
 ]
+
+const checks = process.argv.includes('--quick') ? quickChecks : fullChecks
 
 const started = Date.now()
 for (const [index, [command, meaning]] of checks.entries()) {

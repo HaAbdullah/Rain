@@ -25,7 +25,8 @@ import {
   startBackend,
 } from './backend.mjs'
 
-const REBUILD_DEBOUNCE_MS = 1000
+// Long enough for an editor that writes a file in two steps, short enough not to be felt.
+const REBUILD_DEBOUNCE_MS = 250
 
 /** True for a change that needs a new backend: a source file or a Cargo.toml of a crate. */
 function affectsBackend(changedPath) {
