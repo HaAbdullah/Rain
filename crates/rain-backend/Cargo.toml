@@ -59,6 +59,8 @@ rayon = { workspace = true }
 # jobs (section 03)
 croner = { workspace = true }
 chrono = { workspace = true }
+# hardware (section 05)
+hidapi = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

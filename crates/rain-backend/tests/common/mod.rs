@@ -106,6 +106,12 @@ impl TestBackend {
                     b.with::<dyn ProcessLister>(Arc::new(fakes::FakeProcesses::default()))
                 }),
                 Arc::new(|b| b.opener(Arc::new(fakes::FakeOpener::default()))),
+                // hardware (section 05): no real device is read.
+                Arc::new(|b| {
+                    b.with::<dyn rain_backend::modules::hardware::Source>(Arc::new(
+                        fakes::FakeHardware::default(),
+                    ))
+                }),
             ],
             config_tweaks: Vec::new(),
         }

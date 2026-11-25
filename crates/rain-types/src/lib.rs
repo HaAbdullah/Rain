@@ -11,6 +11,7 @@ pub mod env;
 mod events;
 mod gamemode;
 mod games;
+mod hardware;
 mod jobs;
 mod launcher;
 mod life;
@@ -39,6 +40,9 @@ pub use gamemode::{
     RecapOutcome, StartGameModeBody, WindDownEffect, WindDownItem, WindDownKind, WindDownStatus,
 };
 pub use games::{CustomGameDraft, Game, GameLibrary, GamePatch, GameSource, GameSourceStatus};
+pub use hardware::{
+    HardwareBattery, HardwareKind, HardwareLink, HardwareOpenKind, HardwareOpens, HardwareTile,
+};
 pub use jobs::{
     EnabledBody, IdleJob, IdleResource, IdleState, JobKind, JobRun, LogLevel, LogLine, ScheduledJob,
 };

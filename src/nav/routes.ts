@@ -10,7 +10,7 @@ export type RouteName =
   | 'games'
   | 'workflows'
   | 'life'
-  | 'disk'
+  | 'hardware'
   | 'gameMode'
   | 'settings'
 
@@ -25,6 +25,8 @@ export interface RouteDef {
   rail: 'top' | 'bottom'
   subs?: readonly string[]
   defaultSub?: string
+  /** False when going to the route always shows the default sub-view (Hardware: the tile grid, not the Disk screen). */
+  rememberSub?: boolean
   /** Whether going here adds the scope chip. False for Home and Game mode. */
   filterable: boolean
   /** Lazy import of the screen, so each screen is its own chunk. */
@@ -104,14 +106,18 @@ export const routes: readonly RouteDef[] = [
     component: () => import('@/features/life/LifeScreen.vue'),
   },
   {
-    name: 'disk',
-    path: '/disk',
-    title: 'Disk',
-    icon: 'hard-drive',
+    name: 'hardware',
+    path: '/hardware/:sub',
+    title: 'Hardware',
+    icon: 'cpu',
     combo: 'Ctrl+Digit7',
     rail: 'top',
+    // 'devices' is the grid of tiles; 'disk' is the Disk screen, opened from its tile.
+    subs: ['devices', 'disk'],
+    defaultSub: 'devices',
+    rememberSub: false,
     filterable: true,
-    component: () => import('@/features/disk/DiskScreen.vue'),
+    component: () => import('@/features/hardware/HardwareScreen.vue'),
   },
   {
     name: 'gameMode',

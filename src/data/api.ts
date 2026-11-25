@@ -4,7 +4,7 @@
 
 import type {
   ApiError, AppEntry, CalendarEvent, ClaudeSession, CustomGameDraft, DiskNode, DiskScan, Drive, FocusResult, Game,
-  GameLibrary, GameModeChoice, GameModeState, Habit, HabitDay, HabitDraft, HabitStats, HabitSummary, Health, ID, IdleJob, ISODate, JobRun,
+  GameLibrary, GameModeChoice, HardwareTile, GameModeState, Habit, HabitDay, HabitDraft, HabitStats, HabitSummary, Health, ID, IdleJob, ISODate, JobRun,
   LaunchRun, LaunchTarget, LogLine, MachineState, OpenNoteResult, PathCheck, PermissionAnswer, PermissionAnswerResult, PinnableType, Pool, PoolDraft,
   GamePatch, Project, PropertySuggestion, ScheduledJob, SearchItem, SearchType, Settings, SettingsPatch, VaultStatus,
 } from './types'
@@ -79,6 +79,10 @@ export interface RainApi {
   runIdleJob(id: ID): Promise<IdleJob>                                         // POST /idle-jobs/{id}/run  (ignores idle)
   getIdleJobLog(id: ID): Promise<LogLine[]>                                    // GET  /idle-jobs/{id}/log  (the newest run)
   getMachineState(): Promise<MachineState>                                     // GET  /machine
+
+  // hardware: read at the moment of the call (no cache in the backend); only the Hardware screen calls it.
+  listHardware(): Promise<HardwareTile[]>                                      // GET  /hardware
+  openHardware(id: ID): Promise<void>                                          // POST /hardware/:id/open  (what the tile of the last read opens)
 
   // life: Rain reads the vault and writes one thing, the property a habit tick sets
   getVaultStatus(): Promise<VaultStatus>                                       // GET  /vault

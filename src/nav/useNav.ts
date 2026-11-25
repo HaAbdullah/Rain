@@ -27,7 +27,7 @@ function resolveSub(name: RouteName, sub: string | undefined): string | undefine
   const def = routeByName[name]
   if (!def.subs) return undefined
   if (sub && def.subs.includes(sub)) return sub
-  return lastSub[name] ?? def.defaultSub
+  return def.rememberSub === false ? def.defaultSub : (lastSub[name] ?? def.defaultSub)
 }
 
 function show(next: Route) {

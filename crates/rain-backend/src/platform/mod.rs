@@ -17,6 +17,7 @@
 //! | `windows_focus` | the windows with their handles, and bringing one to the front |
 //! | `idle` | milliseconds since the last keyboard or mouse input |
 //! | `fs` | the fixed drives and their sizes |
+//! | `hid` | the HID devices that are plugged in, and a channel to one |
 //! | `time` | the local calendar date |
 //! | `power` | a notice when the PC wakes up |
 //! | `thread` | below-normal priority for a worker thread |
@@ -26,6 +27,7 @@
 pub mod com;
 pub mod console;
 pub mod fs;
+pub mod hid;
 pub mod icons;
 pub mod idle;
 pub mod job;

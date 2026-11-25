@@ -4,6 +4,7 @@
 import { appActions, poolActions } from '@/features/apps/actions'
 import { diskNodeActions, driveActions } from '@/features/disk/actions'
 import { gameActions } from '@/features/games/actions'
+import { hardwareActions } from '@/features/hardware/actions'
 import { habitActions, habitDayActions } from '@/features/life/actions'
 import { projectActions } from '@/features/projects/actions'
 import { settingActions } from '@/features/settings/actions'
@@ -23,6 +24,7 @@ const providers: { [K in ItemType]: ActionProvider<TargetOf<K>> } = {
   habit: habitActions,
   habitDay: habitDayActions,
   drive: driveActions,
+  hardware: hardwareActions,
   diskNode: diskNodeActions,
   setting: settingActions,
 }

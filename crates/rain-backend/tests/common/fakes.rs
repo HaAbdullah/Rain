@@ -556,3 +556,75 @@ impl PathProbe for FakePathProbe {
         Some(!lock(&self.missing).contains(&text))
     }
 }
+
+// ---- hardware ----
+
+/// Waits for `time` on this thread. `park_timeout` is a sleep that clippy allows, but it can
+/// return early, so it is repeated until the time is up.
+fn nap(time: Duration) {
+    let end = std::time::Instant::now() + time;
+    while let Some(left) = end.checked_duration_since(std::time::Instant::now()) {
+        std::thread::park_timeout(left);
+    }
+}
+
+/// A PC with the devices that a test says it has. Nothing is read from the real PC.
+#[derive(Default)]
+pub struct FakeHardware {
+    pub inputs: Mutex<rain_backend::modules::hardware::Inputs>,
+    /// What each channel answers (by path) and how long it takes.
+    pub answers: Mutex<
+        std::collections::HashMap<
+            String,
+            (Duration, Vec<rain_backend::modules::hardware::Reading>),
+        >,
+    >,
+    pub installed: Mutex<Vec<rain_backend::platform::registry::UninstallEntry>>,
+    /// The program files that exist.
+    pub files: Mutex<Vec<PathBuf>>,
+    /// How many times the PC was read: one count per call of `inputs`.
+    pub reads: std::sync::atomic::AtomicUsize,
+}
+
+impl FakeHardware {
+    pub fn set_inputs(&self, inputs: rain_backend::modules::hardware::Inputs) {
+        *lock(&self.inputs) = inputs;
+    }
+
+    pub fn answer(
+        &self,
+        path: &str,
+        delay: Duration,
+        readings: Vec<rain_backend::modules::hardware::Reading>,
+    ) {
+        lock(&self.answers).insert(path.to_owned(), (delay, readings));
+    }
+}
+
+impl rain_backend::modules::hardware::Source for FakeHardware {
+    fn inputs(&self) -> rain_backend::modules::hardware::Inputs {
+        self.reads.fetch_add(1, Ordering::SeqCst);
+        lock(&self.inputs).clone()
+    }
+
+    fn ask(
+        &self,
+        endpoint: &rain_backend::modules::hardware::Endpoint,
+        _deadline: std::time::Instant,
+    ) -> Vec<rain_backend::modules::hardware::Reading> {
+        let (delay, readings) = lock(&self.answers)
+            .get(&endpoint.path)
+            .cloned()
+            .unwrap_or_default();
+        nap(delay);
+        readings
+    }
+
+    fn installed(&self) -> Vec<rain_backend::platform::registry::UninstallEntry> {
+        lock(&self.installed).clone()
+    }
+
+    fn exists(&self, path: &Path) -> bool {
+        lock(&self.files).iter().any(|file| file == path)
+    }
+}

@@ -28,7 +28,7 @@ const ROUTE_KEYWORDS: Record<RouteName, string[]> = {
   games: ['library', 'steam', 'epic', 'riot', 'play'],
   workflows: ['claude', 'sessions', 'jobs', 'idle', 'cron'],
   life: ['habits', 'streak', 'vault', 'daily note'],
-  disk: ['storage', 'space', 'treemap', 'drives'],
+  hardware: ['disk', 'storage', 'space', 'drives', 'keyboard', 'mouse', 'battery', 'devices'],
   gameMode: ['wind down', 'close everything', 'shut down', 'quit'],
   settings: ['preferences', 'options', 'configuration'],
 }
@@ -46,6 +46,14 @@ const goCommands: CommandDef[] = routes.map((def) => ({
 export const commands: CommandDef[] = [
   ...goCommands,
   {
+    // Disk was a screen of its own before Hardware: the old way in still works.
+    id: 'go-disk',
+    title: 'Go to Disk',
+    icon: 'hard-drive',
+    keywords: ['storage', 'space', 'treemap', 'drives'],
+    run: ({ nav }) => nav.go('hardware', 'disk'),
+  },
+  {
     id: 'today-note',
     title: "Open today's note",
     icon: 'notebook-pen',
@@ -59,7 +67,7 @@ export const commands: CommandDef[] = [
     icon: 'scan',
     keywords: ['disk', 'storage', 'space'],
     async run(ctx) {
-      ctx.nav.go('disk')
+      ctx.nav.go('hardware', 'disk')
       const drives = await ctx.api.listDrives()
       const drive = drives.find((candidate) => candidate.letter.toUpperCase().startsWith('C'))
       if (drive) await scanDrive(drive.id, ctx)

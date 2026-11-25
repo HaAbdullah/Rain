@@ -187,13 +187,13 @@ No vue-router. `src/nav/routes.ts` holds the table; `useNav()` holds `route: { n
 | `/games` | `games` | Games | `gamepad-2` | Ctrl+4 | top | `all`, `steam`, `epic`, `custom`, `installed` |
 | `/workflows/:sub` | `workflows` | Workflows | `workflow` | Ctrl+5 | top | `sessions`, `jobs`, `idle` |
 | `/life` | `life` | Life | `calendar-check` | Ctrl+6 | top | none |
-| `/disk` | `disk` | Disk | `hard-drive` | Ctrl+7 | top | none |
+| `/hardware/:sub` | `hardware` | Hardware | `cpu` | Ctrl+7 | top | `devices`, `disk` (never remembered: Ctrl+7 always shows the tiles) |
 | `/game-mode` | `gameMode` | Game mode | `circle-power` | Ctrl+G | bottom | none |
 | `/settings` | `settings` | Settings | `settings` | Ctrl+, | bottom | none |
 
 ```ts
 // src/nav/routes.ts
-export type RouteName = 'home' | 'apps' | 'projects' | 'games' | 'workflows' | 'life' | 'disk' | 'gameMode' | 'settings'
+export type RouteName = 'home' | 'apps' | 'projects' | 'games' | 'workflows' | 'life' | 'hardware' | 'gameMode' | 'settings'
 export interface RouteDef {
   name: RouteName; path: string; title: string; icon: string   // lucide name
   combo: string                                                 // e.g. 'Ctrl+Digit1'
@@ -217,7 +217,7 @@ useSectionQuery(name: RouteName): ComputedRef<string>   // '' unless scope === n
 - `nav.go(name)` (Ctrl+digit, rail click, "Show in ...") sets `scope = name` when the route is `filterable`, and clears the query.
 - Summon sets `scope = null` and clears the query.
 - Ctrl+F toggles the chip for the current section.
-- Backspace on an empty query steps out one level: Disk folder up if inside a folder, otherwise removes the chip.
+- Backspace on an empty query steps out one level: Disk folder up if inside a folder, from the top of Disk back to the Hardware tiles, otherwise removes the chip.
 - No chip and a non-empty query: `HomeScreen` renders the flat result list in place of the current screen. Esc clears the query and the previous screen is back.
 - With a chip, the screen filters its own items (case-insensitive substring on name and keywords via `lib/score.ts#matches`) and selects the first match.
 
@@ -275,7 +275,7 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 | Window | F1 or Ctrl+/ | Shortcut sheet | Always |
 | Window | F10 | Keep open on/off | Always |
 | Window | F11 | Maximise / restore | Always |
-| Go | Ctrl+1 .. Ctrl+7 | Home, Apps, Projects, Games, Workflows, Life, Disk | Always |
+| Go | Ctrl+1 .. Ctrl+7 | Home, Apps, Projects, Games, Workflows, Life, Hardware | Always |
 | Go | Ctrl+, | Settings | Always |
 | Go | Ctrl+G | Game mode | Always |
 | Go | Tab / Shift+Tab | Next / previous sub-view | Screen has a `ViewStrip` |
@@ -283,14 +283,14 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 | Move | Left / Right | Move selection | Grid screens |
 | Move | PageUp / PageDown | Page up / down; a year in the open habit | Always |
 | Move | Ctrl+Up / Ctrl+Down | Previous / next group (Life: Daily, Weekly, Monthly) | Grouped screens |
-| Move | Backspace (empty query) | Step out: Disk folder up, close the open habit, else remove chip | Always |
+| Move | Backspace (empty query) | Step out: Disk folder up, Disk back to the tiles, close the open habit, else remove chip | Always |
 | Act | Enter | Primary action | Item selected |
 | Act | Ctrl+Enter | Secondary action | Item has one |
 | Act | Ctrl+K | Action panel | Item selected |
 | Act | Alt+1 .. Alt+9 | Run the Nth numbered row | Home list |
 | Act | Ctrl+P | Pin / unpin to Home | app, pool, project, game |
 | Act | Ctrl+N | New: pool (Apps), custom game (Games), habit (Life) | Apps, Games, Life |
-| Act | Ctrl+R | Run now / rescan / re-read | job, idle job, Disk, Life; otherwise reload the screen's data |
+| Act | Ctrl+R | Run now / rescan / re-read | job, idle job, Disk, Life, Hardware (reads the devices again); otherwise reload the screen's data |
 | Act | Ctrl+L | Log or transcript | session, job, idle job (also from Home rows) |
 | Act | Ctrl+Y | Allow once | Workflows > Sessions, waiting session selected |
 | Act | Ctrl+D | Deny | Workflows > Sessions, waiting session selected |
@@ -311,6 +311,7 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 | Session, job, idle job | Home | Show in Workflows | (none) | Transcript / log, Run now |
 | Habit | Life list | Tick / untick today | Open habit | Edit habit, Open today's note, Re-read vault, Delete habit (confirm) |
 | Habit day | Life, open habit | Tick / untick that day (last 31 days) | Open that day's note | Open today's note, Edit habit, Re-read vault |
+| Hardware tile | Hardware | Open what the tile opens (Disk screen, a program, or a web page) | (none) | Read devices again, Copy name |
 | Drive | Disk | Scan | (none) | (none) |
 | Disk node | Disk | Open folder (folders only) | Reveal in Explorer | Rescan, Copy path |
 
@@ -708,7 +709,7 @@ export const shell: Shell                       // src/shell/index.ts picks Taur
 ```ts
 // src/actions/types.ts
 export type ItemType = 'app' | 'pool' | 'project' | 'game' | 'session' | 'job' | 'idleJob' | 'command'
-                     | 'habit' | 'habitDay' | 'drive' | 'diskNode' | 'setting'
+                     | 'habit' | 'habitDay' | 'drive' | 'hardware' | 'diskNode' | 'setting'
 export type ActionTarget =
   | { type: 'app'; id: ID; item: AppEntry }       | { type: 'pool'; id: ID; item: Pool }
   | { type: 'project'; id: ID; item: Project }    | { type: 'game'; id: ID; item: Game }
@@ -888,7 +889,21 @@ Layout: `ScreenFrame pane="none"`, no strip. Rain reads your vault and writes ex
 - **States.** Vault not set: `EmptyState` `calendar-check` "Choose your vault", button "Open settings". Vault path wrong: "Vault not found", "Nothing at {path}. Check the path in Settings." No habits: "No habits yet", "A habit is a checkbox property at the top of your daily note.", button "New habit" + `KeyHint` Ctrl N. A problem with the daily notes (folder or format): one muted line above the list with the sentence and "Open settings". Ticking switched off (development build): one muted line "Ticking is switched off in this development build." and disabled checkboxes. A tick that fails shows an error notice with the reason ("The property 'gym' in that note is not a checkbox, so Rain left the note alone.").
 - **Writing rules (for the reader of the spec).** A tick sets `property: true` in the note of that day. If the property exists the `true`/`false` word is replaced and nothing else changes. If it is missing one line is added at the end of the properties. If the note has no properties, a block is added at the top. If the note does not exist it is created and holds only that property (the Obsidian template is not applied). Unticking writes `false` when the property exists and does nothing otherwise. Rain never creates a folder, never changes a property that is not true/false, and refuses instead of guessing.
 
-### 7.7 Disk (`features/disk/DiskScreen.vue`, loaded with `defineAsyncComponent`)
+### 7.7a Hardware (`features/hardware/HardwareScreen.vue`)
+
+The screen for the things plugged into the PC. It is opened rarely, so it reads nothing until it is shown.
+
+- **Layout.** One grid of large rectangular tiles, three to a row (a fourth device starts a new row). At the smallest window (1040 x 680) a tile is about 300 px wide and 224 px tall. Each tile has a 56 px icon (Lucide, stroke 1.5) in the upper middle, the name under it (16 px, semibold), and one to three short lines. The tiles are `Tile` inside `ItemGrid` with a fixed column count. Gap 16.
+- **Tiles.** Disk (`hard-drive`), Keyboard (`keyboard`), Mouse (`mouse`). A second keyboard or mouse gets its own tile. A tile for a device that is not found stays, dimmed, with one line ("No mouse found", or the reason).
+- **Lines.** Disk: up to three drives, the fullest first, each as "C: 120 GB free of 954 GB" with a thin bar; "+2 more" when there are more. Keyboard and mouse: the name the device gives itself, how it is connected (`usb` "USB", `radio` "2.4 GHz receiver", `bluetooth` "Bluetooth"), and the battery when the device reports one ("20%", "about 64%, charging"; the word "about" means the percent was worked out from a voltage). A keyboard that reports no battery shows two lines.
+- **Loading.** The tiles with their icon and name show at once. The lines are two grey bars until the answer arrives. A refresh keeps the old lines on screen. If the backend does not answer, an `ErrorRow` "Hardware unavailable" with Retry shows above the tiles and the tiles say "Not read".
+- **When it reads.** `GET /hardware` runs when the grid is shown and on Ctrl+R. It does not run at start, on a timer, or while another screen is open. The backend keeps no cache. Each source has a 1.5 s limit, so one slow device only leaves its own tile empty.
+- **Keys.** Arrows move (the grid keyboard model of the other screens), Enter opens what the tile opens, Ctrl+K lists the actions, Ctrl+R reads again. Typing with the chip filters the tiles by name and product.
+- **What Enter opens.** Disk: the Disk screen (sub-view `disk` of the same route; Esc or Backspace on its top level, or the "Hardware" crumb, goes back to the tiles). A Logitech device: Logitech G HUB or Logi Options+ when installed, else the Logitech download page. A VIA keyboard (a keyboard with the QMK and VIA raw HID interface): the VIA program when installed, else usevia.app in the default browser. A device with nothing known to open: a notice "Set what this opens in hardware.toml". After a program or page starts, Rain hides unless Keep open is on.
+- **hardware.toml.** `[[tile]]` rules in the data folder rename a tile (`name`), hide it (`hidden = true`) or set what it opens (`opens` = a program path, a web address, "disk" or "none"). A rule names a tile by id (`mouse`, `keyboard-2`) or by kind. Rain writes a commented example when the file is missing and never changes it afterwards.
+- "Go to Disk" and "Scan drive C:" still work: both open `/hardware/disk`.
+
+### 7.7 Disk (`features/disk/DiskScreen.vue`, opened from the Disk tile of Hardware, loaded with `defineAsyncComponent`)
 
 `d3-hierarchy` is imported only inside this folder. Nothing is read until a scan is started.
 
@@ -900,7 +915,7 @@ Layout: `ScreenFrame pane="none"`, no strip. Rain reads your vault and writes ex
   - Legend: a 24 px row under the map, 8 swatches (10x10, radius 2) with 12 px labels.
   - One selection: Up/Down move in the list and the matching rectangle gets a 2 px `--foreground` outline. Clicking a rectangle selects its top-level ancestor in the list; double-click opens that folder. Hit-testing walks the hierarchy from the pointer; no per-rectangle listeners.
   - Redraw on resize through one `ResizeObserver`, debounced 100 ms.
-- Keys: Enter opens the selected folder; Backspace on an empty query goes up; Ctrl+Enter reveals in Explorer; Ctrl+R rescans. Typing with the chip filters the list.
+- Keys: Enter opens the selected folder; Backspace on an empty query goes up, and from the top level goes back to the Hardware tiles (Esc does the same when the query is empty and no folder is open); the first crumb "Hardware" does it too; Ctrl+Enter reveals in Explorer; Ctrl+R rescans. Typing with the chip filters the list.
 - Summary: full path, size, share ("C:\Dev\node_modules, 4.1 GB, 12% of Dev").
 - No delete in the prototype.
 - Opening a folder (Enter, double-click, breadcrumb) fetches that folder whole from the backend when the folder is not complete yet; the list appears when it is whole. A rare failure shows as a notice ("This scan is too old. Scan the drive again.").
@@ -1011,6 +1026,7 @@ src/
                 idle/     IdleView.vue IdleRow.vue IdleJobDetail.vue
     life/       LifeScreen.vue  HabitRow.vue  HabitStrip.vue  HabitView.vue  HabitYear.vue  HabitEditorDialog.vue  HeatCell.vue
                 useOpenHabit.ts  rows.ts  yearGrid.ts  habitForm.ts  actions.ts
+    hardware/   HardwareScreen.vue  HardwareGrid.vue  HardwareCard.vue  model.ts  actions.ts
     disk/       DiskScreen.vue  DriveList.vue  FolderList.vue  TreemapCanvas.vue  treemap.ts  diskCache.ts  actions.ts
     game-mode/  GameModeScreen.vue  WindDownRow.vue
     settings/   SettingsScreen.vue  SettingRow.vue  settingDefs.ts  actions.ts

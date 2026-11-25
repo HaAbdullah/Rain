@@ -3,7 +3,7 @@
 import type { Bridge, HttpMethod } from '@/shell/bridge'
 import type { RainApi } from '../api'
 import type {
-  AppEntry, CalendarEvent, ClaudeSession, DiskNode, DiskScan, Drive, FocusResult, Game, GameLibrary, GameModeState,
+  AppEntry, CalendarEvent, ClaudeSession, DiskNode, DiskScan, Drive, FocusResult, Game, GameLibrary, GameModeState, HardwareTile,
   Habit, HabitDay, HabitStats, HabitSummary, Health, IdleJob, JobRun, LaunchRun, LogLine, MachineState, OpenNoteResult,
   PathCheck, PathsCheckBody, PermissionAnswerResult, Pool, Project, PropertySuggestion, RevealBody,
   ScheduledJob, SearchItem, Settings, StartScanBody, VaultStatus,
@@ -84,6 +84,9 @@ export function createRestApi(
     revealPath: (path) => call<void>('POST', '/shell/reveal', { path } satisfies RevealBody),
     checkPaths: (paths) => call<PathCheck[]>('POST', '/paths/check', { paths } satisfies PathsCheckBody),
     getMachineState: () => call<MachineState>('GET', '/machine'),
+    // ---- hardware ----
+    listHardware: () => call<HardwareTile[]>('GET', '/hardware'),
+    openHardware: (id) => call<void>('POST', `/hardware/${enc(id)}/open`),
 
     // ---- launcher and apps, section 01 ----
     search: (query, types) => call<SearchItem[]>('GET', `/search${qs({ q: query, types })}`),

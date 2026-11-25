@@ -18,8 +18,8 @@ use super::shell_facts::ShellFactsCell;
 use super::shutdown::{Activity, ShutdownHandle};
 use crate::config::Config;
 use crate::modules::{
-    disk, gamemode, games, idle, jobs, launcher, life, lifecycle, machine, projects, sessions,
-    settings,
+    disk, gamemode, games, hardware, idle, jobs, launcher, life, lifecycle, machine, projects,
+    sessions, settings,
 };
 use crate::store::db::Db;
 use crate::store::hub::ConfigHub;
@@ -108,6 +108,9 @@ impl AppState {
     }
     pub fn machine(&self) -> Arc<machine::Service> {
         self.slots.machine.get()
+    }
+    pub fn hardware(&self) -> Arc<hardware::Service> {
+        self.slots.hardware.get()
     }
     pub fn disk(&self) -> Arc<disk::Service> {
         self.slots.disk.get()
@@ -366,6 +369,7 @@ pub struct Slots {
     pub lifecycle: Slot<lifecycle::Service>,
     pub machine: Slot<machine::Service>,
     pub disk: Slot<disk::Service>,
+    pub hardware: Slot<hardware::Service>,
     pub launcher: Slot<launcher::Service>,
     pub projects: Slot<projects::Service>,
     pub games: Slot<games::Service>,
@@ -383,6 +387,7 @@ impl Default for Slots {
             lifecycle: Slot::new("lifecycle"),
             machine: Slot::new("machine"),
             disk: Slot::new("disk"),
+            hardware: Slot::new("hardware"),
             launcher: Slot::new("launcher"),
             projects: Slot::new("projects"),
             games: Slot::new("games"),

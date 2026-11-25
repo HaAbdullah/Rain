@@ -108,6 +108,18 @@ describe('REST client: getHealth', () => {
   })
 })
 
+describe('REST client: hardware', () => {
+  it('reads the tiles with one GET and opens a tile with one POST', async () => {
+    const { bridge, api } = setup()
+    await api.listHardware()
+    await api.openHardware('mouse-2')
+    expect(bridge.calls).toEqual([
+      { method: 'GET', path: '/hardware', body: undefined },
+      { method: 'POST', path: '/hardware/mouse-2/open', body: undefined },
+    ])
+  })
+})
+
 describe('REST client: disk and machine', () => {
   it('sends each call to its route with the right method, path and body', async () => {
     const { bridge, api } = setup()
