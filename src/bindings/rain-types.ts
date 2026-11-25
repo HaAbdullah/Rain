@@ -70,17 +70,31 @@ export type LaunchMode = "full" | "editorOnly" | "terminal" | "claude";
 
 export type LaunchTarget = { type: "app" | "pool" | "project" | "game", id: string, mode?: 'full' | 'editorOnly' | 'terminal' | 'claude', args?: string, };
 
-export type LaunchStep = { label: string, icon: IconRef, status: "idle" | "running" | "waiting" | "success" | "failed", error?: string, };
+export type LaunchStep = { label: string, icon: IconRef, status: "idle" | "running" | "waiting" | "success" | "failed", error?: string, note?: string, };
 
 export type RunStatus = "running" | "success" | "failed";
 
 export type LaunchRun = { id: string, target: LaunchTarget, status: "running" | "success" | "failed", steps: Array<LaunchStep>, };
 
-export type EnvKind = "editor" | "terminal" | "browser" | "claude" | "app";
+export type EnvKind = "editor" | "terminal" | "browser" | "claude" | "app" | "folder";
 
-export type EnvStep = { kind: "editor" | "terminal" | "browser" | "claude" | "app", label: string, icon: IconRef, command?: string, url?: string, };
+export type EnvStep = { kind: "editor" | "terminal" | "browser" | "claude" | "app" | "folder", label: string, icon: IconRef, command?: string, url?: string, };
 
 export type Project = { id: string, name: string, path: string, icon: IconRef, branch: string, dirtyFiles?: number, commits14d: Array<number>, lastOpenedAt?: string, activityScore: number, environment: Array<EnvStep>, open: boolean, pinned: boolean, missing: boolean, };
+
+export type LayoutZone = "free" | "full" | "left-half" | "right-half" | "top-half" | "bottom-half" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | "left-third" | "middle-third" | "right-third" | "left-two-thirds" | "right-two-thirds";
+
+export type LayoutWhat = { "kind": "step", name: string, } | { "kind": "app", id: string, } | { "kind": "folder" };
+
+export type LayoutItem = { what: LayoutWhat, zone: "free" | "full" | "left-half" | "right-half" | "top-half" | "bottom-half" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | "left-third" | "middle-third" | "right-third" | "left-two-thirds" | "right-two-thirds", monitor?: number, };
+
+export type LayoutScope = "project" | "default" | "none";
+
+export type LayoutStepOption = { name: string, kind: "editor" | "terminal" | "browser" | "claude" | "app" | "folder", label: string, icon: IconRef, };
+
+export type ProjectLayout = { items: Array<LayoutItem>, scope: "project" | "default" | "none", steps: Array<LayoutStepOption>, monitors: number, };
+
+export type LayoutSave = { items: Array<LayoutItem>, all: boolean, };
 
 export type GameSource = "steam" | "epic" | "riot" | "custom";
 

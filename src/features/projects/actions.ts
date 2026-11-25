@@ -1,11 +1,30 @@
 // Actions for a project (spec 4.3). Enter opens the whole dev environment;
 // its label follows the project's state: Focus when open, Locate when the folder is gone.
+import { ref } from 'vue'
 import { copyAction, pinAction, revealAction } from '@/actions/common'
-import type { ActionProvider, RainAction, TargetOf } from '@/actions/types'
+import type { ActionContext, ActionProvider, RainAction, TargetOf } from '@/actions/types'
 import { useLaunch } from '@/composables/useLaunch'
 import type { Project } from '@/data/types'
 
 const { runs, launch } = useLaunch()
+
+/**
+ * The layout editor's state. LayoutEditorDialog (mounted by ProjectsScreen) is open while `target`
+ * is set; it saves with api.saveProjectLayout and sets it back to null.
+ */
+export const layoutEditor = {
+  target: ref<{ id: string; name: string } | null>(null),
+
+  edit(project: Project) {
+    layoutEditor.target.value = { id: project.id, name: project.name }
+  },
+}
+
+/** The editor dialog only exists on the Projects screen, so go there first. */
+function editLayout(project: Project, ctx: ActionContext) {
+  if (ctx.nav.displayed.value !== 'projects') ctx.nav.go('projects', undefined, { id: project.id })
+  layoutEditor.edit(project)
+}
 
 // Enter and Ctrl+Enter act on the selection, so they must not start a second launch.
 async function launchProject(project: Project, mode: 'full' | 'editorOnly' | 'terminal' | 'claude') {
@@ -51,6 +70,15 @@ export const projectActions: ActionProvider<TargetOf<'project'>> = ({ item: proj
       run: () => launchProject(project, 'editorOnly'),
     },
     pin,
+    {
+      id: 'layout',
+      label: 'Edit layout',
+      icon: 'layout-grid',
+      slot: 'more',
+      keys: 'Ctrl+KeyE',
+      // Where each window goes when the project opens.
+      run: (ctx) => editLayout(project, ctx),
+    },
     {
       id: 'terminal',
       label: 'Terminal here',

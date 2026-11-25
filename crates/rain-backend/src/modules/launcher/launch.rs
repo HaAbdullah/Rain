@@ -19,8 +19,8 @@ use super::apps::AppRecord;
 use super::limits::{EXISTS_TIMEOUT, RUN_KEEP, RUN_MAX, STEP_TIMEOUT};
 use crate::core::blocking;
 use crate::core::launch_contract::{
-    ErrorText, OnSpawned, OpenError, OpenRequest, Opener, PlannedStep, ShellFallback, Started,
-    StepAction,
+    ErrorText, OnSpawned, OpenError, OpenRequest, Opener, Placement, PlannedStep, ShellFallback,
+    Started, StepAction,
 };
 
 // ---- what a step does ----
@@ -50,6 +50,7 @@ pub struct EngineStep {
     pub on_spawned: Option<OnSpawned>,
     pub shell_fallback: Option<ShellFallback>,
     pub error_text: Option<ErrorText>,
+    pub placement: Option<Placement>,
 }
 
 impl EngineStep {
@@ -68,6 +69,7 @@ impl EngineStep {
             on_spawned: None,
             shell_fallback: None,
             error_text: None,
+            placement: None,
         }
     }
 
@@ -83,6 +85,7 @@ impl EngineStep {
             on_spawned: None,
             shell_fallback: None,
             error_text: None,
+            placement: None,
         }
     }
 
@@ -98,6 +101,7 @@ impl EngineStep {
             on_spawned,
             shell_fallback,
             error_text,
+            placement,
         } = planned;
         let source = match action {
             StepAction::App { app_id, args } => match find(&app_id) {
@@ -128,6 +132,7 @@ impl EngineStep {
             on_spawned,
             shell_fallback,
             error_text,
+            placement,
         }
     }
 }
@@ -462,6 +467,7 @@ pub fn new_run(id: String, target: &LaunchTarget, steps: &[EngineStep]) -> Launc
                     Status::Idle
                 },
                 error: None,
+                note: None,
             })
             .collect(),
     }
@@ -798,6 +804,7 @@ mod tests {
                     dir: Some(r"C:\Fake".into()),
                 }),
                 error_text: None,
+                placement: None,
             },
             |_| None,
         );
@@ -840,6 +847,7 @@ mod tests {
                 on_spawned: None,
                 shell_fallback: None,
                 error_text: None,
+                placement: None,
             },
             |_| None,
         );
@@ -868,6 +876,7 @@ mod tests {
                 on_spawned: None,
                 shell_fallback: None,
                 error_text: None,
+                placement: None,
             },
             |_| None,
         );

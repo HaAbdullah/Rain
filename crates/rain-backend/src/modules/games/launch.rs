@@ -206,6 +206,7 @@ impl LaunchPlanner for Service {
                 on_spawned,
                 shell_fallback,
                 error_text: Some(error_text_of(&found)),
+                placement: None,
             }],
         })
     }

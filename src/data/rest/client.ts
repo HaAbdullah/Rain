@@ -5,7 +5,7 @@ import type { RainApi } from '../api'
 import type {
   AppEntry, CalendarEvent, ClaudeSession, DiskNode, DiskScan, Drive, FocusResult, Game, GameLibrary, GameModeState, HardwareTile, OtherApps,
   Habit, HabitDay, HabitStats, HabitSummary, Health, IdleJob, JobRun, LaunchRun, LogLine, MachineState, OpenNoteResult,
-  PathCheck, PathsCheckBody, PermissionAnswerResult, Pool, Project, PropertySuggestion, RevealBody,
+  PathCheck, PathsCheckBody, PermissionAnswerResult, Pool, Project, ProjectLayout, PropertySuggestion, RevealBody,
   ScheduledJob, SearchItem, Settings, StartScanBody, VaultStatus,
 } from '../types'
 import { toRainError } from './errors'
@@ -66,6 +66,8 @@ export function createRestApi(
     getHealth: () => call<Health>('GET', '/health'),
     // ---- projects ----
     listProjects: () => call<Project[]>('GET', '/projects'),
+    getProjectLayout: (id) => call<ProjectLayout>('GET', `/projects/${enc(id)}/layout`),
+    saveProjectLayout: (id, save) => call<ProjectLayout>('PUT', `/projects/${enc(id)}/layout`, save),
     subscribe: stream.subscribe,
     // ---- disk and machine ----
     listDrives: () => call<Drive[]>('GET', '/drives'),

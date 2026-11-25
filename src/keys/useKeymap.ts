@@ -41,6 +41,7 @@ const BLOCKED = new Set([
   'Ctrl+KeyT',
   'Ctrl+KeyL',
   'Ctrl+KeyD',
+  'Ctrl+KeyE',
   'Ctrl+KeyJ',
   'Ctrl+KeyU',
   'F7',

@@ -1012,6 +1012,7 @@ fn run_with(id: &str, statuses: &[Status]) -> LaunchRun {
                 },
                 status: *status,
                 error: None,
+                note: None,
             })
             .collect(),
     }

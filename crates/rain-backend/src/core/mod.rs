@@ -10,6 +10,7 @@ pub mod launch_contract;
 pub mod logging;
 pub mod media;
 pub mod paths;
+pub mod placement;
 pub mod secrets;
 pub mod shell_facts;
 pub mod shutdown;

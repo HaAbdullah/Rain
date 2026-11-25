@@ -15,6 +15,7 @@
 //! | `job` | `OwnedJob`: a process tree that dies with Rain, with its output captured |
 //! | `windows` | the visible top-level windows; every top-level window and `post_close` (game mode) |
 //! | `windows_focus` | the windows with their handles, and bringing one to the front |
+//! | `windows_place` | the monitors, and moving a window into a rectangle (`SystemDesktop`) |
 //! | `idle` | milliseconds since the last keyboard or mouse input |
 //! | `fs` | the fixed drives and their sizes |
 //! | `hid` | the HID devices that are plugged in, and a channel to one |
@@ -42,3 +43,4 @@ pub mod thread;
 pub mod time;
 pub mod windows;
 pub mod windows_focus;
+pub mod windows_place;

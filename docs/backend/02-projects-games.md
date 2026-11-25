@@ -88,6 +88,8 @@ Paths are after `/api/v1`. "Idempotent" follows foundation 4.6.
 |---|---|---|---|---|---|---|---|
 | GET | `/projects` | none | `Project[]` | 200 | 503 `unavailable` `moduleFailed` or `shuttingDown` | yes | may start a background git refresh; the result arrives on `projects` |
 | POST | `/projects/refresh` (new) | none | `Project[]` | 200 | 409 `conflict` `gameMode`; 503 as above | yes | recomputes the git facts of every project now (waits at most 8 s, section 6.3), publishes `projects` |
+| GET | `/projects/{id}/layout` (new `getProjectLayout`) | none | `ProjectLayout` | 200 | 404 `notFound` `unknownId`; 503 as above | yes | none |
+| PUT | `/projects/{id}/layout` (new `saveProjectLayout`) | `LayoutSave` | `ProjectLayout` | 200 | 404 `notFound` `unknownId`; 400 `invalid`: `unknownStep`, `unknownApp`, `badMonitor`, `tooManyItems`; 409 `conflict`: `gameMode`, `configBroken`, `configNewer`, `configChanged`; 500 `failed` `saveFailed` | yes | `projects` (the file watcher) |
 | GET | `/games` | none | `GameLibrary` | 200 | 503 `unavailable` `moduleFailed` or `shuttingDown` | yes | may start the background size measurement; results arrive on `games` |
 | POST | `/games/refresh` (new) | none | `GameLibrary` | 200 | 409 `conflict` `gameMode`; 503 as above | yes | drops the guess and size caches, rescans every source, publishes `games` |
 | POST | `/games` (`saveCustomGame`) | `CustomGameDraft` | `Game` | 201 | 400 `invalid`: `noName`, `noExe`, `exeNotAbsolute`, `exeNotFound`, `notAnExe`, `coverNotFound`, `coverNotImage`, `coverTooLarge`; 409 `conflict`: `alreadyListed`, `configBroken`, `configNewer`, `configChanged`; 500 `failed` `saveFailed` | no, but a second identical call gets 409 `alreadyListed` (same program file) | `games` |
@@ -335,7 +337,7 @@ Both files are rows of foundation 10.2 (`projects.toml`, `games.toml`, folder `m
 
 ### 4.1 `projects.toml`
 
-Owner: this section. Rain never changes it after it exists. The user edits it by hand. A change is picked up by the file watcher (foundation 10.4) and publishes `projects`.
+Owner: this section. The user edits it by hand. Rain changes it in one place only: the `layout` of `[defaults]` or of a `[[project]]`, when the user saves a layout in the Projects screen (6.17); comments and order stay. A change is picked up by the file watcher (foundation 10.4) and publishes `projects`.
 
 Rain creates the file once, at the first start of the `projects` module, when it does not exist. The created file contains `schema_version = 1` and the commented example below, nothing else (foundation 10.1 allows this when the section says so).
 
@@ -352,6 +354,7 @@ Schema:
 | `[terminal]` `profile` | string | `""` | name of a Windows Terminal profile (`-p`); empty = the default profile |
 | `[defaults]` `steps` | array of step names | `["editor", "claude"]` | every name must be a built-in step (`editor`, `terminal`, `claude`) or defined by a `[[step]]`; an unknown name is skipped with a warning |
 | `[defaults]` `forget_missing_days` | integer 0 to 3650 | 30 | days a vanished project stays listed as missing; 0 = never list missing projects |
+| `[defaults]` `layout` | array of layout items | none | where each window goes for every project that has no layout or steps of its own (6.17); an item that breaks a rule is skipped and counted |
 | `[[step]]` `name` | string `^[a-z0-9][a-z0-9_-]{0,39}$` | required | unique; a name equal to a built-in name replaces the built-in |
 | `[[step]]` `kind` | `editor`, `terminal`, `claude`, `browser`, `app` | required | |
 | `[[step]]` `label` | string, 1 to 40 characters | the built-in label of the kind | shown in the detail pane and in the checklist |
@@ -366,6 +369,7 @@ Schema:
 | `[[project]]` `name` | string | folder name | display name |
 | `[[project]]` `icon` | lucide name | letter tile | |
 | `[[project]]` `steps` | array of step names | `[defaults].steps` | replaces the default list for this project |
+| `[[project]]` `layout` | array of layout items | none | this project's own layout; it beats `steps` and the default layout (6.17). An empty list is no layout |
 
 The built-in steps (never written to the file):
 
@@ -382,7 +386,8 @@ schema_version = 1
 
 # Rain opens a project with two steps: VS Code, and a Windows Terminal tab in the folder
 # that runs Claude Code. This file changes that. Nothing here is required.
-# Rain only reads this file. Edit it with any editor; Rain notices the change.
+# Edit this file with any editor; Rain notices the change. Rain itself writes only the `layout`
+# lists below, when you save a layout in the Projects screen. Your comments and order stay.
 
 # [tools]                       # only when Rain cannot find a program by itself
 # editor   = "C:\\Path\\To\\Code.exe"
@@ -416,6 +421,32 @@ schema_version = 1
 # [[project]]
 # path  = "C:\\Dev\\web-shop"
 # steps = ["editor", "dev-server", "preview", "claude"]
+
+# A layout says where each window goes. Each item names WHAT opens (one of step, app, folder)
+# and WHERE (zone, and monitor). Without a layout every window opens where Windows puts it.
+#   step    = "editor", "terminal", "claude", or the name of a [[step]] above
+#   app     = the id of an app of Rain's app list, for example "app-notepad"
+#   folder  = true: the project folder in Explorer
+#   zone    = "free" (the default: not moved), "full", "left-half", "right-half", "top-half",
+#             "bottom-half", "top-left", "top-right", "bottom-left", "bottom-right",
+#             "left-third", "middle-third", "right-third", "left-two-thirds", "right-two-thirds"
+#   monitor = 1, 2, ... counted from the left. Without it: the monitor Rain's window is on.
+# Terminal items in the same zone become tabs of one Windows Terminal window.
+# A layout of a project beats its steps. A layout under [defaults] serves every project that has
+# neither a layout nor steps of its own.
+# [defaults]
+# layout = [
+#   { step = "editor",   zone = "right-half" },
+#   { step = "terminal", zone = "top-left" },
+#   { step = "claude",   zone = "bottom-left" },
+# ]
+#
+# [[project]]
+# path   = "C:\\Dev\\web-shop"
+# layout = [
+#   { step = "editor", zone = "left-two-thirds", monitor = 2 },
+#   { app = "app-notepad", zone = "right-third", monitor = 2 },
+# ]
 ```
 
 Hand edit: anything. A syntax error keeps the last good value and shows a `ConfigIssue` (foundation 10.4). Migration: `fn migrate` in `store.rs` is empty for version 1.
@@ -744,7 +775,7 @@ Autodetection from `package.json` or `Cargo.toml` is NOT done (the user decided 
 
 Called by section 01 through `LaunchPlanner::plan` and `finished` (6.9 of section 01); this module has no run task of its own.
 
-**Plan.** `mode` selects steps: `full` or absent = all steps of the project's list (the default list `[editor, claude]` when the project has none); `editorOnly` = the steps of kind `editor` of that list; `terminal` and `claude` = the project's step of that kind when its list has one, else the built-in step of that name (`terminal`, `claude`), so "Terminal here" works with the default list, which has no `terminal` step. An empty plan is `400 invalid` `noSteps` with the message "This project has no editor step" (for `full` with an empty list: "This project has no steps"). `noSteps` can only come from `editorOnly` (no editor step in the list) or from an empty list: the `terminal` and `claude` modes fall back to the built-in step, so "no terminal/Claude step" never occurs. The project must be known (missing projects too): an unknown id is `404`.
+**Plan.** `mode` selects steps: `full` or absent = all steps of the project's list (the default list `[editor, claude]` when the project has none); `editorOnly` = the steps of kind `editor` of that list; `terminal` and `claude` = the project's step of that kind when its list has one, else the built-in step of that name (`terminal`, `claude`), so "Terminal here" works with the default list, which has no `terminal` step. An empty plan is `400 invalid` `noSteps` with the message "This project has no editor step" (for `full` with an empty list: "This project has no steps"). `noSteps` can only come from `editorOnly` (no editor step in the list) or from an empty list: the `terminal` and `claude` modes fall back to the built-in step, so "no terminal/Claude step" never occurs. The project must be known (missing projects too): an unknown id is `404`. A layout changes the list and places the windows: see 6.17.
 
 **Double click.** The engine owns it: section 01 6.8 step 3 returns the run that is still going for the same target before `plan` is called, so this module keeps no map of runs.
 
@@ -1114,6 +1145,24 @@ None of these methods waits for git, a size or a scan that is not yet cached; th
 | `COVER_MAX` | 8 MiB | 6.12 |
 | manifest file limits | acf 256 KB, localconfig 4 MiB, epic item 1 MiB | 6.9, 6.10 |
 | games, projects per answer | designed for 400 and 200; larger works but is not budgeted | 2.1 |
+
+### 6.17 Launch layouts
+
+A layout is a list of at most 12 items. An item says WHAT opens and WHERE it goes. The types are in `rain-types/src/layout.rs`.
+
+- WHAT (`LayoutWhat`): `step` (a built-in or `[[step]]` name: editor, terminal, Claude Code, a named terminal, a browser page), `app` (the id of an app of the launcher's list) or `folder` (the project folder in Explorer).
+- WHERE: a `LayoutZone` of one monitor's work area (the screen without the taskbar): `free`, `full`, the halves, the quadrants, the thirds, the two-thirds. `free` is the default and moves nothing. `monitor` is 1 for the monitor at the far left, up to 16. Without it the monitor that Rain's window is on counts; a number that no monitor has falls back to that monitor and the launch result says so.
+- Which layout counts: the project's own `layout`, else its own `steps` (no layout), else the `[defaults]` layout, else the default steps. A project without any layout opens exactly as before. Only the full open (Enter) uses zones; "Open in editor only", "Terminal here" and "New Claude session here" open where Windows puts the window.
+- Writing: `PUT /projects/{id}/layout` edits `projects.toml` with `toml_edit` (`layout_file.rs`): only the `layout` key of `[defaults]` (`all: true`) or of the project's `[[project]]` entry (found by path, else id; made with its `path` when missing) changes. An empty list removes the key.
+
+How a plan becomes placed windows (`projects/launch.rs`, `core/placement.rs`, `platform/windows_place.rs`):
+
+1. The plan gives a step a `Placement`: the zone, the monitor and a `WindowQuery` (image names, a title text, whether a window that is open already may be the one). Terminal and Claude items that share a zone and a monitor become the tabs of ONE `wt.exe -w new` call, wherever they stand in the list; a different zone is another window. A zone for the terminal always means a new window, whatever `[terminal] window` says, so the user's own terminal window is never moved. A project that is open already starts no terminal (as before) and only places its editor.
+2. The launch engine takes a snapshot of the visible windows before each placed step, runs the step, then polls (every 150 ms, at most 8 s) for a window that is not in the snapshot and belongs to the started program: its process id, or one of the image names (`WindowsTerminal.exe` and `wt.exe`; the editor's image; `explorer.exe`; the program of an app; the browsers). A title rule narrows it (VS Code: the folder name; Explorer: the folder name; a store app: its name). Only the editor and Explorer may take a window that is open already (the project is being opened), and only with the title rule. A window that an earlier step of the run placed is never taken again.
+3. The window is restored when it is maximised or minimised, then `SetWindowPos` moves it so that its VISIBLE part fills the zone: the invisible resize border is measured (`GetWindowRect` against the DWM extended frame bounds) and added to each edge, and the move is measured again, up to three times, because the border has another width on a monitor of another scale. The calling thread is made per-monitor DPI aware for the call, so all numbers are physical pixels. A moment later the position is checked once more and corrected once, for programs that put their window back.
+4. A step whose window did not show up, whose monitor is missing or whose move was refused stays `success` and carries a `note` in the `LaunchStep` (for example "Its window did not show up, so it was left where it is"). Nothing is retried and no other window is moved. The Projects screen shows the notes in a quiet line after the launch.
+
+Not known until a real launch: a browser that opens the page as a tab of a window that is open already makes no window, so it is reported and left; a program that runs as administrator refuses the move; a program with a fixed minimum size may not fill a small zone; UWP windows that Windows reports under another process are found by title only.
 
 ---------------------------------------------------------------------------------------------------
 

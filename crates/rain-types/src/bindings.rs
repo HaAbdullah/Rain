@@ -46,6 +46,7 @@ pub fn single_file(config: &Config) -> String {
         LaunchType, LaunchMode, LaunchTarget, LaunchStep, RunStatus, LaunchRun,
         // projects and games (section 02)
         EnvKind, EnvStep, Project,
+        LayoutZone, LayoutWhat, LayoutItem, LayoutScope, LayoutStepOption, ProjectLayout, LayoutSave,
         GameSource, Game, GameSourceStatus, GameLibrary, CustomGameDraft, GamePatch,
         // sessions, jobs and idle jobs (section 03)
         JobKind, JobSource, JobRun, LogLevel, LogLine, ScheduledJob, IdleState, IdleResource, IdleJob, EnabledBody,

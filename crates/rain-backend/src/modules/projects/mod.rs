@@ -7,6 +7,7 @@
 //! - `env` and `tools`: `projects.toml` (what opening a project does) and finding the programs
 //!   (editor, Windows Terminal, Claude Code, git);
 //! - `launch`: the command lines and the plan that the launcher engine runs;
+//! - `layout_file`: writing a layout into `projects.toml` (the zones of the windows);
 //! - `open`: which projects have an editor window open;
 //! - `store`: the tables;
 //! - `service` and `routes`: the list, the topic, and the interface for the other modules.
@@ -18,6 +19,7 @@ mod facts;
 mod git;
 pub(crate) mod ids;
 mod launch;
+mod layout_file;
 mod open;
 mod routes;
 mod service;
