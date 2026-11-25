@@ -10,6 +10,7 @@
 //! | `icons` | an icon as PNG for a file, a shortcut or an app id |
 //! | `known_folders` | `%APPDATA%`, the Start Menu folders and the like, from Windows |
 //! | `registry` | reading values, and the autostart entry (`RunKey`) |
+//! | `session_env` | dropping the variables of a Claude Code session that started Rain |
 //! | `process` | `hidden_command`, process lists, `spawn_detached`, `ExitWatcher` |
 //! | `job` | `OwnedJob`: a process tree that dies with Rain, with its output captured |
 //! | `windows` | the visible top-level windows |
@@ -33,6 +34,7 @@ pub mod pipe_acl;
 pub mod power;
 pub mod process;
 pub mod registry;
+pub mod session_env;
 pub mod shell;
 pub mod thread;
 pub mod time;

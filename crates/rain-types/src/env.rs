@@ -111,7 +111,54 @@ fn validate_pipe_name(name: &str) -> Result<String, InvalidPipeName> {
     }
 }
 
-/// The full Windows path of a pipe: `\\.\pipe\<name>`.
+/// A process started from inside a Claude Code session has one of these variables.
+const CLAUDE_SESSION_MARKERS: [&str; 2] = ["CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION"];
+/// What a Claude Code session hands down to the programs it starts, besides the markers.
+const CLAUDE_SESSION_PREFIXES: [&str; 3] = ["CLAUDE_CODE_", "CLAUDE_AGENT_SDK_", "CLAUDE_PREVIEW_"];
+const CLAUDE_SESSION_NAMES: [&str; 5] = [
+    "CLAUDECODE",
+    "CLAUDE_PID",
+    "CLAUDE_EFFORT",
+    "MCP_SERVER_CONNECTION_BATCH_SIZE",
+    "MCP_CONNECTION_NONBLOCKING",
+];
+
+/// The variables that a surrounding Claude Code session left in this process, out of `names`.
+///
+/// When Rain is started from inside a Claude Code session (a developer's terminal, an agent), it
+/// inherits that session's variables. A terminal that Rain then opens would pass them on, and
+/// the Claude Code started there would believe it is a child of the first session: it does not
+/// save its transcript and it shows no colours. So the backend drops them when it starts.
+///
+/// Empty unless a marker is present: a user's own `CLAUDE_CODE_...` settings are not touched in
+/// a normal start. `CLAUDE_CONFIG_DIR` and `ANTHROPIC_...` are never listed. Windows variable
+/// names ignore case, and so does this rule.
+pub fn claude_session_vars<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let names: Vec<&str> = names.into_iter().collect();
+    let is = |name: &str, other: &str| name.eq_ignore_ascii_case(other);
+    let inside_a_session = names
+        .iter()
+        .any(|name| CLAUDE_SESSION_MARKERS.iter().any(|marker| is(name, marker)));
+    if !inside_a_session {
+        return Vec::new();
+    }
+    let starts = |name: &str, prefix: &str| {
+        name.get(..prefix.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+    };
+    names
+        .into_iter()
+        .filter(|name| {
+            CLAUDE_SESSION_NAMES.iter().any(|known| is(name, known))
+                || CLAUDE_SESSION_PREFIXES
+                    .iter()
+                    .any(|prefix| starts(name, prefix))
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The full Windows path of a pipe:`\\.\pipe\<name>`.
 pub fn pipe_path(pipe_name: &str) -> String {
     format!("{PIPE_PATH_PREFIX}{pipe_name}")
 }
@@ -146,6 +193,51 @@ pub fn pipe_name() -> Result<String, InvalidPipeName> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nothing_is_a_session_variable_in_a_normal_start() {
+        let names = [
+            "PATH",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CONFIG_DIR",
+            "ANTHROPIC_API_KEY",
+        ];
+        assert!(claude_session_vars(names).is_empty());
+    }
+
+    #[test]
+    fn inside_a_claude_session_its_variables_are_listed_and_the_users_own_are_not() {
+        let names = [
+            "PATH",
+            "claudecode",
+            "CLAUDE_CODE_CHILD_SESSION",
+            "CLAUDE_CODE_SESSION_ID",
+            "Claude_Code_Entrypoint",
+            "CLAUDE_AGENT_SDK_VERSION",
+            "CLAUDE_PREVIEW_CLASSIFIER_FLOOR",
+            "CLAUDE_PID",
+            "CLAUDE_EFFORT",
+            "MCP_CONNECTION_NONBLOCKING",
+            "CLAUDE_CONFIG_DIR",
+            "ANTHROPIC_API_KEY",
+            "RAIN_PIPE",
+            "CLAUDÉ",
+        ];
+        assert_eq!(
+            claude_session_vars(names),
+            [
+                "claudecode",
+                "CLAUDE_CODE_CHILD_SESSION",
+                "CLAUDE_CODE_SESSION_ID",
+                "Claude_Code_Entrypoint",
+                "CLAUDE_AGENT_SDK_VERSION",
+                "CLAUDE_PREVIEW_CLASSIFIER_FLOOR",
+                "CLAUDE_PID",
+                "CLAUDE_EFFORT",
+                "MCP_CONNECTION_NONBLOCKING",
+            ]
+        );
+    }
 
     #[test]
     fn user_slug_lowers_case_and_replaces_other_characters() {

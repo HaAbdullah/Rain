@@ -12,6 +12,7 @@ use std::process::ExitCode;
 use rain_backend::config::Config;
 use rain_backend::core::logging;
 use rain_backend::platform::console::attach_parent_console;
+use rain_backend::platform::session_env;
 use rain_backend::{StartError, StopOutcome, run, stop};
 use rain_types::limits::{BLOCKING_KEEPALIVE, BLOCKING_MAX, RUNTIME_WORKERS};
 use tracing::{error, info};
@@ -123,6 +124,8 @@ fn stop_running(force: bool) -> ExitCode {
 }
 
 fn serve(console: bool) -> ExitCode {
+    // First of all, before anything is started: see `session_env`.
+    let dropped = session_env::drop_claude_session_vars();
     let mut config = match Config::from_env() {
         Ok(config) => config,
         Err(e) => {
@@ -141,6 +144,12 @@ fn serve(console: bool) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    if !dropped.is_empty() {
+        info!(
+            count = dropped.len(),
+            "started from inside a Claude Code session; its variables are not passed on"
+        );
+    }
 
     let runtime = match build_runtime() {
         Ok(runtime) => runtime,
