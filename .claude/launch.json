@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:empty"],
       "port": 1420
+    },
+    {
+      "name": "rainmax-live",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/abdul/All/RainMax", "run", "dev"],
+      "port": 1440
     }
   ]
 }
