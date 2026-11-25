@@ -1,11 +1,27 @@
 <script setup lang="ts">
 // The shortcut sheet (F1, Ctrl+/), generated from the key table so it cannot drift from the real bindings.
+import { computed } from 'vue'
+import { keysOf, orderActions, targetName } from '@/actions/display'
+import { lucideIcon } from '@/lib/icon-map'
+import { useScreenState } from '@/composables/useScreen'
+import { useNav } from '@/nav/useNav'
+import { routeByName } from '@/nav/routes'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { useCheatSheet } from '@/composables/useCheatSheet'
 import { combosOf, keymap, type KeyBinding, type KeyGroup } from '@/keys/keymap'
 import KeyHint from './KeyHint.vue'
 
 const { isOpen, close } = useCheatSheet()
+
+// The selected item's actions come from the same source as the action bar (useScreenState).
+const screenState = useScreenState()
+const nav = useNav()
+const itemActions = computed(() => (isOpen.value ? orderActions(screenState.actions.value) : []))
+const itemTitle = computed(() => {
+  const target = screenState.target.value
+  if (target) return `Selected: ${targetName(target)}`
+  return `This screen: ${routeByName[nav.displayed.value].title}`
+})
 
 const GROUPS: KeyGroup[] = ['Window', 'Go', 'Move', 'Act', 'Command']
 const sections = GROUPS.map((title) => ({
@@ -29,6 +45,23 @@ function shownCombos(binding: KeyBinding): string[] {
     <DialogContent class="max-h-[calc(100vh-4rem)] gap-4 overflow-y-auto sm:max-w-[720px]">
       <DialogTitle class="text-base font-semibold">Keyboard shortcuts</DialogTitle>
       <DialogDescription class="sr-only">Every key Rain responds to.</DialogDescription>
+      <section v-if="itemActions.length > 0" data-testid="item-actions">
+        <h3 class="mb-1 truncate text-xs font-medium text-muted-foreground">{{ itemTitle }}</h3>
+        <ul class="grid grid-cols-2 gap-x-8">
+          <li
+            v-for="action in itemActions"
+            :key="action.id"
+            class="flex min-h-8 items-center justify-between gap-4 text-13"
+            :class="action.danger && 'text-destructive'"
+          >
+            <span class="flex min-w-0 items-center gap-2">
+              <component :is="lucideIcon(action.icon)" class="size-3.5 shrink-0" />
+              <span class="truncate">{{ action.label }}</span>
+            </span>
+            <KeyHint v-if="keysOf(action)" :keys="keysOf(action)!" />
+          </li>
+        </ul>
+      </section>
       <div class="grid grid-cols-2 gap-x-8 gap-y-5">
         <section v-for="section in sections" :key="section.title">
           <h3 class="mb-1 text-xs font-medium text-muted-foreground">{{ section.title }}</h3>

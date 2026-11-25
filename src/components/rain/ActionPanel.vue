@@ -3,6 +3,7 @@
 // Anchored in the bottom-right corner, or at the pointer for a right-click.
 import { computed } from 'vue'
 import { actionContext, runAction } from '@/actions/context'
+import { keysOf, orderActions } from '@/actions/display'
 import { actionsFor } from '@/actions/registry'
 import type { RainAction } from '@/actions/types'
 import {
@@ -21,12 +22,10 @@ import KeyHint from './KeyHint.vue'
 const panel = useActionPanel()
 const { isOpen, anchor, target } = panel
 
-// Danger items go last; the sort is stable, so the registry's order holds otherwise.
+// Danger items go last (see `orderActions`).
 const actions = computed<RainAction[]>(() => {
   if (!isOpen.value || !target.value) return []
-  return [...actionsFor(target.value, actionContext())].sort(
-    (a, b) => Number(a.danger ?? false) - Number(b.danger ?? false),
-  )
+  return orderActions(actionsFor(target.value, actionContext()))
 })
 
 const anchorStyle = computed(() =>
@@ -34,12 +33,6 @@ const anchorStyle = computed(() =>
     ? { left: `${anchor.value.x}px`, top: `${anchor.value.y}px` }
     : { right: '12px', bottom: '12px' },
 )
-
-function keysOf(action: RainAction): string | undefined {
-  if (action.slot === 'primary') return 'Enter'
-  if (action.slot === 'secondary') return 'Ctrl+Enter'
-  return action.keys
-}
 
 function choose(action: RainAction) {
   panel.close()

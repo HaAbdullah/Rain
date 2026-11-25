@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use rain_backend::modules::settings::{
-    epic_folder, epic_v2_folder, parse_daily_notes_json, parse_obsidian_json,
+    epic_folder, epic_v2_folder, parse_daily_notes_json, parse_obsidian_json, riot_folder,
 };
 
 fn fixture(name: &str) -> String {
@@ -63,6 +63,23 @@ fn the_epic_folder_is_the_launcher_data_folder_only_when_it_holds_the_manifests(
 
     std::fs::create_dir_all(launcher.join("Data").join("Manifests")).unwrap();
     assert_eq!(epic_folder(temp.path()), Some(launcher));
+}
+
+#[test]
+fn the_riot_folder_is_found_by_its_client_list_or_its_metadata_folder() {
+    let temp = tempfile::tempdir().unwrap();
+    assert_eq!(riot_folder(temp.path()), None, "nothing installed");
+
+    let riot = temp.path().join("Riot Games");
+    std::fs::create_dir_all(&riot).unwrap();
+    assert_eq!(riot_folder(temp.path()), None, "an empty folder");
+
+    std::fs::write(riot.join("RiotClientInstalls.json"), "{}").unwrap();
+    assert_eq!(riot_folder(temp.path()), Some(riot.clone()));
+
+    std::fs::remove_file(riot.join("RiotClientInstalls.json")).unwrap();
+    std::fs::create_dir_all(riot.join("Metadata")).unwrap();
+    assert_eq!(riot_folder(temp.path()), Some(riot));
 }
 
 #[test]

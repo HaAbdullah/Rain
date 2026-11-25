@@ -194,8 +194,16 @@ impl MediaProvider for GameCovers {
             let Some(path) = state.games().cover_file(&id).await else {
                 return Ok(None);
             };
-            let Some(content_type) = image_content_type(&path) else {
-                return Ok(None);
+            let is_icon = path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("ico"));
+            let content_type = if is_icon {
+                "image/png"
+            } else {
+                let Some(content_type) = image_content_type(&path) else {
+                    return Ok(None);
+                };
+                content_type
             };
             // A file that has vanished, is too large or cannot be read is "no picture": the
             // tile then falls back to the title.
@@ -206,6 +214,12 @@ impl MediaProvider for GameCovers {
                     return None;
                 }
                 let bytes = fs::read(&path).ok()?;
+                // An icon file holds several sizes (Riot's product icons): serve the largest.
+                let bytes = if is_icon {
+                    super::ico::largest_png(&bytes)?
+                } else {
+                    bytes
+                };
                 Some((bytes, version))
             })
             .await?;

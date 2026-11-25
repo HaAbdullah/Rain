@@ -5,19 +5,10 @@
 //! calculation. The UTC offset of a moment comes from the caller (`platform::time` in
 //! production, a fixed offset in a test), because it changes with daylight saving time.
 
+use crate::platform::time::days_from_civil;
+
 /// How many days the strip has.
 pub const STRIP_DAYS: usize = 14;
-
-/// Days since 1970-01-01 of a civil date (the algorithm of Howard Hinnant).
-pub fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let month_index = (month + 9) % 12; // March is 0
-    let day_of_year = (153 * month_index + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
-}
 
 /// `YYYY-MM-DD` as a day number. `None` for text of another shape.
 pub fn parse_date(text: &str) -> Option<i64> {

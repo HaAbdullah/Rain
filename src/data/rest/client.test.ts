@@ -19,6 +19,8 @@ const SETTINGS: Settings = {
   steamPath: '',
   epicEnabled: true,
   epicPath: '',
+  riotEnabled: true,
+  riotPath: '',
   calendarConnected: false,
   monitorClaude: false,
   monitorClaudeState: 'off',
@@ -259,13 +261,17 @@ describe('REST client: games (section 02)', () => {
     const { bridge, api } = setup()
     bridge.answerWith({
       games: [{ id: 'game-steam-1', title: 'A', source: 'steam', coverUrl: 'media/game-cover/game-steam-1?v=ab' }],
-      sources: [{ source: 'epic', state: 'off', message: 'Epic Games is not installed' }],
+      sources: [
+        { source: 'epic', state: 'off', message: 'Epic Games is not installed' },
+        { source: 'riot', state: 'ok' },
+      ],
     })
 
     const library = await api.listGames()
 
     expect(library.games[0].coverUrl).toBe('test://media-host/media/game-cover/game-steam-1?v=ab')
     expect(library.sources[0].state).toBe('off')
+    expect(library.sources[1].source).toBe('riot')
     expect(bridge.calls).toEqual([{ method: 'GET', path: '/games', body: undefined }])
   })
 

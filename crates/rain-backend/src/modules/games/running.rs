@@ -11,7 +11,7 @@
 
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 use futures_util::future::BoxFuture;
 use tokio::time::Instant;
@@ -24,6 +24,7 @@ use super::store;
 use crate::core::blocking;
 use crate::core::error::ApiResult;
 use crate::core::task::spawn_named;
+use crate::modules::jobs::parse_iso;
 use crate::platform::process::ExitWatcher;
 
 /// How long a process snapshot answers `running` questions.
@@ -68,7 +69,9 @@ impl Service {
                 if steam_running.is_some_and(|running| running != 0 && running.to_string() == *appid));
             let by_image = game_folder(entry).is_some_and(|folder| {
                 let prefix = format!("{}\\", path_key(&folder.to_string_lossy()));
-                images.iter().any(|image| image.starts_with(&prefix))
+                images
+                    .iter()
+                    .any(|image| image.starts_with(&prefix) && !is_riot_client(image))
             });
             if by_session || by_steam || by_image {
                 ids.insert(entry.id.clone());
@@ -197,6 +200,16 @@ impl Service {
     }
 }
 
+/// The Riot Client runs in the background most of the time, so it never means that a game runs,
+/// wherever it lies. (Teamfight Tactics runs inside the League of Legends client, so it has no
+/// process of its own and is never shown as running.) `image` is a `path_key`.
+fn is_riot_client(image: &str) -> bool {
+    image
+        .rsplit('\\')
+        .next()
+        .is_some_and(|name| name == super::riot::CLIENT_EXE.to_lowercase())
+}
+
 /// The folder whose processes make a game "running": the install folder, or for a hand-added
 /// game the folder of its program (never a drive root, which would match everything).
 fn game_folder(entry: &super::model::Found) -> Option<std::path::PathBuf> {
@@ -210,69 +223,4 @@ fn game_folder(entry: &super::model::Found) -> Option<std::path::PathBuf> {
     let text = folder.to_string_lossy().into_owned();
     // `D:\` has three characters.
     (text.len() > 3).then_some(folder)
-}
-
-/// Reads `YYYY-MM-DDTHH:MM:SS.mmmZ` (the one format Rain writes).
-pub fn parse_iso(text: &str) -> Option<SystemTime> {
-    let bytes = text.as_bytes();
-    if bytes.len() != 24 || bytes[10] != b'T' || bytes[23] != b'Z' {
-        return None;
-    }
-    let number = |from: usize, to: usize| text.get(from..to)?.parse::<i64>().ok();
-    let (year, month, day) = (number(0, 4)?, number(5, 7)?, number(8, 10)?);
-    let (hour, minute, second, millis) = (
-        number(11, 13)?,
-        number(14, 16)?,
-        number(17, 19)?,
-        number(20, 23)?,
-    );
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-        return None;
-    }
-    // Days since 1970-01-01 (the civil-from-days algorithm in reverse).
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let month_index = (month + 9) % 12;
-    let day_of_year = (153 * month_index + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    let days = era * 146_097 + day_of_era - 719_468;
-    let seconds = days * 86_400 + hour * 3600 + minute * 60 + second;
-    let millis_total = seconds.checked_mul(1000)?.checked_add(millis)?;
-    if millis_total >= 0 {
-        UNIX_EPOCH.checked_add(Duration::from_millis(millis_total as u64))
-    } else {
-        UNIX_EPOCH.checked_sub(Duration::from_millis(millis_total.unsigned_abs()))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_iso_text_that_rain_writes_is_read_back() {
-        for millis in [
-            0u64,
-            1_700_000_000_123,
-            1_000_000_000_000,
-            4_102_444_800_999,
-        ] {
-            let time = UNIX_EPOCH + Duration::from_millis(millis);
-            let text = rain_types::time::iso_from_system_time(time);
-            assert_eq!(parse_iso(&text), Some(time), "{text}");
-        }
-    }
-
-    #[test]
-    fn text_that_is_not_the_format_is_refused() {
-        for text in [
-            "",
-            "2026-11-21",
-            "2026-13-21T09:30:00.000Z",
-            "2026-11-21T09:30:00Z",
-        ] {
-            assert_eq!(parse_iso(text), None, "{text}");
-        }
-    }
 }

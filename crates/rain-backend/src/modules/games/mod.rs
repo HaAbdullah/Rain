@@ -1,14 +1,15 @@
 //! Games: Steam, Epic, game folders and hand-added games. Feature section 02.
 //!
 //! What lives here:
-//! - `steam`, `epic`, `epic_data`, `folders`: the kinds of source (installed games of the signed-in
-//!   Steam account, the old Epic launcher's manifests and the new one's journal, and the folders of
-//!   the setting `gameFolders`);
+//! - `steam`, `epic`, `epic_data`, `riot`, `folders`: the kinds of source (installed games of the
+//!   signed-in Steam account, the old Epic launcher's manifests and the new one's journal, the Riot
+//!   Client's product folders, and the folders of the setting `gameFolders`);
 //! - `guess`: which program file starts a game folder (pure scoring);
 //! - `config`: `games.toml`, the user's corrections and hand-added games;
 //! - `library`: puts the sources together; `edit`: what the user changes;
 //! - `launch` and `running`: starting a game, play time, which games run;
-//! - `covers`: cover pictures and the media provider `game-cover`;
+//! - `covers` and `ico`: cover pictures (and the biggest picture of an icon file) and the media
+//!   provider `game-cover`;
 //! - `store`: the SQLite tables (play time, running sessions, caches).
 //!
 //! The launcher (section 01) uses `Service` through the launch contract (`ItemSource`,
@@ -21,10 +22,12 @@ mod epic;
 mod epic_data;
 mod folders;
 mod guess;
+mod ico;
 mod launch;
 mod library;
 mod model;
 mod names;
+mod riot;
 mod routes;
 mod running;
 mod service;

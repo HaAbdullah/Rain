@@ -25,7 +25,7 @@ const ROUTE_KEYWORDS: Record<RouteName, string[]> = {
   home: ['launcher', 'start', 'pinned'],
   apps: ['pools', 'programs'],
   projects: ['code', 'dev', 'repositories'],
-  games: ['library', 'steam', 'epic', 'play'],
+  games: ['library', 'steam', 'epic', 'riot', 'play'],
   workflows: ['claude', 'sessions', 'jobs', 'idle', 'cron'],
   life: ['habits', 'streak', 'vault', 'daily note'],
   disk: ['storage', 'space', 'treemap', 'drives'],

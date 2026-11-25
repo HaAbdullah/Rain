@@ -27,7 +27,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 pub use detect::{
     Detect, Detected, EPIC_JOURNAL_FILE, NoteSettings, SystemDetect, VaultEntry, epic_folder,
-    epic_v2_folder, parse_daily_notes_json, parse_obsidian_json,
+    epic_v2_folder, parse_daily_notes_json, parse_obsidian_json, riot_folder,
 };
 pub use resolved::Resolved;
 pub use service::Service;

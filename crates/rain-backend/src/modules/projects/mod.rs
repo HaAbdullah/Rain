@@ -16,7 +16,7 @@ mod discovery;
 mod env;
 mod facts;
 mod git;
-mod ids;
+pub(crate) mod ids;
 mod launch;
 mod open;
 mod routes;

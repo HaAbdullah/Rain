@@ -1,5 +1,5 @@
 // Brand marks from simple-icons. Named imports only, so the bundle holds these
-// eight icons and not the whole set. Any other brand is shown as a letter tile.
+// nine icons and not the whole set. Any other brand is shown as a letter tile.
 
 import {
   siClaude,
@@ -9,6 +9,7 @@ import {
   siGooglecalendar,
   siGooglechrome,
   siObsidian,
+  siRiotgames,
   siSteam,
 } from 'simple-icons'
 
@@ -26,6 +27,7 @@ const brands: Record<string, BrandIcon> = {
   googlecalendar: siGooglecalendar,
   googlechrome: siGooglechrome,
   obsidian: siObsidian,
+  riotgames: siRiotgames,
   steam: siSteam,
 }
 

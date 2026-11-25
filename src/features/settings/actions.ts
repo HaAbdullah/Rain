@@ -28,6 +28,7 @@ export const settingDefaults = {
   dailyNoteFolder: '',
   steamEnabled: true,
   epicEnabled: true,
+  riotEnabled: true,
   gameModeCountdownSeconds: 10,
 } as const
 
@@ -56,6 +57,8 @@ function resetPatch(key: DefaultedKey): SettingsPatch {
       return { steamEnabled: settingDefaults.steamEnabled }
     case 'epicEnabled':
       return { epicEnabled: settingDefaults.epicEnabled }
+    case 'riotEnabled':
+      return { riotEnabled: settingDefaults.riotEnabled }
     case 'gameModeCountdownSeconds':
       return { gameModeCountdownSeconds: settingDefaults.gameModeCountdownSeconds }
   }

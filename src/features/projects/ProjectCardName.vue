@@ -9,12 +9,18 @@ defineProps<{
   iconSize: number
   /** Type classes of the name. */
   nameClass: string
+  /** Let the name use two lines instead of one (the large card). */
+  wrap?: boolean
 }>()
 </script>
 
 <template>
   <RIcon :icon="project.icon" :size="iconSize" />
-  <span class="min-w-0 truncate text-foreground" :class="nameClass">{{ project.name }}</span>
+  <span
+    class="min-w-0 text-foreground"
+    :class="[wrap ? 'line-clamp-2 break-words leading-tight' : 'truncate', nameClass]"
+    :title="project.name"
+  >{{ project.name }}</span>
   <FolderXIcon
     v-if="project.missing"
     :size="16"

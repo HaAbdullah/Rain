@@ -68,6 +68,7 @@ export const settingDefs: SettingDef[] = [
   },
   { id: 'steam', group: 'Sources', label: 'Steam library', kind: 'switch', key: 'steamEnabled', placeholder: 'Not found' },
   { id: 'epic', group: 'Sources', label: 'Epic library', kind: 'switch', key: 'epicEnabled', placeholder: 'Not found' },
+  { id: 'riot', group: 'Sources', label: 'Riot library', kind: 'switch', key: 'riotEnabled', placeholder: 'Not found' },
   { id: 'calendar', group: 'Sources', label: 'Calendar', hint: 'Coming later', kind: 'info', key: 'calendarConnected' },
   {
     id: 'claude-monitor',

@@ -187,7 +187,7 @@ impl Service {
         if editable && local.is_none() {
             return Err(invalid(
                 "notEditable",
-                "Steam and Epic games can only be hidden",
+                "Steam, Epic and Riot games can only be hidden",
             ));
         }
         self.file

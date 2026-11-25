@@ -16,6 +16,12 @@ pub enum Launch {
         /// `None` for a game of the old launcher's manifests.
         catalog: Option<EpicCatalog>,
     },
+    /// A Riot game: the Riot Client is started with the product and the patchline.
+    Riot {
+        client: PathBuf,
+        product: String,
+        patchline: String,
+    },
     /// A direct start of a program file (folder games and hand-added games).
     Local,
 }

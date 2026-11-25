@@ -13,6 +13,7 @@ use crate::system::SourceState;
 pub enum GameSource {
     Steam,
     Epic,
+    Riot,
     Custom,
 }
 
@@ -27,7 +28,7 @@ pub struct Game {
     // "media/game-cover/<id>?v=<hex>"; absent = no art, the UI draws the title tile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
-    // Steam and Epic: always true (only installed games are listed). Local game: true while its
+    // Steam, Epic and Riot: always true (only installed games are listed). Local game: true while its
     // program file exists; a folder game without any program file is true too.
     pub installed: bool,
     pub running: bool,
@@ -67,7 +68,7 @@ pub struct GameSourceStatus {
     pub message: Option<String>,
 }
 
-/// The whole library. `sources` always has three entries: steam, epic, custom.
+/// The whole library. `sources` always has four entries: steam, epic, riot, custom.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct GameLibrary {

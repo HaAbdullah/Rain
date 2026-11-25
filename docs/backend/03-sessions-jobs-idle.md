@@ -52,7 +52,7 @@ Stage 8 is two steps. 8a builds the registry reader, the transcript reader, focu
 | `sessions` | `hooks_state() -> MonitorClaudeState` | 06 | cheap, for Settings: `ok` with an event received is `on`, `ok` without an event yet is `onInactive`, `off` is `off`, and `broken`, `blocked` and `unavailable` are `needsRepair` (the message is in the `ApiError` of the failed call, or in the Health source `claude-hooks`) |
 | `jobs` | `list() -> Vec<ScheduledJob>` | 01 (search) | snapshot from memory |
 | `jobs` | `wind_down() -> &dyn WindDownPort` (the trait of `core/winddown.rs`, section 06 6.7.1: `counts()`, `running_watch()`, `pause(bool)`, `stop_all(budget)`) | 06 | `stop_all(budget)` terminates every Rain-owned job run (`TerminateJobObject`, then checks the job is empty inside the budget), marks each run outcome `stopped` (status `idle`, reason `gameMode`), sets `handled_until` back as in 6.11.5 and returns one `Stopped` per run. `pause(true)` is the existing rule "starts nothing and advances nothing in game mode" (6.11.3); `pause(false)` clears it and a job that came due runs once. Call order (section 06 6.7.2): `pause(false)` is called AFTER `game_mode_active` was cleared; it nudges the scheduler (T2), re-creates the idle sampler (T3) and then runs `plan_catch_up` (6.11.5); called before the flag is cleared, the scheduler and the start path would still refuse the catch-up run. `running_watch()` is a `watch` of the number of runs in progress |
-| `jobs` | `read_log(run_id) -> ApiResult<Vec<LogLine>>`, `delete_log(run_id)` (removes the log rows of one run; the only way idle logs are deleted), `start_child(...)` | `idle` | the shared log store and the shared child runner (6.11.9). `idle` never touches `jobs_*` tables itself |
+| `jobs` | `read_log(run_id) -> ApiResult<Vec<LogLine>>`, the log store's `delete(run_id)` (removes the log rows of one run; the only way idle logs are deleted), `start_child(...)` | `idle` | the shared log store and the shared child runner (6.11.9). `idle` never touches `jobs_*` tables itself |
 | `idle` | `list() -> Vec<IdleJob>`; `wind_down() -> &dyn WindDownPort` | 01, 06 | the same trait with the same meaning: `pause(true)` stops the sampler from starting or resuming a run, `stop_all(budget)` ends the running run |
 
 What this module needs from other modules (each is repeated in section 12):
@@ -635,7 +635,7 @@ Retention (run at the end of every run, in the same transaction as the final upd
 | runs kept per job | the newest 20 (`JOB_RUNS_KEPT`); older runs and their log lines are deleted |
 | runs of jobs that are no longer in `jobs.toml` | deleted when older than 30 days (checked at start) |
 | log lines stored per run | at most 4000 from the start plus the last 500 (6.11.9) |
-| total log rows | at most 200 000 (`JOBS_LOG_ROWS_MAX`), counting the rows of scheduled runs AND of idle runs; above it the log lines of the oldest finished runs are deleted first (the run rows stay, `log_lines` becomes 0). Rows whose run id starts with `irun-` are removed only by `delete_log` (called by `idle` for its old runs) and by this cap, the oldest `irun-` runs first, because the `jobs_run` retention knows only `jobs_run` rows |
+| total log rows | at most 200 000 (`JOBS_LOG_ROWS_MAX`), counting the rows of scheduled runs AND of idle runs; above it the log lines of the oldest finished runs are deleted first (the run rows stay, `log_lines` becomes 0). Rows whose run id starts with `irun-` are removed only by the log store's `delete` (called by `idle` for its old runs) and by this cap, the oldest `irun-` runs first, because the `jobs_run` retention knows only `jobs_run` rows |
 | a `running` row at start | closed as `failed` with a log line "Rain stopped while this run was in progress" (6.11.6) |
 
 ### 5.2 `idle` module
@@ -661,7 +661,7 @@ CREATE TABLE idle_run (
 CREATE INDEX idx_idle_run_job_started ON idle_run (job_id, started_at DESC);
 ```
 
-Retention: the newest 5 runs per job and their lines in `jobs_run_log` (deleted through `jobs::Service::delete_log(run_id)`, one call per run that falls out of the newest 5). Progress and the paused state are not stored: after a restart a job is `queued` again (its process died with Rain, 6.12.6).
+Retention: the newest 5 runs per job and their lines in `jobs_run_log` (deleted through the log store's `delete(run_id)`, one call per run that falls out of the newest 5). Progress and the paused state are not stored: after a restart a job is `queued` again (its process died with Rain, 6.12.6).
 
 ### 5.3 `sessions` module
 

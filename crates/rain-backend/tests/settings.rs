@@ -29,6 +29,8 @@ fn default_settings(backend: &TestBackend) -> Value {
         "steamPath": "",
         "epicEnabled": true,
         "epicPath": "",
+        "riotEnabled": true,
+        "riotPath": "",
         "calendarConnected": false,
         "monitorClaude": false,
         "monitorClaudeState": "off",
@@ -177,6 +179,31 @@ async fn the_first_write_creates_a_file_with_a_header_and_readable_paths() {
         ),
         "{text}"
     );
+    backend.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_riot_switch_and_path_are_written_like_the_epic_ones() {
+    let backend = TestBackend::start().await;
+    let (status, answer) = patch(
+        &backend,
+        json!({ "riotEnabled": false, "riotPath": r"D:\Riot Games" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    assert_eq!(answer["riotEnabled"], false);
+    assert_eq!(answer["riotPath"], r"D:\Riot Games");
+    let text = settings_file(&backend);
+    assert!(text.contains("riot_enabled = false\n"), "{text}");
+    assert!(text.contains("riot_path = 'D:\\Riot Games'\n"), "{text}");
+    assert!(
+        text.contains("#   riot_path = ''                        empty = detected"),
+        "the header explains the key"
+    );
+
+    let (_, cleared) = patch(&backend, json!({ "riotPath": "" })).await;
+    assert_eq!(cleared["riotPath"], "");
+    assert!(!settings_file(&backend).contains("\nriot_path"));
     backend.stop().await;
 }
 

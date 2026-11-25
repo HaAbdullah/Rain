@@ -28,6 +28,7 @@ export const SOURCE_OF_ROW: Record<string, string> = {
   vault: 'vault',
   steam: 'steam',
   epic: 'epic',
+  riot: 'riot',
   'game-folders': 'gamefolders',
 }
 

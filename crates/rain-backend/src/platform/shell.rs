@@ -1,10 +1,10 @@
-//! The Windows shell: starting things, showing a file in Explorer, listing the installed apps,
-//! reading shortcuts. Foundation section 11.6.
+//! The Windows shell: starting things, showing a file in Explorer, listing the installed apps.
+//! Foundation section 11.6.
 //!
 //! [`shell_execute`] is the one launch call of the backend: shortcuts, URIs, folders, files with
 //! parameters and `shell:AppsFolder\<AUMID>` all go through it (section 01 6.8.1, section 02,
-//! section 04). The blocking functions in this file ([`reveal`], [`list_apps`],
-//! [`resolve_shortcut`]) must run on the COM thread, so the caller wraps them:
+//! section 04). The blocking functions in this file ([`reveal`], [`list_apps`]) must run on the COM
+//! thread, so the caller wraps them:
 //! `com::run(move || shell::reveal(&path))`.
 
 use std::path::Path;
@@ -12,16 +12,13 @@ use std::path::Path;
 use windows::Win32::Storage::EnhancedStorage::{
     PKEY_AppUserModel_ID, PKEY_Link_Arguments, PKEY_Link_TargetParsingPath,
 };
-use windows::Win32::System::Com::{
-    CLSCTX_INPROC_SERVER, CoCreateInstance, CoTaskMemFree, IPersistFile, STGM_READ,
-};
+use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance, CoTaskMemFree};
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
     AO_NONE, ApplicationActivationManager, BHID_EnumItems, FOLDERID_AppsFolder,
-    IApplicationActivationManager, IEnumShellItems, IShellItem, IShellItem2, IShellLinkW,
-    KF_FLAG_DEFAULT, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW,
-    SHGetKnownFolderItem, SHOpenFolderAndSelectItems, SHParseDisplayName, SIGDN_NORMALDISPLAY,
-    ShellExecuteExW, ShellLink,
+    IApplicationActivationManager, IEnumShellItems, IShellItem, IShellItem2, KF_FLAG_DEFAULT,
+    SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, SHGetKnownFolderItem,
+    SHOpenFolderAndSelectItems, SHParseDisplayName, SIGDN_NORMALDISPLAY, ShellExecuteExW,
 };
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 use windows::core::{Interface, PCWSTR, PWSTR};
@@ -199,67 +196,9 @@ fn text_of(text: PWSTR) -> String {
     }
 }
 
-// ---- shortcuts ----
-
-/// What a `.lnk` file says.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Shortcut {
-    pub target: String,
-    pub args: String,
-}
-
-/// Reads a shortcut. Runs on the COM thread. A shortcut on a disconnected network drive can take
-/// long, so a module resolves them when needed and not eagerly (foundation 11.6).
-pub fn resolve_shortcut(path: &Path) -> Result<Shortcut, ComError> {
-    let wide_path = wide(&path.to_string_lossy());
-    // SAFETY: the link object is created and used on this COM thread only; the buffers are
-    // valid for the lengths that the slices carry.
-    unsafe {
-        let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
-        let file: IPersistFile = link.cast()?;
-        file.Load(PCWSTR(wide_path.as_ptr()), STGM_READ)?;
-        let mut target = [0u16; 1024];
-        link.GetPath(&mut target, std::ptr::null_mut(), 0)?;
-        let mut args = [0u16; 1024];
-        link.GetArguments(&mut args)?;
-        Ok(Shortcut {
-            target: from_buffer(&target),
-            args: from_buffer(&args),
-        })
-    }
-}
-
-fn from_buffer(buffer: &[u16]) -> String {
-    let end = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
-    String::from_utf16_lossy(&buffer[..end])
-}
-
 /// UTF-16 with a closing NUL, for the Windows calls.
 fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
-/// Makes a shortcut file for a test, so that no installed program is needed.
-#[cfg(test)]
-pub(super) async fn write_shortcut_for_tests(link_path: &Path, target: &Path) {
-    use windows::Win32::System::Com::IPersistFile;
-    let (link_path, target) = (link_path.to_owned(), target.to_owned());
-    com::run(move || {
-        // SAFETY: on the COM thread; the strings are NUL-terminated and outlive the calls.
-        unsafe {
-            let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
-            let target = wide(&target.to_string_lossy());
-            link.SetPath(PCWSTR(target.as_ptr()))?;
-            let arguments = wide("/test arguments");
-            link.SetArguments(PCWSTR(arguments.as_ptr()))?;
-            let file: IPersistFile = link.cast()?;
-            let link_path = wide(&link_path.to_string_lossy());
-            file.Save(PCWSTR(link_path.as_ptr()), true)?;
-        }
-        Ok(())
-    })
-    .await
-    .unwrap();
 }
 
 #[cfg(test)]
@@ -300,29 +239,6 @@ mod tests {
                 .all(|app| !app.name.is_empty() || !app.aumid.is_empty())
         );
         assert!(apps.iter().any(|app| !app.aumid.is_empty()));
-    }
-
-    #[tokio::test]
-    async fn a_shortcut_that_the_test_made_resolves_to_its_target_and_arguments() {
-        let temp = tempfile::tempdir().unwrap();
-        let link = temp.path().join("Notepad test.lnk");
-        let target =
-            PathBuf::from(std::env::var("SystemRoot").unwrap()).join(r"System32\notepad.exe");
-        write_shortcut_for_tests(&link, &target).await;
-
-        let shortcut = com::run(move || resolve_shortcut(&link)).await.unwrap();
-        assert!(
-            shortcut
-                .target
-                .eq_ignore_ascii_case(&target.to_string_lossy())
-        );
-        assert_eq!(shortcut.args, "/test arguments");
-    }
-
-    #[tokio::test]
-    async fn a_shortcut_that_is_not_there_is_an_error() {
-        let missing = PathBuf::from(r"C:\no-such-folder-rain-test\x.lnk");
-        assert!(com::run(move || resolve_shortcut(&missing)).await.is_err());
     }
 
     #[tokio::test]

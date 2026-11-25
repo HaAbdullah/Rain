@@ -95,6 +95,28 @@ async fn a_pc_with_both_epic_launchers_shows_the_one_in_use_and_reads_the_other_
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_riot_folder_is_detected_and_a_typed_path_wins() {
+    let detect = pc_with_one_vault();
+    *detect.riot.lock().expect("lock") = Some(PathBuf::from(r"C:\Fake Riot Games"));
+    let backend = detecting_backend(&detect).await;
+
+    let settings: Value = backend.get("/settings").await;
+    assert_eq!(settings["riotPath"], r"C:\Fake Riot Games");
+    assert_eq!(settings["riotEnabled"], true);
+    let resolved = backend.state.settings().resolved();
+    assert_eq!(
+        resolved.riot_path,
+        Some(PathBuf::from(r"C:\Fake Riot Games"))
+    );
+
+    let (_, typed) = patch(&backend, json!({ "riotPath": r"D:\Typed Riot" })).await;
+    assert_eq!(typed["riotPath"], r"D:\Typed Riot");
+    let resolved = backend.state.settings().resolved();
+    assert_eq!(resolved.riot_path, Some(PathBuf::from(r"D:\Typed Riot")));
+    backend.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn several_vaults_and_no_choice_mean_no_vault_and_a_choice_reads_that_vault() {
     let detect = Arc::new(FakeDetect::with_vaults(vec![
         FakeDetect::vault("one", r"C:\One"),

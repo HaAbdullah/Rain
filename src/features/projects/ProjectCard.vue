@@ -27,16 +27,16 @@ const environmentIcons = computed(() => props.project.environment.map((step) => 
   <div class="min-h-0" :class="size === 'lg' ? 'aspect-video' : 'h-22'">
     <Tile :selected="selected" :dimmed="project.missing">
       <div v-if="size === 'lg'" class="flex h-full min-h-0 flex-col gap-1 overflow-hidden p-3">
+        <!-- The name has this row to itself (about 114 px). The time and the session dot sit on the branch row. -->
         <div class="flex items-center gap-2">
-          <ProjectCardName :project="project" :icon-size="32" name-class="text-base font-semibold" />
-          <span class="flex-1" />
-          <StatusDot v-if="sessionStatus" :status="sessionStatus" label="Claude session" />
-          <RelTime v-if="project.lastOpenedAt" :iso="project.lastOpenedAt" short class="text-xs text-muted-foreground" />
+          <ProjectCardName :project="project" :icon-size="32" name-class="text-base font-semibold" wrap />
         </div>
         <div class="flex items-center gap-2 text-muted-foreground">
           <GitBranchIcon :size="12" :stroke-width="1.75" class="shrink-0" aria-hidden="true" />
-          <span class="min-w-0 flex-1 truncate font-mono text-xs">{{ project.branch }}</span>
+          <span class="min-w-0 flex-1 truncate font-mono text-xs" :title="project.branch">{{ project.branch }}</span>
           <IconStack :icons="environmentIcons" :size="14" />
+          <StatusDot v-if="sessionStatus" :status="sessionStatus" label="Claude session" />
+          <RelTime v-if="project.lastOpenedAt" :iso="project.lastOpenedAt" short class="text-xs" />
         </div>
         <CommitStrip class="mt-auto shrink-0" :counts="project.commits14d" />
       </div>

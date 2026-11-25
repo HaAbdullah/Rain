@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { configIssueText, monitorClaudeRowState, sourceRowState } from './rowState'
+import { configIssueText, monitorClaudeRowState, SOURCE_OF_ROW, sourceRowState } from './rowState'
 
 describe('monitorClaudeRowState', () => {
   it('shows nothing when the switch is off, so the row keeps its plain hint', () => {
@@ -42,6 +42,11 @@ describe('sourceRowState', () => {
     expect(sourceRowState({ name: 'steam', state: 'failed', message: 'Cannot read libraryfolders.vdf' })).toEqual({
       status: 'failed',
       text: 'Cannot read libraryfolders.vdf',
+    })
+    expect(SOURCE_OF_ROW.riot).toBe('riot')
+    expect(sourceRowState({ name: 'riot', state: 'failed', message: 'Could not read RiotClientInstalls.json' })).toEqual({
+      status: 'failed',
+      text: 'Could not read RiotClientInstalls.json',
     })
     expect(sourceRowState({ name: 'epic', state: 'off', message: 'Epic is not installed' })).toEqual({
       status: 'idle',

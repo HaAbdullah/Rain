@@ -8,6 +8,7 @@
 //! |---|---|
 //! | Steam | the address `steam://rungameid/<appid>`, handed to Windows (Steam starts the game) |
 //! | Epic | the address `com.epicgames.launcher://apps/<AppName>?action=launch&silent=true`; for a game of the new launcher `<AppName>` is `<namespace>%3A<itemId>%3A<AppName>` |
+//! | Riot | the Riot Client program, started with `--launch-product=<product> --launch-patchline=<patchline>`, in its own folder |
 //! | Local | a direct start of the program file in its own folder, detached from Rain |
 //!
 //! `launch_after_game_mode` does the same without a run, for game mode, which calls it just
@@ -61,6 +62,24 @@ pub(super) fn start_of(found: &Found) -> Start {
             params: None,
             dir: None,
         }),
+        Launch::Riot {
+            client,
+            product,
+            patchline,
+        } => {
+            if !client.is_file() {
+                return Start::Refuse(format!("Riot Client not found: {}", client.display()));
+            }
+            // Through the shell, like Steam and Epic: the client starts the game itself, so Rain
+            // has no process of the game to watch and counts no play time.
+            Start::Open(OpenRequest::ShellExec {
+                file: client.to_string_lossy().into_owned(),
+                params: Some(super::riot::launch_args(product, patchline)),
+                dir: client
+                    .parent()
+                    .map(|folder| folder.to_string_lossy().into_owned()),
+            })
+        }
         Launch::Local => {
             let Some(local) = &found.local else {
                 return Start::Refuse("No program file. Choose one with Edit".to_owned());
@@ -95,6 +114,7 @@ fn error_text_of(found: &Found) -> ErrorText {
             "Epic Games Launcher is not installed".to_owned()
         }
         (Launch::Epic { .. }, _) => "Could not hand the game to Epic Games".to_owned(),
+        (Launch::Riot { .. }, _) => "Could not start the Riot Client".to_owned(),
         (Launch::Local, _) => "Could not start the program".to_owned(),
     })
 }
@@ -283,7 +303,7 @@ impl Service {
             self.invalidate();
         }
         // The opener says whether the program broke away from a job of the backend. Only a
-        // program that Rain started itself can be inside such a job: Steam and Epic start the
+        // program that Rain started itself can be inside such a job: Steam, Epic and Riot start the
         // game from their own process.
         Ok(LaunchedAfterGameMode {
             in_job: is_local && started.in_job,

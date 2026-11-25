@@ -183,9 +183,12 @@ impl Service {
 
     async fn apply(&self, plan: Plan) -> ApiResult<()> {
         let Plan { edits, effect } = plan;
-        let clears_detection = edits
-            .iter()
-            .any(|edit| matches!(edit.key, "vault_path" | "steam_path" | "epic_path"));
+        let clears_detection = edits.iter().any(|edit| {
+            matches!(
+                edit.key,
+                "vault_path" | "steam_path" | "epic_path" | "riot_path"
+            )
+        });
         match effect {
             None => self.write(edits).await?,
             Some(Effect::StartWithWindows(on)) => {
@@ -321,6 +324,8 @@ impl Service {
             steam_path: shown(&file.steam_path, detected.steam.as_deref()),
             epic_enabled: resolved.epic_enabled,
             epic_path: shown(&file.epic_path, detected.epic.as_deref()),
+            riot_enabled: resolved.riot_enabled,
+            riot_path: shown(&file.riot_path, detected.riot.as_deref()),
             // There is no calendar in this round.
             calendar_connected: false,
             monitor_claude: resolved.monitor_claude,

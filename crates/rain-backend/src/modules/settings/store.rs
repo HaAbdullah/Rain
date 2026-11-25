@@ -30,6 +30,8 @@ const HEADER: &str = "\
 #   steam_path = ''                       empty = detected
 #   epic_enabled = true
 #   epic_path = ''                        empty = detected
+#   riot_enabled = true
+#   riot_path = ''                        empty = detected
 #   game_mode_countdown_seconds = 10      5, 10, 20 or 30
 #   monitor_claude = false                the switch \"Monitor Claude sessions\"
 ";
@@ -53,6 +55,8 @@ pub struct SettingsFile {
     pub steam_path: String,
     pub epic_enabled: Option<bool>,
     pub epic_path: String,
+    pub riot_enabled: Option<bool>,
+    pub riot_path: String,
     pub game_mode_countdown_seconds: Option<CountdownSeconds>,
     /// The intent of the switch "Monitor Claude sessions"; the state is computed by section 03.
     pub monitor_claude: Option<bool>,
@@ -67,6 +71,7 @@ fn validate(file: &SettingsFile) -> Result<(), String> {
     named("vault_path", rules::path_text(&file.vault_path))?;
     named("steam_path", rules::path_text(&file.steam_path))?;
     named("epic_path", rules::path_text(&file.epic_path))?;
+    named("riot_path", rules::path_text(&file.riot_path))?;
     named(
         "daily_note_format",
         rules::note_format(&file.daily_note_format),

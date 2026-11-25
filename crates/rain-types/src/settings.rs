@@ -50,7 +50,7 @@ pub enum MonitorClaudeState {
 ///
 /// `hotkey`, `hotkey_available`, `calendar_connected` and `monitor_claude_state` are facts, not
 /// choices: they cannot be changed through `SettingsPatch`. For `data_dir`, `vault_path`,
-/// `daily_note_format`, `daily_note_folder`, `steam_path` and `epic_path` the value is the
+/// `daily_note_format`, `daily_note_folder`, `steam_path`, `epic_path` and `riot_path` the value is the
 /// effective one (the override, else what Rain detected, else the default).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -70,6 +70,8 @@ pub struct Settings {
     pub steam_path: String,
     pub epic_enabled: bool,
     pub epic_path: String,
+    pub riot_enabled: bool,
+    pub riot_path: String,
     pub calendar_connected: bool,
     pub monitor_claude: bool,
     #[ts(inline)]
@@ -111,6 +113,10 @@ pub struct SettingsPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub epic_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub riot_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub riot_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub monitor_claude: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_mode_countdown_seconds: Option<CountdownSeconds>,
@@ -139,6 +145,8 @@ mod tests {
             "steamPath": "",
             "epicEnabled": false,
             "epicPath": "",
+            "riotEnabled": true,
+            "riotPath": "",
             "calendarConnected": false,
             "monitorClaude": false,
             "monitorClaudeState": "off",

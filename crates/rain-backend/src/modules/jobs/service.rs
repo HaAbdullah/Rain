@@ -990,11 +990,6 @@ impl Service {
         self.inner.logs.read(run_id).await
     }
 
-    /// Removes the stored lines of one run.
-    pub async fn delete_log(&self, run_id: &str) {
-        self.inner.logs.delete(run_id).await;
-    }
-
     /// The times in force (a test may have shortened them).
     pub fn tuning(&self) -> Tuning {
         self.inner.tuning.clone()

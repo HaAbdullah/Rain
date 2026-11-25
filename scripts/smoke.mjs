@@ -38,12 +38,13 @@ const DEFAULT_SETTINGS = {
   gameFolders: [],
   steamEnabled: true,
   epicEnabled: true,
+  riotEnabled: true,
   calendarConnected: false,
   monitorClaude: false,
   monitorClaudeState: 'off',
   gameModeCountdownSeconds: 10,
 }
-const DETECTED_TEXT_FIELDS = ['vaultPath', 'dailyNoteFormat', 'dailyNoteFolder', 'steamPath', 'epicPath']
+const DETECTED_TEXT_FIELDS = ['vaultPath', 'dailyNoteFormat', 'dailyNoteFolder', 'steamPath', 'epicPath', 'riotPath']
 
 let backend = null // the processes we started, until we know they have ended
 let shell = null

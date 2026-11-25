@@ -43,6 +43,8 @@ pub struct Resolved {
     /// The folder of the other Epic launcher when the PC has both and the user typed no path.
     /// A typed `epic_path` means "read exactly this", so it leaves this empty.
     pub epic_extra_path: Option<PathBuf>,
+    pub riot_enabled: bool,
+    pub riot_path: Option<PathBuf>,
     pub countdown_seconds: u32,
     pub monitor_claude: bool,
 }
@@ -69,6 +71,8 @@ impl Resolved {
                 .epic_extra
                 .clone()
                 .filter(|_| file.epic_path.trim().is_empty()),
+            riot_enabled: file.riot_enabled.unwrap_or(true),
+            riot_path: path_with_fallback(&file.riot_path, detected.riot.as_ref()),
             countdown_seconds: file
                 .game_mode_countdown_seconds
                 .unwrap_or(DEFAULT_COUNTDOWN) as u32,
@@ -195,6 +199,7 @@ mod tests {
             steam: Some(PathBuf::from(r"C:\Steam")),
             epic: Some(PathBuf::from(r"C:\Epic")),
             epic_extra: None,
+            riot: Some(PathBuf::from(r"C:\Riot")),
             notes: NoteSettings {
                 format: Some("DD-MM-YYYY".into()),
                 folder: Some("Daily".into()),
@@ -243,6 +248,16 @@ mod tests {
         assert_eq!(resolved.daily_note_format, "DD-MM-YYYY");
         assert_eq!(resolved.steam_path, Some(PathBuf::from(r"C:\Steam")));
         assert_eq!(resolved.epic_path, Some(PathBuf::from(r"C:\Epic")));
+        assert!(resolved.riot_enabled, "on unless the user turned it off");
+        assert_eq!(resolved.riot_path, Some(PathBuf::from(r"C:\Riot")));
+        let typed = SettingsFile {
+            riot_path: r"E:\Riot".into(),
+            riot_enabled: Some(false),
+            ..SettingsFile::default()
+        };
+        let resolved = Resolved::build(&typed, &detected_with_one_vault());
+        assert!(!resolved.riot_enabled);
+        assert_eq!(resolved.riot_path, Some(PathBuf::from(r"E:\Riot")));
     }
 
     #[test]

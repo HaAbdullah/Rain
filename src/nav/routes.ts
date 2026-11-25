@@ -76,7 +76,7 @@ export const routes: readonly RouteDef[] = [
     icon: 'gamepad-2',
     combo: 'Ctrl+Digit4',
     rail: 'top',
-    subs: ['all', 'steam', 'epic', 'custom', 'installed', 'hidden'],
+    subs: ['all', 'steam', 'epic', 'riot', 'custom', 'installed', 'hidden'],
     defaultSub: 'all',
     filterable: true,
     component: () => import('@/features/games/GamesScreen.vue'),

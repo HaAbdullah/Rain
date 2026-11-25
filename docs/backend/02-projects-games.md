@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Area | projects (list, git facts, environments, opening) and games (Steam, Epic, game folders, hand-added games; hide, covers, launching), with their pins and search entries |
+| Area | projects (list, git facts, environments, opening) and games (Steam, Epic, Riot, game folders, hand-added games; hide, covers, launching), with their pins and search entries |
 | Modules | `projects`, `games` (foundation section 11.2) |
 | Stage | 5 (foundation section 14.3) |
 | Author | backend designer, section 02 |
@@ -37,7 +37,7 @@ All paths in this document are placeholders (`D:\Games`, `C:\Dev`). Nothing pers
 |---|---|---|---|
 | Project list: discovery in `projectRoots`, git facts, activity, missing, open, pinned | `listProjects`; topic `projects` | `projects` | stage 5 |
 | Project environments and opening a project, mode `full` and `editorOnly` (and two small new modes, section 6.7) | `launch` for `target.type = "project"` | `projects` (the route `POST /launches` belongs to section 01, which calls this module) | stage 5 |
-| Game library: Steam, Epic, game folders, hand-added games | `listGames`; topic `games` | `games` | stage 5 |
+| Game library: Steam, Epic, Riot, game folders, hand-added games | `listGames`; topic `games` | `games` | stage 5 |
 | Game corrections: hide, unhide, title, program file, cover | `setGameHidden`, new `updateGame` | `games` | stage 5 |
 | Hand-added games | `saveCustomGame`, new `deleteCustomGame` | `games` | stage 5 |
 | Starting a game, play time and last played recorded by Rain | `launch` for `target.type = "game"` | `games` | stage 5 |
@@ -92,7 +92,7 @@ Paths are after `/api/v1`. "Idempotent" follows foundation 4.6.
 | POST | `/games/refresh` (new) | none | `GameLibrary` | 200 | 409 `conflict` `gameMode`; 503 as above | yes | drops the guess and size caches, rescans every source, publishes `games` |
 | POST | `/games` (`saveCustomGame`) | `CustomGameDraft` | `Game` | 201 | 400 `invalid`: `noName`, `noExe`, `exeNotAbsolute`, `exeNotFound`, `notAnExe`, `coverNotFound`, `coverNotImage`, `coverTooLarge`; 409 `conflict`: `alreadyListed`, `configBroken`, `configNewer`, `configChanged`; 500 `failed` `saveFailed` | no, but a second identical call gets 409 `alreadyListed` (same program file) | `games` |
 | PATCH | `/games/{id}` (`setGameHidden`, new `updateGame`) | `GamePatch` | `Game` | 200 | 404 `notFound` `unknownId`; 400 `invalid`: `emptyPatch`, `notEditable`, plus the reasons of `POST /games`; 409 `conflict`: `configBroken`, `configNewer`, `configChanged`; 500 `failed` `saveFailed` | yes | `games`; hiding also removes the game's pin (section 01 pins) |
-| DELETE | `/games/{id}` (new `deleteCustomGame`) | none | none | 204 | 409 `conflict`: `notRemovable` (a Steam, Epic or folder game), `configBroken`, `configNewer`, `configChanged`; 500 `failed` `saveFailed`; an unknown id is 204 | yes | `games`; also removes the pin |
+| DELETE | `/games/{id}` (new `deleteCustomGame`) | none | none | 204 | 409 `conflict`: `notRemovable` (a Steam, Epic, Riot or folder game), `configBroken`, `configNewer`, `configChanged`; 500 `failed` `saveFailed`; an unknown id is 204 | yes | `games`; also removes the pin |
 | POST | `/launches` (section 01) with `target.type = "project"` | `LaunchTarget` | `LaunchRun` | 201 new run, 200 the running run is returned | 404 `notFound` `unknownId` ("Project not found"); 400 `invalid` `noSteps`; 409 `conflict` `gameMode` | yes: a second call while a run of the same project is going returns that run | `launch` (one frame per step change), `projects` after the run |
 | POST | `/launches` (section 01) with `target.type = "game"` | `LaunchTarget` | `LaunchRun` | 201 new run, 200 the running run is returned | 404 `notFound` `unknownId` ("Game not found"); 409 `conflict` `gameMode` | yes: same rule as above | `launch`, `games` after the run |
 | GET | `/media/game-cover/{id}` (core route, 4.7) | `v` optional | image bytes | 200, 304 | 404 `notFound` (JSON body; the `<img>` shows its fallback) | yes | none |
@@ -209,7 +209,7 @@ use ts_rs::TS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub enum GameSource { Steam, Epic, Custom }          // 'custom' = every local game (decision G1)
+pub enum GameSource { Steam, Epic, Riot, Custom }          // 'custom' = every local game (decision G1)
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -265,7 +265,7 @@ pub struct GameSourceStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct GameLibrary { pub games: Vec<Game>, pub sources: Vec<GameSourceStatus> }   // always three entries: steam, epic, custom
+pub struct GameLibrary { pub games: Vec<Game>, pub sources: Vec<GameSourceStatus> }   // always four entries: steam, epic, riot, custom
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -434,7 +434,7 @@ There are two kinds of table:
 | `schema_version` | integer | 1 | |
 | `[[game]]` `key` | string | required | `steam:<appid>` (digits), `epic:<AppName>`, or `dir:<absolute folder path>` for a folder game. Compared case-insensitively after path normalisation (6.1). An entry without a valid key is skipped |
 | `[[game]]` `hidden` | boolean | false | |
-| `[[game]]` `title` | string 1 to 120 characters | the found title | used by `dir:` games only (Steam and Epic titles are not editable) |
+| `[[game]]` `title` | string 1 to 120 characters | the found title | used by `dir:` games only (Steam, Epic and Riot titles are not editable) |
 | `[[game]]` `exe` | string | none (use the guess) | `dir:` games only. Relative to the game folder, or absolute. Must end in `.exe`. A path that does not exist makes the game "not installed" (the guess is not used behind the user's back) |
 | `[[game]]` `args` | string up to 500 characters | none | `dir:` games only; extra command-line text given to the program. Hand edit only |
 | `[[game]]` `cover` | string | none | `dir:` games only. `media/<file>` (relative to the data folder) or an absolute image path. Extension `png`, `jpg`, `jpeg`, `webp` or `gif` |
@@ -903,6 +903,27 @@ Play time and last played are Epic's own numbers, the way Steam's own numbers ar
 **Watching.** Not watched: the module never watched the old manifests either. The library is scanned when a request needs a fresh one (cached for 2 seconds), at `POST /games/refresh`, and after a change of the settings.
 
 **Not done.** The `.prev` copy of the journal is not read when the main file cannot be read. Add-ons or DLC are not told from games in the journal (it has no category); an add-on that has its own installation record would be listed.
+
+#### 6.10.2 Riot Games
+
+Riot's own client lists what it has installed. Rain reads two things from the Riot Games data folder (`riotPath`, else `%ProgramData%\Riot Games`, found by section 06) and writes nothing there.
+
+| File | What Rain takes from it |
+|---|---|
+| `RiotClientInstalls.json` | the client program: `rc_default`, else `rc_live` |
+| `Metadata\<product>.<patchline>\` | one folder per installed product (`league_of_legends.live`, `teamfighttactics.live`). Folders without a `.` in the name (`Riot Client`, `RiotGamesApi`) are not games |
+| `<name>.product_settings.yaml` | `product_install_full_path` and `shortcut_name`. A small reader takes the top-level `key: value` lines (quoted or not); the nested blocks are skipped and there is no YAML dependency |
+| `<name>.ico` | the picture (see Cover) |
+
+**Game.** One game per product whose install folder exists. Title: `shortcut_name` without `.lnk`, else the product name as words. Key `riot:<name>`, id `game-riot-<slug of name>` (for example `game-riot-league-of-legends-live`). The key works in `games.toml` like the Epic keys, so a Riot game can be hidden.
+
+**Launch.** `ShellExecuteExW` of the client program, in its own folder, with `--launch-product=<product> --launch-patchline=<patchline>`, the same as Riot's Start menu shortcuts. Both parts are plain characters (checked). The client starts the game, so Rain watches no process and counts no play time.
+
+**Running.** A Riot game runs when a process runs from inside its own install folder (6.13). `RiotClientServices.exe` never counts, wherever it lies, because it runs in the background most of the time. Teamfight Tactics runs through the League of Legends client and has no process of its own, so it is never shown as running.
+
+**Size and cover.** The size is the install folder's, measured in the background and cached like the size of a game folder (6.13). The icon holds several sizes. The media route `game-cover` takes the largest picture, turns a 32-bit bitmap into a PNG (a PNG picture is used as it is) and serves it as the cover, so the Games screen shows no blank tile.
+
+**Health.** `off` when Riot is not installed ("Riot Games is not installed") or switched off. `failed` when the folder is missing, or when games exist and the client cannot be found ("Could not read RiotClientInstalls.json"), or when every product fails ("Could not read the Riot Games library"). One broken yaml hides that product only; the source stays `ok` and says which one. A product whose install folder is gone is simply not listed. The health name is `riot`.
 
 ### 6.11 Game folders: discovery and the program-file guess
 

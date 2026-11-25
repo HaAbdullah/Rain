@@ -7,7 +7,7 @@ import { APP_VERSION } from './settingDefs'
 export type SettingValue = string | boolean
 
 /** The switches that Settings stores and the user may change. */
-export type BooleanSettingKey = 'hideOnBlur' | 'startWithWindows' | 'steamEnabled' | 'epicEnabled' | 'monitorClaude'
+export type BooleanSettingKey = 'hideOnBlur' | 'startWithWindows' | 'steamEnabled' | 'epicEnabled' | 'riotEnabled' | 'monitorClaude'
 
 export function isBooleanKey(key: keyof Settings | undefined): key is BooleanSettingKey {
   return (
@@ -15,6 +15,7 @@ export function isBooleanKey(key: keyof Settings | undefined): key is BooleanSet
     key === 'startWithWindows' ||
     key === 'steamEnabled' ||
     key === 'epicEnabled' ||
+    key === 'riotEnabled' ||
     key === 'monitorClaude'
   )
 }
@@ -40,6 +41,7 @@ export function readValue(def: SettingDef, settings: Settings): SettingValue {
     case 'startWithWindows':
     case 'steamEnabled':
     case 'epicEnabled':
+    case 'riotEnabled':
     case 'monitorClaude':
       return settings[def.key]
     case 'calendarConnected':
@@ -56,17 +58,19 @@ export function readValue(def: SettingDef, settings: Settings): SettingValue {
   }
 }
 
-/** The library path that belongs to a Steam or Epic row. */
+/** The library path that belongs to a Steam, Epic or Riot row. */
 export function readLibraryPath(def: SettingDef, settings: Settings): string | undefined {
   if (def.id === 'steam') return settings.steamPath
   if (def.id === 'epic') return settings.epicPath
+  if (def.id === 'riot') return settings.riotPath
   return undefined
 }
 
-/** The path field next to a Steam or Epic switch. */
+/** The path field next to a Steam, Epic or Riot switch. */
 export function libraryPathPatch(def: SettingDef, path: string): SettingsPatch | null {
   if (def.id === 'steam') return { steamPath: path }
   if (def.id === 'epic') return { epicPath: path }
+  if (def.id === 'riot') return { riotPath: path }
   return null
 }
 
@@ -81,6 +85,8 @@ export function togglePatch(key: BooleanSettingKey, value: boolean): SettingsPat
       return { steamEnabled: value }
     case 'epicEnabled':
       return { epicEnabled: value }
+    case 'riotEnabled':
+      return { riotEnabled: value }
     case 'monitorClaude':
       return { monitorClaude: value }
   }

@@ -3,7 +3,7 @@
 import type { Game, GameSource, GameSourceStatus } from '@/data/types'
 import { SOURCE_LABEL } from './gameSource'
 
-export const SUBS = ['all', 'steam', 'epic', 'custom', 'installed', 'hidden'] as const
+export const SUBS = ['all', 'steam', 'epic', 'riot', 'custom', 'installed', 'hidden'] as const
 export type Sub = (typeof SUBS)[number]
 
 /**

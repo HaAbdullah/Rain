@@ -14,21 +14,26 @@ function game(id: string, over: Partial<Game> = {}): Game {
 describe('visibleSubs', () => {
   it('has no tab for a source that is off', () => {
     const sources: GameSourceStatus[] = [ok('steam'), { source: 'epic', state: 'off', message: 'Epic Games is not installed' }, ok('custom')]
-    expect(visibleSubs(sources, 0)).toEqual(['all', 'steam', 'custom', 'installed'])
+    expect(visibleSubs(sources, 0)).toEqual(['all', 'steam', 'riot', 'custom', 'installed'])
   })
 
   it('shows Hidden only while a game is hidden', () => {
-    const sources = [ok('steam'), ok('epic'), ok('custom')]
+    const sources = [ok('steam'), ok('epic'), ok('riot'), ok('custom')]
     expect(visibleSubs(sources, 0)).not.toContain('hidden')
-    expect(visibleSubs(sources, 2)).toEqual(['all', 'steam', 'epic', 'custom', 'installed', 'hidden'])
+    expect(visibleSubs(sources, 2)).toEqual(['all', 'steam', 'epic', 'riot', 'custom', 'installed', 'hidden'])
   })
 
   it('keeps every tab before the first answer', () => {
-    expect(visibleSubs([], 0)).toEqual(['all', 'steam', 'epic', 'custom', 'installed'])
+    expect(visibleSubs([], 0)).toEqual(['all', 'steam', 'epic', 'riot', 'custom', 'installed'])
   })
 
   it('does not hide a source that failed: it shows its warning', () => {
     expect(visibleSubs([{ source: 'epic', state: 'failed', message: 'x' }], 0)).toContain('epic')
+  })
+
+  it('has no Riot tab while Riot is off and one when it works', () => {
+    expect(visibleSubs([{ source: 'riot', state: 'off', message: 'Riot Games is not installed' }], 0)).not.toContain('riot')
+    expect(visibleSubs([ok('riot')], 0)).toContain('riot')
   })
 })
 
@@ -49,13 +54,15 @@ describe('gamesOfSub', () => {
     game('b', { source: 'custom', installed: false }),
     game('c', { hidden: true }),
     game('d', { source: 'epic', hidden: true }),
+    game('e', { source: 'riot' }),
   ]
 
   it('leaves hidden games out of every tab but Hidden, and counts them there', () => {
-    expect(gamesOfSub(games, 'all').map((g) => g.id)).toEqual(['a', 'b'])
+    expect(gamesOfSub(games, 'all').map((g) => g.id)).toEqual(['a', 'b', 'e'])
     expect(gamesOfSub(games, 'steam').map((g) => g.id)).toEqual(['a'])
     expect(gamesOfSub(games, 'custom').map((g) => g.id)).toEqual(['b'])
-    expect(gamesOfSub(games, 'installed').map((g) => g.id)).toEqual(['a'])
+    expect(gamesOfSub(games, 'riot').map((g) => g.id)).toEqual(['e'])
+    expect(gamesOfSub(games, 'installed').map((g) => g.id)).toEqual(['a', 'e'])
     expect(gamesOfSub(games, 'hidden').map((g) => g.id)).toEqual(['c', 'd'])
   })
 })

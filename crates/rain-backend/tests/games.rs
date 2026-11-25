@@ -1,4 +1,4 @@
-//! The game library: Steam, Epic, game folders, hand-added games, corrections, covers, launching
+//! The game library: Steam, Epic, Riot, game folders, hand-added games, corrections, covers, launching
 //! and play time. Section 02, 10.4. Every game here has an invented name and lives in a temporary
 //! folder; nothing starts a program (the opener is the fake of the harness).
 
@@ -250,7 +250,7 @@ fn state_of(library: &GameLibrary, source: GameSource) -> (SourceState, Option<S
         .sources
         .iter()
         .find(|s| s.source == source)
-        .expect("three sources");
+        .expect("four sources");
     (status.state, status.message.clone())
 }
 
@@ -290,10 +290,15 @@ async fn the_library_has_every_source_with_ids_covers_and_three_states() {
         ],
         "sorted by source, then title: Steam Arena, Steam Quest, ..."
     );
-    assert_eq!(library.sources.len(), 3);
+    assert_eq!(library.sources.len(), 4);
     for source in [GameSource::Steam, GameSource::Epic, GameSource::Custom] {
         assert_eq!(state_of(&library, source).0, SourceState::Ok, "{source:?}");
     }
+    assert_eq!(
+        state_of(&library, GameSource::Riot).0,
+        SourceState::Off,
+        "no Riot folder on this PC"
+    );
     let quest = game(&library, "game-steam-1000001");
     assert_eq!(quest.playtime_minutes, 125);
     assert_eq!(quest.size_bytes, Some(4096));
@@ -1532,4 +1537,356 @@ async fn the_schema_of_the_games_tables_is_in_the_database() {
             "games_size_cache"
         ]
     );
+}
+
+// ---- Riot Games ----
+
+/// A backend whose settings name the Riot Games data folder `<temp>/Riot Games`.
+fn riot_builder() -> common::TestBackendBuilder {
+    TestBackend::builder()
+        .file(
+            "settings.toml",
+            &format!("{SETTINGS}riot_path = '{{TEMP}}/Riot Games'\n"),
+        )
+        .with::<dyn SteamRegistry>(Arc::new(FakeSteamRegistry { active: Some(1111) }))
+}
+
+/// An icon file with a 256 px and a 16 px bitmap picture (blue 10, green 20, red 30).
+fn riot_icon() -> Vec<u8> {
+    let picture = |side: u32| {
+        let mut data = Vec::new();
+        data.extend(40u32.to_le_bytes());
+        data.extend(side.to_le_bytes());
+        data.extend((side * 2).to_le_bytes());
+        data.extend(1u16.to_le_bytes());
+        data.extend(32u16.to_le_bytes());
+        data.extend([0u8; 24]);
+        for _ in 0..side * side {
+            data.extend([10u8, 20, 30, 255]);
+        }
+        data.extend(vec![0u8; (side * side / 8) as usize]);
+        data
+    };
+    let (large, small) = (picture(256), picture(16));
+    let mut file = vec![0u8, 0, 1, 0, 2, 0];
+    file.extend([0u8, 0, 0, 0, 1, 0, 32, 0]);
+    file.extend((large.len() as u32).to_le_bytes());
+    file.extend((6u32 + 32).to_le_bytes());
+    file.extend([16u8, 16, 0, 0, 1, 0, 32, 0]);
+    file.extend((small.len() as u32).to_le_bytes());
+    file.extend((6u32 + 32 + large.len() as u32).to_le_bytes());
+    file.extend(large);
+    file.extend(small);
+    file
+}
+
+/// What Riot's own files look like for League of Legends and Teamfight Tactics, with invented
+/// folders: the client in `<root>/Riot Client`, the games in `<root>/Riot Games Installed`.
+/// Returns the folder of League of Legends and the client program.
+fn make_riot(root: &Path) -> (PathBuf, PathBuf) {
+    let data = root.join("Riot Games");
+    let client = root.join("Riot Client").join("RiotClientServices.exe");
+    touch(&client, 10);
+    let slash = |path: &Path| {
+        path.to_string_lossy()
+            .replace(std::path::MAIN_SEPARATOR, "/")
+    };
+    write(
+        &data.join("RiotClientInstalls.json"),
+        &format!(
+            "{{ \"rc_default\": \"{0}\", \"rc_live\": \"{0}\", \"associated_client\": {{}}, \"patchlines\": {{}} }}",
+            slash(&client)
+        ),
+    );
+    let league = root.join("Riot Games Installed").join("League of Legends");
+    touch(&league.join("LeagueClient.exe"), 3000);
+    touch(&league.join("Game").join("data.bin"), 2000);
+    let tft = root
+        .join("Riot Games Installed")
+        .join("Teamfight Tactics")
+        .join("Live");
+    fs::create_dir_all(&tft).unwrap();
+    for (name, install, shortcut, extra) in [
+        (
+            "league_of_legends.live",
+            &league,
+            "League of Legends.lnk",
+            "",
+        ),
+        (
+            "teamfighttactics.live",
+            &tft,
+            "Teamfight Tactics.lnk",
+            "product_dependency: \"league_of_legends.live\"\n",
+        ),
+    ] {
+        let folder = data.join("Metadata").join(name);
+        write(
+            &folder.join(format!("{name}.product_settings.yaml")),
+            &format!(
+                "dependencies:\n    vanguard: true\nlocale_data:\n    default_locale: \"en_US\"\n{extra}product_install_full_path: \"{}\"\nproduct_install_root: \"{}\"\nshortcut_name: \"{shortcut}\"\nsettings:\n    locale: \"en_US\"\n",
+                slash(install),
+                slash(root)
+            ),
+        );
+        fs::write(folder.join(format!("{name}.ico")), riot_icon()).unwrap();
+    }
+    // Folders of Riot that are not games.
+    write(
+        &data
+            .join("Metadata")
+            .join("Riot Client")
+            .join("Riot Client.settings.yaml"),
+        "x: 1\n",
+    );
+    fs::create_dir_all(data.join("Metadata").join("RiotGamesApi")).unwrap();
+    (league, client)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn riot_games_are_listed_with_title_cover_size_and_launch() {
+    let backend = riot_builder().start().await;
+    let temp = temp_of(&backend);
+    let (league, client) = make_riot(&temp);
+    let mut stream = backend.stream().await;
+    let library = refreshed(&backend).await;
+
+    assert_eq!(library.sources.len(), 4);
+    assert_eq!(
+        state_of(&library, GameSource::Riot),
+        (SourceState::Ok, None)
+    );
+    let riot: Vec<&Game> = library
+        .games
+        .iter()
+        .filter(|g| g.source == GameSource::Riot)
+        .collect();
+    assert_eq!(
+        riot.iter().map(|g| g.id.as_str()).collect::<Vec<_>>(),
+        [
+            "game-riot-league-of-legends-live",
+            "game-riot-teamfighttactics-live"
+        ],
+        "the Riot Client and the API folder are not games"
+    );
+    assert_eq!(riot[0].title, "League of Legends");
+    assert_eq!(riot[1].title, "Teamfight Tactics");
+    assert!(riot.iter().all(|g| g.installed && !g.running && !g.hidden));
+    assert_eq!(
+        riot[0].install_path.as_deref(),
+        Some(league.to_string_lossy().as_ref())
+    );
+
+    // The icon is the cover: the media route serves its largest picture as a PNG.
+    let cover = riot[0].cover_url.clone().expect("the icon is the cover");
+    assert!(cover.starts_with("media/game-cover/game-riot-league-of-legends-live?v="));
+    assert!(
+        riot[1].cover_url.is_some(),
+        "no blank tile for the second game"
+    );
+    let served = backend
+        .client
+        .request(Method::GET, &format!("{API_PREFIX}/{cover}"), None, &[])
+        .await
+        .unwrap();
+    assert_eq!(served.status, StatusCode::OK);
+    assert_eq!(
+        served
+            .headers
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "image/png"
+    );
+    assert!(served.body.starts_with(&[0x89, b'P', b'N', b'G']));
+
+    // The size of the install folder arrives in the background, like a game folder's.
+    let mut size = riot[0].size_bytes;
+    while size.is_none() {
+        let frame = stream.expect_topic("games").await;
+        let payload: GameLibrary = serde_json::from_value(frame.payload).unwrap();
+        size = game(&payload, "game-riot-league-of-legends-live").size_bytes;
+    }
+    assert_eq!(size, Some(5000));
+    assert_eq!(riot[0].playtime_minutes, 0);
+
+    // Started through the client, with the product and the patchline.
+    let games = backend.state.games();
+    let plan = games
+        .plan(&target("game-riot-teamfighttactics-live"))
+        .unwrap();
+    match &plan.steps[0].action {
+        StepAction::ShellExec { file, params, dir } => {
+            assert_eq!(file, &client.to_string_lossy());
+            assert_eq!(
+                params.as_deref(),
+                Some("--launch-product=teamfighttactics --launch-patchline=live")
+            );
+            assert_eq!(
+                dir.as_deref(),
+                client.parent().map(|p| p.to_string_lossy()).as_deref()
+            );
+        }
+        _ => panic!("a Riot game is started through the Riot Client"),
+    }
+
+    // Hiding works with the same key shape as the other launcher games.
+    let (status, body) = backend
+        .send(
+            "PATCH",
+            "/games/game-riot-league-of-legends-live",
+            Some(json!({ "hidden": true })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(games_toml(&backend).contains("riot:league_of_legends.live"));
+    let after = refreshed(&backend).await;
+    assert!(game(&after, "game-riot-league-of-legends-live").hidden);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_riot_game_runs_only_when_a_program_of_its_own_folder_runs() {
+    let processes = Arc::new(FakeProcesses::default());
+    let backend = riot_builder()
+        .with::<dyn rain_backend::platform::process::ProcessLister>(processes.clone())
+        .start()
+        .await;
+    let temp = temp_of(&backend);
+    let (league, client) = make_riot(&temp);
+    let image = |path: &Path| path.to_string_lossy().into_owned();
+
+    // The Riot Client alone, in its own folder or even inside a game folder, means nothing.
+    processes.0.lock().unwrap().push(image(&client));
+    processes
+        .0
+        .lock()
+        .unwrap()
+        .push(image(&league.join("RiotClientServices.exe")));
+    let list = refreshed(&backend).await;
+    assert!(list.games.iter().all(|g| !g.running));
+    assert!(!backend.state.games().any_game_running().await);
+
+    // A program of the League of Legends folder makes that game run. Teamfight Tactics runs
+    // through the same client and has no process of its own, so it is never shown as running.
+    processes
+        .0
+        .lock()
+        .unwrap()
+        .push(image(&league.join("LeagueClient.exe")));
+    let list = refreshed(&backend).await;
+    assert!(game(&list, "game-riot-league-of-legends-live").running);
+    assert!(!game(&list, "game-riot-teamfighttactics-live").running);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn riot_that_is_not_installed_off_or_broken_never_hides_the_other_sources() {
+    // Nothing detected and nothing typed: off, not failed.
+    let backend = builder().start().await;
+    make_steam(&temp_of(&backend));
+    let library = refreshed(&backend).await;
+    assert_eq!(
+        state_of(&library, GameSource::Riot),
+        (
+            SourceState::Off,
+            Some("Riot Games is not installed".to_owned())
+        )
+    );
+    backend.stop().await;
+
+    // A product whose yaml is broken: the other one stays.
+    let backend = riot_builder().start().await;
+    let temp = temp_of(&backend);
+    make_steam(&temp);
+    make_riot(&temp);
+    write(
+        &temp
+            .join("Riot Games")
+            .join("Metadata")
+            .join("teamfighttactics.live")
+            .join("teamfighttactics.live.product_settings.yaml"),
+        "this is not a settings file\n",
+    );
+    let library = refreshed(&backend).await;
+    let (state, message) = state_of(&library, GameSource::Riot);
+    assert_eq!(state, SourceState::Ok);
+    assert_eq!(
+        message.as_deref(),
+        Some("Could not read the settings of teamfighttactics.live")
+    );
+    assert!(
+        library
+            .games
+            .iter()
+            .any(|g| g.id == "game-riot-league-of-legends-live")
+    );
+    assert!(
+        library
+            .games
+            .iter()
+            .all(|g| g.id != "game-riot-teamfighttactics-live")
+    );
+
+    // No client: the source fails with a sentence, and Steam is still listed.
+    fs::remove_file(temp.join("Riot Games").join("RiotClientInstalls.json")).unwrap();
+    let library = refreshed(&backend).await;
+    let (state, message) = state_of(&library, GameSource::Riot);
+    assert_eq!(state, SourceState::Failed);
+    assert_eq!(
+        message.as_deref(),
+        Some("Could not read RiotClientInstalls.json")
+    );
+    assert!(library.games.iter().all(|g| g.source != GameSource::Riot));
+    assert!(library.games.iter().any(|g| g.id == "game-steam-1000001"));
+    let (_, health) = backend.send("GET", "/health", None).await;
+    assert!(
+        health["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["name"] == "riot" && s["state"] == "failed")
+    );
+
+    // An install folder that is gone: the game is not listed.
+    write(
+        &temp.join("Riot Games").join("RiotClientInstalls.json"),
+        &format!(
+            "{{ \"rc_default\": \"{}\" }}",
+            temp.join("Riot Client")
+                .join("RiotClientServices.exe")
+                .to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "/")
+        ),
+    );
+    fs::remove_dir_all(temp.join("Riot Games Installed").join("League of Legends")).unwrap();
+    let library = refreshed(&backend).await;
+    assert!(
+        library
+            .games
+            .iter()
+            .all(|g| g.id != "game-riot-league-of-legends-live")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn riot_can_be_turned_off_in_the_settings() {
+    let backend = riot_builder().start().await;
+    make_riot(&temp_of(&backend));
+    assert!(
+        refreshed(&backend)
+            .await
+            .games
+            .iter()
+            .any(|g| g.source == GameSource::Riot)
+    );
+    let (status, body) = backend
+        .send("PATCH", "/settings", Some(json!({ "riotEnabled": false })))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let library = refreshed(&backend).await;
+    assert_eq!(
+        state_of(&library, GameSource::Riot),
+        (SourceState::Off, Some("Turned off in Settings".to_owned()))
+    );
+    assert!(library.games.iter().all(|g| g.source != GameSource::Riot));
 }

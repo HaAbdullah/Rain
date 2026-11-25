@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// One dialog for two jobs: add a game that Steam and Epic do not list (Ctrl+N), and edit a local
+// One dialog for two jobs: add a game that Steam, Epic and Riot do not list (Ctrl+N), and edit a local
 // game (Ctrl+K, Edit game). A game found in a game folder can be corrected here as well: its
 // program file is only a guess until the user says otherwise.
 import { computed, onScopeDispose, ref, watch } from 'vue'
@@ -111,7 +111,7 @@ async function reset(patch: GamePatch) {
       <DialogHeader>
         <DialogTitle>{{ editing ? 'Edit game' : 'Add a game' }}</DialogTitle>
         <DialogDescription>
-          {{ editing ? 'Change what Rain starts for this game.' : 'For a game that Steam and Epic do not list.' }}
+          {{ editing ? 'Change what Rain starts for this game.' : 'For a game that Steam, Epic and Riot do not list.' }}
         </DialogDescription>
       </DialogHeader>
 

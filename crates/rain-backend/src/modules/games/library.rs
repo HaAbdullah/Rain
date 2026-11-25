@@ -1,6 +1,6 @@
 //! Putting the library together. Section 02, 6.8 and 6.12.
 //!
-//! Three sources (Steam, Epic, game folders and hand-added games) each give `Found` games.
+//! Four sources (Steam, Epic, Riot, game folders and hand-added games) each give `Found` games.
 //! The user's corrections of `games.toml` are applied on top, the list is sorted, and the result
 //! is kept for two seconds so that a burst of requests (Home, Games, game mode) costs one scan.
 //! What changes quickly (running, pinned, play time) is added at every answer, in `compose`.
@@ -26,6 +26,7 @@ use super::folders::{self, FolderGame};
 use super::guess;
 use super::model::{Found, Launch, LocalInfo};
 use super::names::{fnv8, norm_path, path_key, slug};
+use super::riot;
 use super::service::{Service, lock, play_key};
 use super::steam;
 use super::store::{self, Play, SizeRow};
@@ -47,7 +48,7 @@ const PRUNE_DAYS: u64 = 90;
 /// The assembled library: every game of every source that works, sorted.
 pub struct Library {
     pub entries: Vec<Found>,
-    /// Always three: steam, epic, custom.
+    /// Always four: steam, epic, riot, custom.
     pub sources: Vec<GameSourceStatus>,
     pub built_at: Instant,
 }
@@ -208,7 +209,31 @@ fn custom_game(custom: &Custom, data_dir: &Path) -> Found {
     }
 }
 
-/// Applies the hide flag of `[[game]]` to Steam and Epic games, sorts, and keeps only covers
+/// Gives the Riot games the size that was measured before and returns the folders that still need
+/// measuring (the same background measurement and cache as for game folders).
+fn riot_sizes(
+    items: &mut [Found],
+    sizes: &HashMap<String, SizeRow>,
+    size_cutoff: &str,
+) -> Vec<(PathBuf, String)> {
+    let mut wanted = Vec::new();
+    for item in items {
+        let Some(install) = item.install.clone() else {
+            continue;
+        };
+        let known = sizes.get(&path_key(&install.to_string_lossy()));
+        item.size_bytes = known.map(|row| row.size_bytes);
+        let signature = folders::signature(&install);
+        if known
+            .is_none_or(|row| row.signature != signature || row.measured_at.as_str() < size_cutoff)
+        {
+            wanted.push((install, signature));
+        }
+    }
+    wanted
+}
+
+/// Applies the hide flag of `[[game]]` to Steam, Epic and Riot games, sorts, and keeps only covers
 /// that exist (a missing file means "no cover": the tile shows the title). Blocking.
 pub fn finish(mut entries: Vec<Found>, parsed: &Parsed) -> Vec<Found> {
     for entry in &mut entries {
@@ -226,7 +251,8 @@ pub fn finish(mut entries: Vec<Found>, parsed: &Parsed) -> Vec<Found> {
     let rank = |source: GameSource| match source {
         GameSource::Steam => 0,
         GameSource::Epic => 1,
-        GameSource::Custom => 2,
+        GameSource::Riot => 2,
+        GameSource::Custom => 3,
     };
     entries.sort_by(|a, b| {
         (rank(a.source), a.title.to_lowercase(), &a.id).cmp(&(
@@ -378,15 +404,25 @@ impl Service {
                 )
             })
         };
-        let (steam_result, epic_result) = tokio::join!(steam_scan, epic_scan);
-        let (steam_result, epic_result) = (steam_result?, epic_result?);
+        let riot_scan = {
+            let resolved = Arc::clone(&resolved);
+            blocking::run(move || riot::scan(resolved.riot_enabled, resolved.riot_path.as_deref()))
+        };
+        let (steam_result, epic_result, riot_result) =
+            tokio::join!(steam_scan, epic_scan, riot_scan);
+        let (steam_result, epic_result, riot_result) = (steam_result?, epic_result?, riot_result?);
 
-        // Folders that Steam and Epic list themselves are not game folders.
+        // Folders that Steam, Epic and Riot list themselves are not game folders.
         let mut exclude: Vec<PathBuf> = Vec::new();
         if let Some(steam) = &resolved.steam_path {
             exclude.push(steam.join("steamapps"));
         }
-        for item in steam_result.items.iter().chain(&epic_result.items) {
+        for item in steam_result
+            .items
+            .iter()
+            .chain(&epic_result.items)
+            .chain(&riot_result.items)
+        {
             match item.launch {
                 Launch::Steam { .. } => exclude.extend(
                     item.install
@@ -418,8 +454,12 @@ impl Service {
                 );
                 let mut all = steam_result.items;
                 all.extend(epic_result.items);
+                let mut size_wanted = local.size_wanted;
+                let mut riot_items = riot_result.items;
+                size_wanted.extend(riot_sizes(&mut riot_items, &sizes, &size_cutoff));
+                all.extend(riot_items);
                 all.extend(local.games);
-                (finish(all, &parsed), local.size_wanted)
+                (finish(all, &parsed), size_wanted)
             })
             .await?
         };
@@ -434,11 +474,17 @@ impl Service {
             state: epic_result.state,
             message: epic_result.message,
         };
+        let riot_status = GameSourceStatus {
+            source: GameSource::Riot,
+            state: riot_result.state,
+            message: riot_result.message,
+        };
         let custom = custom_status(&discovery.missing, self.file_is_broken());
         if report {
             for (name, source) in [
                 ("steam", &steam_status),
                 ("epic", &epic_status),
+                ("riot", &riot_status),
                 ("gamefolders", &custom),
             ] {
                 app.health
@@ -448,7 +494,7 @@ impl Service {
 
         let library = Arc::new(Library {
             entries,
-            sources: vec![steam_status, epic_status, custom],
+            sources: vec![steam_status, epic_status, riot_status, custom],
             built_at: Instant::now(),
         });
         {
@@ -565,7 +611,7 @@ impl Service {
                 };
                 let _ =
                     store::guess_put(&db, key.clone(), signature, rel.clone(), score, stamp).await;
-                lock_std(&found).insert(key, rel);
+                super::service::lock(&found).insert(key, rel);
             });
         }
         let finished = tokio::time::timeout(GUESS_BUDGET, async {
@@ -584,7 +630,7 @@ impl Service {
                 service.publish().await;
             });
         }
-        result.extend(lock_std(&found).drain());
+        result.extend(super::service::lock(&found).drain());
         Ok(result)
     }
 
@@ -656,12 +702,6 @@ impl Service {
     }
 }
 
-fn lock_std<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
 /// One game as the API shows it.
 pub fn game_of(entry: &Found, live: &Live) -> Game {
     let play = live.plays.get(&play_key(entry));
@@ -695,7 +735,9 @@ pub fn game_of(entry: &Found, live: &Live) -> Game {
         playtime_minutes: match entry.source {
             GameSource::Steam => entry.playtime_minutes,
             GameSource::Epic => entry.playtime_minutes.max(rain_minutes),
-            GameSource::Custom => rain_minutes,
+            // Riot keeps no play time that Rain can read, and the client, not Rain, starts
+            // the game, so Rain counts nothing either.
+            GameSource::Riot | GameSource::Custom => rain_minutes,
         },
         last_played_at: [launcher_last, rain_last].into_iter().flatten().max(),
         pinned: live.pinned.contains(&entry.id),

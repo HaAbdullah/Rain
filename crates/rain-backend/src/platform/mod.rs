@@ -6,7 +6,7 @@
 //! | File | Offers |
 //! |---|---|
 //! | `com` | the one COM thread and `com::run` |
-//! | `shell` | `shell_execute` (the one launch call), `reveal`, `list_apps`, `resolve_shortcut` |
+//! | `shell` | `shell_execute` (the one launch call), `reveal`, `list_apps` |
 //! | `icons` | an icon as PNG for a file, a shortcut or an app id |
 //! | `known_folders` | `%APPDATA%`, the Start Menu folders and the like, from Windows |
 //! | `registry` | reading values, and the autostart entry (`RunKey`) |

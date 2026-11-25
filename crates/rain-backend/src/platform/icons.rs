@@ -25,8 +25,6 @@ use super::com::{self, ComError};
 pub enum IconSource<'a> {
     /// A program or any file: its icon.
     File(&'a Path),
-    /// A shortcut (`.lnk`): the icon it shows, which may differ from the target's.
-    Shortcut(&'a Path),
     /// An app id (an AUMID) from the app list: a packaged app or any item of `shell:AppsFolder`.
     AppId(&'a str),
 }
@@ -35,7 +33,7 @@ impl IconSource<'_> {
     /// The parsing name that the shell understands.
     fn parsing_name(&self) -> String {
         match self {
-            Self::File(path) | Self::Shortcut(path) => path.to_string_lossy().into_owned(),
+            Self::File(path) => path.to_string_lossy().into_owned(),
             Self::AppId(aumid) => format!(r"shell:AppsFolder\{aumid}"),
         }
     }
@@ -185,19 +183,6 @@ mod tests {
         assert_eq!(&png[..8], &PNG_SIGNATURE);
         assert_eq!(dimensions(&png), (64, 64));
         assert!(png.len() > 100);
-    }
-
-    #[tokio::test]
-    async fn a_shortcut_has_an_icon_too() {
-        // A shortcut that this test makes itself, so no installed program is needed.
-        let temp = tempfile::tempdir().unwrap();
-        let link = temp.path().join("Test.lnk");
-        let target = system_file(r"System32\notepad.exe");
-        super::super::shell::write_shortcut_for_tests(&link, &target).await;
-
-        let png = icon_png(IconSource::Shortcut(&link), 48).await.unwrap();
-        assert_eq!(&png[..8], &PNG_SIGNATURE);
-        assert_eq!(dimensions(&png), (48, 48));
     }
 
     #[tokio::test]

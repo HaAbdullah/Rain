@@ -86,13 +86,17 @@ pub fn canonical_key(key: &str) -> Option<String> {
     if let Some(name) = key.strip_prefix("epic:") {
         return plain_epic_name(name).then(|| key.to_owned());
     }
+    if let Some(name) = key.strip_prefix("riot:") {
+        return plain_epic_name(name).then(|| key.to_owned());
+    }
     if let Some(folder) = key.strip_prefix("dir:") {
         return is_absolute(folder).then(|| format!("dir:{}", path_key(folder)));
     }
     None
 }
 
-/// The game name of an Epic game goes into a URL, so only plain characters are allowed.
+/// The game name of an Epic game goes into a URL (and a Riot product name onto a command line),
+/// so only plain characters are allowed.
 pub fn plain_epic_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 128

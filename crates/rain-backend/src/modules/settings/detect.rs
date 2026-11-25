@@ -58,6 +58,9 @@ pub trait Detect: Send + Sync {
     fn epic_extra(&self) -> Option<PathBuf> {
         None
     }
+    /// The data folder of Riot Games (`...\ProgramData\Riot Games`), when it holds the client list
+    /// or the product folders.
+    fn riot(&self) -> Option<PathBuf>;
 }
 
 /// The file whose presence tells the new Epic launcher's data folder from any other folder.
@@ -71,6 +74,7 @@ pub struct Detected {
     pub epic: Option<PathBuf>,
     /// The other Epic launcher's folder when both are installed.
     pub epic_extra: Option<PathBuf>,
+    pub riot: Option<PathBuf>,
     /// The daily-note settings of the chosen vault (empty without one).
     pub notes: NoteSettings,
 }
@@ -155,11 +159,13 @@ impl Detector {
         let steam = self.source.steam();
         let epic = self.source.epic();
         let epic_extra = self.source.epic_extra();
+        let riot = self.source.riot();
         let mut detected = Detected {
             vaults,
             steam,
             epic,
             epic_extra,
+            riot,
             notes: NoteSettings::default(),
         };
         let chosen = vault_override
@@ -229,6 +235,18 @@ impl Detect for SystemDetect {
         // Only when the new folder is the one in use, so the old one is the "other".
         epic_v2_system().and(epic_v1_system())
     }
+
+    fn riot(&self) -> Option<PathBuf> {
+        riot_folder(&known_folder(KnownFolder::ProgramData).ok()?)
+    }
+}
+
+/// The Riot Games data folder under `ProgramData`, when it holds `RiotClientInstalls.json` or a
+/// `Metadata` folder. Section 02 reads what is inside.
+pub fn riot_folder(program_data: &Path) -> Option<PathBuf> {
+    let folder = program_data.join("Riot Games");
+    (folder.join("RiotClientInstalls.json").is_file() || folder.join("Metadata").is_dir())
+        .then_some(folder)
 }
 
 /// The old launcher's folder on this PC.
@@ -382,6 +400,10 @@ mod tests {
         }
 
         fn epic(&self) -> Option<PathBuf> {
+            None
+        }
+
+        fn riot(&self) -> Option<PathBuf> {
             None
         }
     }

@@ -22,7 +22,7 @@ const props = defineProps<{
   def: SettingDef
   selected: boolean
   value: SettingValue
-  /** The library path beside a Steam or Epic switch. */
+  /** The library path beside a Steam, Epic or Riot switch. */
   path?: string
   /** Set when the row's setting is not working; shown as a failed glyph with this text. */
   problem?: string

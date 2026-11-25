@@ -5,6 +5,7 @@ import { settingDefs } from './settingDefs'
 import {
   isBooleanKey,
   joinPaths,
+  libraryPathPatch,
   patchFor,
   readLibraryPath,
   readValue,
@@ -28,6 +29,8 @@ const SETTINGS: Settings = {
   steamPath: 'D:\\steam',
   epicEnabled: false,
   epicPath: '',
+  riotEnabled: true,
+  riotPath: 'D:\\riot',
   calendarConnected: false,
   monitorClaude: true,
   monitorClaudeState: 'on',
@@ -54,6 +57,7 @@ describe('readValue', () => {
     ['game-folders', 'D:\\games'],
     ['steam', true],
     ['epic', false],
+    ['riot', true],
     ['claude-monitor', true],
     ['countdown', '10'],
     ['calendar', 'Not connected'],
@@ -68,6 +72,7 @@ describe('readValue', () => {
   it('reads the library path beside the Steam and Epic switches', () => {
     expect(readLibraryPath(rowOf('steam'), SETTINGS)).toBe('D:\\steam')
     expect(readLibraryPath(rowOf('epic'), SETTINGS)).toBe('')
+    expect(readLibraryPath(rowOf('riot'), SETTINGS)).toBe('D:\\riot')
     expect(readLibraryPath(rowOf('vault'), SETTINGS)).toBeUndefined()
   })
 })
@@ -84,6 +89,12 @@ describe('patchFor', () => {
     expect(patchFor(rowOf('project-roots'), ' D:\\a ;; D:\\b; ')).toEqual({ projectRoots: ['D:\\a', 'D:\\b'] })
     expect(patchFor(rowOf('game-folders'), 'D:\\games')).toEqual({ gameFolders: ['D:\\games'] })
     expect(patchFor(rowOf('game-folders'), '')).toEqual({ gameFolders: [] })
+  })
+
+  it('sends the Riot switch and its path as their own fields', () => {
+    expect(patchFor(rowOf('riot'), false)).toEqual({ riotEnabled: false })
+    expect(libraryPathPatch(rowOf('riot'), 'D:/Riot Games')).toEqual({ riotPath: 'D:/Riot Games' })
+    expect(libraryPathPatch(rowOf('vault'), 'x')).toBeNull()
   })
 
   it('sends a select as the number the backend accepts, and nothing for another value', () => {
@@ -107,7 +118,7 @@ describe('patchFor', () => {
 
 describe('togglePatch', () => {
   it('returns exactly one key for every switch', () => {
-    for (const key of ['hideOnBlur', 'startWithWindows', 'steamEnabled', 'epicEnabled', 'monitorClaude'] as const) {
+    for (const key of ['hideOnBlur', 'startWithWindows', 'steamEnabled', 'epicEnabled', 'riotEnabled', 'monitorClaude'] as const) {
       expect(isBooleanKey(key)).toBe(true)
       expect(togglePatch(key, true)).toEqual({ [key]: true })
     }
@@ -134,7 +145,7 @@ describe('the rows', () => {
   })
 
   it('have a placeholder on each path row that may be empty', () => {
-    for (const id of ['vault', 'project-roots', 'game-folders', 'steam', 'epic']) {
+    for (const id of ['vault', 'project-roots', 'game-folders', 'steam', 'epic', 'riot']) {
       expect(rowOf(id).placeholder, id).toBeTruthy()
     }
   })

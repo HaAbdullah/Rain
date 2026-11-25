@@ -42,9 +42,9 @@ export type CountdownSeconds = 5 | 10 | 20 | 30;
 
 export type MonitorClaudeState = "off" | "on" | "onInactive" | "needsRepair";
 
-export type Settings = { hotkey: string, hotkeyAvailable: boolean, hideOnBlur: boolean, resetAfterSeconds: ResetAfterSeconds, startWithWindows: boolean, dataDir: string, vaultPath: string, dailyNoteFormat: string, dailyNoteFolder: string, projectRoots: Array<string>, gameFolders: Array<string>, steamEnabled: boolean, steamPath: string, epicEnabled: boolean, epicPath: string, calendarConnected: boolean, monitorClaude: boolean, monitorClaudeState: "off" | "on" | "onInactive" | "needsRepair", gameModeCountdownSeconds: CountdownSeconds, };
+export type Settings = { hotkey: string, hotkeyAvailable: boolean, hideOnBlur: boolean, resetAfterSeconds: ResetAfterSeconds, startWithWindows: boolean, dataDir: string, vaultPath: string, dailyNoteFormat: string, dailyNoteFolder: string, projectRoots: Array<string>, gameFolders: Array<string>, steamEnabled: boolean, steamPath: string, epicEnabled: boolean, epicPath: string, riotEnabled: boolean, riotPath: string, calendarConnected: boolean, monitorClaude: boolean, monitorClaudeState: "off" | "on" | "onInactive" | "needsRepair", gameModeCountdownSeconds: CountdownSeconds, };
 
-export type SettingsPatch = { hideOnBlur?: boolean, resetAfterSeconds?: ResetAfterSeconds, startWithWindows?: boolean, dataDir?: string, vaultPath?: string, dailyNoteFormat?: string, dailyNoteFolder?: string, projectRoots?: Array<string>, gameFolders?: Array<string>, steamEnabled?: boolean, steamPath?: string, epicEnabled?: boolean, epicPath?: string, monitorClaude?: boolean, gameModeCountdownSeconds?: CountdownSeconds, };
+export type SettingsPatch = { hideOnBlur?: boolean, resetAfterSeconds?: ResetAfterSeconds, startWithWindows?: boolean, dataDir?: string, vaultPath?: string, dailyNoteFormat?: string, dailyNoteFolder?: string, projectRoots?: Array<string>, gameFolders?: Array<string>, steamEnabled?: boolean, steamPath?: string, epicEnabled?: boolean, epicPath?: string, riotEnabled?: boolean, riotPath?: string, monitorClaude?: boolean, gameModeCountdownSeconds?: CountdownSeconds, };
 
 export type SearchType = "app" | "pool" | "project" | "game" | "session" | "job" | "idleJob";
 
@@ -82,11 +82,11 @@ export type EnvStep = { kind: "editor" | "terminal" | "browser" | "claude" | "ap
 
 export type Project = { id: string, name: string, path: string, icon: IconRef, branch: string, dirtyFiles?: number, commits14d: Array<number>, lastOpenedAt?: string, activityScore: number, environment: Array<EnvStep>, open: boolean, pinned: boolean, missing: boolean, };
 
-export type GameSource = "steam" | "epic" | "custom";
+export type GameSource = "steam" | "epic" | "riot" | "custom";
 
-export type Game = { id: string, title: string, source: "steam" | "epic" | "custom", coverUrl?: string, installed: boolean, running: boolean, sizeBytes?: number, playtimeMinutes: number, lastPlayedAt?: string, pinned: boolean, hidden: boolean, exePath?: string, exeGuessed?: boolean, installPath?: string, removable?: boolean, };
+export type Game = { id: string, title: string, source: "steam" | "epic" | "riot" | "custom", coverUrl?: string, installed: boolean, running: boolean, sizeBytes?: number, playtimeMinutes: number, lastPlayedAt?: string, pinned: boolean, hidden: boolean, exePath?: string, exeGuessed?: boolean, installPath?: string, removable?: boolean, };
 
-export type GameSourceStatus = { source: "steam" | "epic" | "custom", state: "ok" | "off" | "failed", message?: string, };
+export type GameSourceStatus = { source: "steam" | "epic" | "riot" | "custom", state: "ok" | "off" | "failed", message?: string, };
 
 export type GameLibrary = { games: Array<Game>, sources: Array<GameSourceStatus>, };
 

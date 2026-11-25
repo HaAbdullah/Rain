@@ -133,6 +133,12 @@ fn file_edits(patch: SettingsPatch) -> ApiResult<Vec<KeyEdit>> {
     if let Some(text) = patch.epic_path {
         set("epic_path", path_override(&text)?);
     }
+    if let Some(on) = patch.riot_enabled {
+        set("riot_enabled", Some(Value::from(on)));
+    }
+    if let Some(text) = patch.riot_path {
+        set("riot_path", path_override(&text)?);
+    }
     if let Some(seconds) = patch.game_mode_countdown_seconds {
         set(
             "game_mode_countdown_seconds",

@@ -303,6 +303,7 @@ fn source_label(found: &Found) -> &'static str {
     match found.source {
         rain_types::GameSource::Steam => "Steam",
         rain_types::GameSource::Epic => "Epic",
+        rain_types::GameSource::Riot => "Riot",
         rain_types::GameSource::Custom => "Local",
     }
 }

@@ -41,6 +41,7 @@ pub struct FakeDetect {
     pub epic: Mutex<Option<PathBuf>>,
     /// The other Epic launcher's folder, for a PC that has both.
     pub epic_extra: Mutex<Option<PathBuf>>,
+    pub riot: Mutex<Option<PathBuf>>,
 }
 
 impl FakeDetect {
@@ -81,6 +82,10 @@ impl Detect for FakeDetect {
 
     fn epic_extra(&self) -> Option<PathBuf> {
         lock(&self.epic_extra).clone()
+    }
+
+    fn riot(&self) -> Option<PathBuf> {
+        lock(&self.riot).clone()
     }
 }
 

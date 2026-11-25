@@ -47,9 +47,6 @@ struct Shared {
     health: Arc<Health>,
     /// The files to reload, by lower-case path (Windows file names ignore case).
     reloaders: Mutex<HashMap<String, Reloader>>,
-    /// The folders the data watcher follows. Kept so that a folder registered before the watcher
-    /// starts is added when it does.
-    folders: Mutex<Vec<PathBuf>>,
     watcher: Mutex<Option<FileDebouncer>>,
 }
 
@@ -57,7 +54,6 @@ impl ConfigHub {
     pub fn new(data_dir: PathBuf, health: Arc<Health>) -> Self {
         Self {
             shared: Arc::new(Shared {
-                folders: Mutex::new(vec![data_dir.clone()]),
                 data_dir,
                 health,
                 reloaders: Mutex::default(),
@@ -105,16 +101,13 @@ impl ConfigHub {
     }
 
     /// Starts watching the data folder (not its sub-folders: a non-recursive watch reports
-    /// nothing from them, so a module registers each sub-folder it keeps TOML in with
-    /// `watch_subfolder`). Needs a tokio runtime. A failure is not fatal: `TomlFile::refresh`
+    /// nothing from them). Needs a tokio runtime. A failure is not fatal: `TomlFile::refresh`
     /// still notices a hand edit when Settings reads the file, and `GET /health` says so.
     pub fn start_watching(&self) {
         let reloaders = Arc::clone(&self.shared);
         let handler = move |result: DebounceEventResult| reloaders.on_events(result);
         let started = new_debouncer(TOML_DEBOUNCE, None, handler).and_then(|mut debouncer| {
-            for folder in self.folders().iter() {
-                debouncer.watch(folder, RecursiveMode::NonRecursive)?;
-            }
+            debouncer.watch(&self.shared.data_dir, RecursiveMode::NonRecursive)?;
             Ok(debouncer)
         });
         match started {
@@ -134,17 +127,6 @@ impl ConfigHub {
         }
     }
 
-    /// Also reload the TOML files in a sub-folder of the data folder (for example `media`).
-    pub fn watch_subfolder(&self, name: &str) {
-        let folder = self.shared.data_dir.join(name);
-        self.folders().push(folder.clone());
-        if let Some(debouncer) = self.watcher().as_mut()
-            && let Err(e) = debouncer.watch(&folder, RecursiveMode::NonRecursive)
-        {
-            warn!(error = %e, "a sub-folder of the data folder cannot be watched");
-        }
-    }
-
     /// Ends the watcher thread. Called as one of the last steps of a stop.
     pub fn stop_watching(&self) {
         self.watcher().take();
@@ -153,13 +135,6 @@ impl ConfigHub {
     fn reloaders(&self) -> MutexGuard<'_, HashMap<String, Reloader>> {
         self.shared
             .reloaders
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-    }
-
-    fn folders(&self) -> MutexGuard<'_, Vec<PathBuf>> {
-        self.shared
-            .folders
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
     }
@@ -420,34 +395,6 @@ mod tests {
         assert!(eventually(|| hits.load(Ordering::SeqCst) >= 1).await);
         tokio::time::sleep(Duration::from_millis(600)).await;
         assert_eq!(hits.load(Ordering::SeqCst), 1);
-        hub.stop_watching();
-    }
-
-    #[tokio::test]
-    async fn a_sub_folder_that_a_module_registers_is_watched_too_also_before_the_watcher_starts() {
-        let temp = tempfile::tempdir().unwrap();
-        let hub = ConfigHub::new(temp.path().join("data"), health());
-        hub.ensure_data_dir().await.unwrap();
-        std::fs::create_dir_all(hub.file_path("media")).unwrap();
-        std::fs::create_dir_all(hub.file_path("later")).unwrap();
-        let hits = Arc::new(AtomicUsize::new(0));
-        for name in ["media", "later"] {
-            let counter = Arc::clone(&hits);
-            hub.register(
-                &hub.file_path(name).join("a.toml"),
-                Arc::new(move || {
-                    counter.fetch_add(1, Ordering::SeqCst);
-                }),
-            );
-        }
-        hub.watch_subfolder("media"); // before the watcher starts
-        hub.start_watching();
-        hub.watch_subfolder("later"); // after it started
-
-        std::fs::write(hub.file_path("media").join("a.toml"), "x = 1\n").unwrap();
-        assert!(eventually(|| hits.load(Ordering::SeqCst) >= 1).await);
-        std::fs::write(hub.file_path("later").join("a.toml"), "x = 1\n").unwrap();
-        assert!(eventually(|| hits.load(Ordering::SeqCst) >= 2).await);
         hub.stop_watching();
     }
 

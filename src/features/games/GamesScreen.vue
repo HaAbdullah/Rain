@@ -79,6 +79,7 @@ const stripItems = computed<ViewStripItem[]>(() => {
     all: { id: 'all', label: 'All', icon: 'library', count: count('all') },
     steam: source('steam'),
     epic: source('epic'),
+    riot: source('riot'),
     custom: source('custom'),
     installed: { id: 'installed', label: 'Installed', icon: 'hard-drive-download', count: count('installed') },
     hidden: { id: 'hidden', label: 'Hidden', icon: 'eye-off', count: count('hidden') },
