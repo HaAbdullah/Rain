@@ -22,7 +22,7 @@ const currentMonitor = vi.fn(async () => ({ workArea: { size: { width: 2560, hei
 const setZoom = vi.fn(async () => {})
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
-vi.mock('@tauri-apps/api/event', () => ({ listen: () => Promise.resolve(() => {}) }))
+vi.mock('@tauri-apps/api/event', () => ({ listen: () => Promise.resolve(() => {}), emit: () => Promise.resolve() }))
 vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => ({ setZoom }) }))
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => fakeWindow,

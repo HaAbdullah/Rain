@@ -23,11 +23,10 @@ mod test_server;
 
 use std::future::Future;
 use std::sync::Arc;
-use std::time::Duration;
 
 use rain_types::limits::GAME_MODE_EXIT_GRACE;
 use rain_types::{ApiError, Frame, ShellFacts};
-use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Emitter, Listener, Manager, RunEvent, WebviewWindow, WindowEvent};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_window_state::StateFlags;
 use tokio_util::sync::CancellationToken;
@@ -47,6 +46,8 @@ const SANDBOX_IDENTIFIER_SUFFIX: &str = ".dev";
 const EVENT_SUMMONED: &str = "rain:summoned";
 /// Sent to the frontend after the window was hidden from the Rust side.
 const EVENT_HIDDEN: &str = "rain:hidden";
+/// Sent by the page after it showed or hid the window itself.
+const EVENT_PAGE_VISIBILITY: &str = "rain:page-visibility";
 
 /// Start flag of "Start with Windows": the window stays hidden until the user summons it. The
 /// backend writes the registry entry with this flag (section 06 6.4); the shell only reads it.
@@ -81,14 +82,10 @@ fn dismiss(window: &WebviewWindow) {
     report_visibility(window.app_handle());
 }
 
-/// The page hides the window a moment after the focus left it (hide on blur), so a look right at
-/// the focus change still sees the window shown. A second look after this pause sees the truth.
-const VISIBILITY_SECOND_LOOK: Duration = Duration::from_millis(500);
-
 /// Tells the backend that the window was shown or hidden, when that is news to it. The backend
 /// reads no session files and no notes while nobody can look at the window, and catches up on
-/// show. The page hides the window itself too (hide on blur, Escape), so this also runs when the
-/// focus changes, and looks twice: once at once and once after the page had time to hide.
+/// show. The page hides and shows the window itself too (hide on blur, Escape); it then sends
+/// `EVENT_PAGE_VISIBILITY` and this runs again.
 fn report_visibility(app: &AppHandle) {
     let Some(facts) = app.try_state::<Arc<Facts>>() else {
         return;
@@ -96,17 +93,12 @@ fn report_visibility(app: &AppHandle) {
     let facts = Arc::clone(&facts);
     let app = app.clone();
     in_background(&app.clone(), move |backend| async move {
-        for second_look in [false, true] {
-            if second_look {
-                tokio::time::sleep(VISIBILITY_SECOND_LOOK).await;
-            }
-            // Read inside the task, so the newest of several quick reports tells the truth.
-            let visible = window_is_visible(&app);
-            if facts.visibility_changed(visible) {
-                facts::report(&backend.client(), &facts.snapshot(visible)).await?;
-            }
+        // Read inside the task, so the newest of several quick reports tells the truth.
+        let visible = window_is_visible(&app);
+        if !facts.visibility_changed(visible) {
+            return Ok(());
         }
-        Ok(())
+        facts::report(&backend.client(), &facts.snapshot(visible)).await
     });
 }
 
@@ -301,6 +293,10 @@ pub fn run() {
             app.manage(Arc::clone(&facts));
             // The facts are complete before the relay can report them.
             start_backend(app.handle(), facts)?;
+            let handle = app.handle().clone();
+            app.listen(EVENT_PAGE_VISIBILITY, move |_event| {
+                report_visibility(&handle)
+            });
             // The window is created hidden so its saved size is applied
             // before anything is drawn. A launch by the user shows it;
             // a start with Windows (`--hidden`) leaves it hidden.

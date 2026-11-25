@@ -5,7 +5,7 @@
 // Split of work with src-tauri/src/lib.rs: Rust owns the global hotkey and tells
 // us what it did through two events. Hide on blur lives here, because only the
 // frontend knows the reasons to stay open (an overlay, a launch, a scan, ...).
-import { listen } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { currentMonitor, getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { readonly, ref } from 'vue'
@@ -16,6 +16,8 @@ import { createTauriBridge } from './tauri-bridge'
 const EVENT_SUMMONED = 'rain:summoned'
 /** Sent by Rust after it hid the window (hotkey or Alt+F4). */
 const EVENT_HIDDEN = 'rain:hidden'
+/** Sent to Rust after the page showed or hid the window itself, so the backend is told. */
+const EVENT_PAGE_VISIBILITY = 'rain:page-visibility'
 
 /**
  * The header carries data-tauri-drag-region. Tauri's own script then starts the drag on
@@ -57,6 +59,7 @@ export async function createTauriShell(): Promise<Shell> {
     // Flag first: listeners stop their timers before the window goes away.
     markHidden()
     await win.hide()
+    void emit(EVENT_PAGE_VISIBILITY)
   }
 
   function hidesOnBlur(): boolean {
@@ -103,6 +106,7 @@ export async function createTauriShell(): Promise<Shell> {
       await win.show()
       await win.setFocus()
       markSummoned()
+      void emit(EVENT_PAGE_VISIBILITY)
     },
 
     hide,
