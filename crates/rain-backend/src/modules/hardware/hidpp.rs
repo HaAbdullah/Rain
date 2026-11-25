@@ -155,13 +155,15 @@ pub struct Battery {
 
 /// Feature `0x1004`, function 1: `[charge %, level flags, charging status, external power]`.
 /// The level flags are 1 critical, 2 low, 4 good, 8 full. A device that does not know its exact
-/// charge sends 0 and only the flags: the percent is then a rough estimate.
+/// charge sends 0 and only the flags. The flags give no number, so only "full" becomes a percent
+/// (marked as estimated); for the others the battery is left out rather than guessed.
 pub fn decode_unified_battery(params: &[u8; 16]) -> Option<Battery> {
     let (charge, level, status) = (params[0], params[1], params[2]);
-    // 0 discharging, 1 charging, 2 charging slowly, 3 full; above that an error.
+    // 0 discharging, 1 charging, 2 charging (final stage), 3 full, 4 charging slowly; above that
+    // an error of the battery.
     let charging = match status {
         0 | 3 => Some(false),
-        1 | 2 => Some(true),
+        1 | 2 | 4 => Some(true),
         _ => None,
     };
     if (1..=100).contains(&charge) {
@@ -171,15 +173,8 @@ pub fn decode_unified_battery(params: &[u8; 16]) -> Option<Battery> {
             estimated: false,
         });
     }
-    let percent = match level {
-        l if l & 8 != 0 => 100,
-        l if l & 4 != 0 => 60,
-        l if l & 2 != 0 => 20,
-        l if l & 1 != 0 => 5,
-        _ => return None,
-    };
-    Some(Battery {
-        percent,
+    (level & 8 != 0).then_some(Battery {
+        percent: 100,
         charging,
         estimated: true,
     })
@@ -557,6 +552,8 @@ mod tests {
         assert_eq!((charging.percent, charging.charging), (40, Some(true)));
         let slowly = decode_unified_battery(&params(&[41, 2, 2, 1])).unwrap();
         assert_eq!(slowly.charging, Some(true));
+        let below = decode_unified_battery(&params(&[41, 2, 4, 1])).unwrap();
+        assert_eq!(below.charging, Some(true));
         let full = decode_unified_battery(&params(&[100, 8, 3, 1])).unwrap();
         assert_eq!((full.percent, full.charging), (100, Some(false)));
         let broken = decode_unified_battery(&params(&[50, 4, 5, 0])).unwrap();
@@ -564,11 +561,13 @@ mod tests {
     }
 
     #[test]
-    fn a_unified_battery_without_a_charge_falls_back_to_its_level_flag() {
-        let low = decode_unified_battery(&params(&[0, 2, 0, 0])).unwrap();
-        assert_eq!((low.percent, low.estimated), (20, true));
-        let critical = decode_unified_battery(&params(&[0, 1, 0, 0])).unwrap();
-        assert_eq!(critical.percent, 5);
+    fn a_unified_battery_without_a_charge_is_not_guessed() {
+        // Only "full" is a number. "Low", "good" and "critical" give no percent.
+        let full = decode_unified_battery(&params(&[0, 8, 3, 0])).unwrap();
+        assert_eq!((full.percent, full.estimated), (100, true));
+        for level in [1, 2, 4] {
+            assert!(decode_unified_battery(&params(&[0, level, 0, 0])).is_none());
+        }
         assert!(decode_unified_battery(&params(&[0, 0, 0, 0])).is_none());
     }
 
