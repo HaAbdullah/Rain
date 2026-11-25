@@ -388,10 +388,12 @@ fn placement_of(input: &PlanInput<'_>, spec: &StepSpec) -> Option<Placement> {
         EnvKind::App => match (&spec.app_id, &spec.app) {
             (Some(id), _) => {
                 let facts = (input.apps)(id)?;
+                // An app without a program of its own (a store app) is told by its title. A
+                // program is told by its image: its title often is not its name.
+                let title_has = facts.image.is_none().then(|| facts.name.to_lowercase());
                 WindowQuery {
                     images: lower_names(facts.image),
-                    // An app without a program of its own (a store app) is told by its title.
-                    title_has: Some(facts.name.to_lowercase()),
+                    title_has,
                     allow_existing: false,
                 }
             }
