@@ -23,6 +23,7 @@ mod test_server;
 
 use std::future::Future;
 use std::sync::Arc;
+use std::time::Duration;
 
 use rain_types::limits::GAME_MODE_EXIT_GRACE;
 use rain_types::{ApiError, Frame, ShellFacts};
@@ -80,10 +81,14 @@ fn dismiss(window: &WebviewWindow) {
     report_visibility(window.app_handle());
 }
 
+/// The page hides the window a moment after the focus left it (hide on blur), so a look right at
+/// the focus change still sees the window shown. A second look after this pause sees the truth.
+const VISIBILITY_SECOND_LOOK: Duration = Duration::from_millis(500);
+
 /// Tells the backend that the window was shown or hidden, when that is news to it. The backend
 /// reads no session files and no notes while nobody can look at the window, and catches up on
 /// show. The page hides the window itself too (hide on blur, Escape), so this also runs when the
-/// focus changes.
+/// focus changes, and looks twice: once at once and once after the page had time to hide.
 fn report_visibility(app: &AppHandle) {
     let Some(facts) = app.try_state::<Arc<Facts>>() else {
         return;
@@ -91,12 +96,17 @@ fn report_visibility(app: &AppHandle) {
     let facts = Arc::clone(&facts);
     let app = app.clone();
     in_background(&app.clone(), move |backend| async move {
-        // Read inside the task, so the newest of several quick reports tells the truth.
-        let visible = window_is_visible(&app);
-        if !facts.visibility_changed(visible) {
-            return Ok(());
+        for second_look in [false, true] {
+            if second_look {
+                tokio::time::sleep(VISIBILITY_SECOND_LOOK).await;
+            }
+            // Read inside the task, so the newest of several quick reports tells the truth.
+            let visible = window_is_visible(&app);
+            if facts.visibility_changed(visible) {
+                facts::report(&backend.client(), &facts.snapshot(visible)).await?;
+            }
         }
-        facts::report(&backend.client(), &facts.snapshot(visible)).await
+        Ok(())
     });
 }
 
