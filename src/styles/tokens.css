@@ -1,9 +1,16 @@
 /*
- * Rain design tokens. Dark is the only theme.
+ * Rain design tokens.
  *
- * Section 5 of docs/ui-spec.md explains every value. The first block uses
- * shadcn-vue's variable names so the stock components pick the colours up;
- * the "Rain:" blocks add what the stock set does not have.
+ * Five themes, each a full set of the same colour tokens, chosen by data-theme on <html>:
+ * dark (the default), high-contrast, dim, midnight and light. The inline script in
+ * index.html sets the attribute before the first paint; src/composables/useTheme.ts
+ * changes it. A test (tokens.test.ts) checks that every theme defines every token.
+ *
+ * Section 5 of docs/ui-spec.md explains every value. The first group of each theme uses
+ * shadcn-vue's variable names so the stock components pick the colours up; the "Rain:"
+ * groups add what the stock set does not have. Every text and icon colour reaches WCAG AA
+ * (4.5:1 for text, 3:1 for icons and borders that carry meaning) on the surfaces it is
+ * used on; the ratios are listed in section 5.1 of the spec.
  */
 
 @import "tailwindcss";
@@ -11,82 +18,12 @@
 /* Defines the data-open / data-closed variants the generated components use. */
 @import "shadcn-vue/tailwind.css";
 
+/* html carries class="dark" in every theme but light (useTheme and the inline script keep it). */
 @custom-variant dark (&:is(.dark *));
 
+/* ---- Rain: layout, motion and type (the same in every theme) ---- */
 :root {
-  color-scheme: dark;
-
-  /* ---- shadcn-vue variables ---- */
-  --background: #171718;
-  --foreground: #f2f2f3;
-  --card: #262729;
-  --card-foreground: #f2f2f3;
-  --popover: #202121;
-  --popover-foreground: #f2f2f3;
-  --primary: #0a78cc; /* one step darker than the ring so white 14px text reaches 4.5:1 */
-  --primary-foreground: #ffffff;
-  --secondary: #262729;
-  --secondary-foreground: #f2f2f3;
-  --muted: #262729;
-  --muted-foreground: #a6a7ab;
-  --accent: #313235; /* hover and highlight inside shadcn components */
-  --accent-foreground: #f2f2f3;
-  --destructive: #e5484d;
-  --destructive-foreground: #ffffff;
-  --border: #2d2e32;
-  --input: #494a50;
-  --ring: #0b8ce9;
   --radius: 0.5rem; /* 8px */
-
-  --chart-1: #4f8fd6;
-  --chart-2: #3fa7a0;
-  --chart-3: #c77d3a;
-  --chart-4: #7c6bd6;
-  --chart-5: #6fae5a;
-
-  --sidebar: #202121;
-  --sidebar-foreground: #a6a7ab;
-  --sidebar-primary: #0a78cc;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #313235;
-  --sidebar-accent-foreground: #f2f2f3;
-  --sidebar-border: #2d2e32;
-  --sidebar-ring: #0b8ce9;
-
-  /* ---- Rain: surfaces ---- */
-  --surface-0: #141414; /* wells: treemap, heatmap, log, code block */
-  --surface-1: #202121; /* rail, header, detail pane */
-  --surface-2: #262729; /* cards, tiles, inputs, keycaps */
-  --hover: #313235; /* pointer hover */
-  --selected: #3c3d42; /* keyboard selection fill */
-  --border-strong: #494a50; /* inputs, overlay outline */
-  --text-3: #84858c; /* placeholder, disabled, hints only */
-
-  /* ---- Rain: status (always paired with a shape, see StatusDot) ---- */
-  --status-running: #3aa0f5;
-  --status-waiting: #fd9903;
-  --status-success: #00cd72;
-  --status-failed: #e5484d;
-  --status-idle: #84858c;
-
-  /* ---- Rain: heatmap, one hue ---- */
-  --heat-0: #262729;
-  --heat-1: #12395a;
-  --heat-2: #0f5a94;
-  --heat-3: #0b7bcc;
-  --heat-4: #3aa5f2;
-
-  /* ---- Rain: file categories (treemap) ---- */
-  --file-video: #7c6bd6;
-  --file-image: #3fa7a0;
-  --file-audio: #c77d3a;
-  --file-archive: #b8a13a;
-  --file-code: #4f8fd6;
-  --file-document: #6fae5a;
-  --file-app: #c2607a;
-  --file-other: #55565e;
-
-  /* ---- Rain: layout ---- */
   --rail-w: 56px;
   --header-h: 56px;
   --strip-h: 40px;
@@ -94,19 +31,451 @@
   --row-lg-h: 56px;
   --pane-w: 340px;
   --pane-w-wide: 420px;
-
-  /* ---- Rain: elevation and motion ---- */
-  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.06);
   --dur: 100ms;
   --dur-overlay: 80ms;
   --ease: cubic-bezier(0, 0, 0.2, 1);
 
-  /* ---- Rain: type (system fonts only, nothing is downloaded) ---- */
+  /* System fonts only, nothing is downloaded. */
   --rain-font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --rain-font-mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
 }
 
-/* Maps the variables above onto Tailwind utilities (bg-surface-1, text-text-3, ...). */
+/* Dark: the default. Neutral grey surfaces and a blue accent. */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* ---- shadcn-vue variables ---- */
+  --background: #171718;
+  --foreground: #f4f4f5;
+  --card: #262729;
+  --card-foreground: #f4f4f5;
+  --popover: #202121;
+  --popover-foreground: #f4f4f5;
+  --primary: #0a78cc;
+  --primary-foreground: #ffffff;
+  --secondary: #262729;
+  --secondary-foreground: #f4f4f5;
+  --muted: #262729;
+  --muted-foreground: #c4c5ca;
+  --accent: #33343a;
+  --accent-foreground: #f4f4f5;
+  --destructive: #f69497;
+  --destructive-foreground: #1a0b0c;
+  --border: #414248;
+  --input: #707279;
+  --ring: #4aa8f7;
+
+  /* ---- charts and icon tints ---- */
+  --chart-1: #5b9be0;
+  --chart-2: #45b5ad;
+  --chart-3: #d9873f;
+  --chart-4: #9486e6;
+  --chart-5: #7cc266;
+
+  /* ---- sidebar ---- */
+  --sidebar: #202121;
+  --sidebar-foreground: #d6d7db;
+  --sidebar-primary: #0a78cc;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #33343a;
+  --sidebar-accent-foreground: #f4f4f5;
+  --sidebar-border: #414248;
+  --sidebar-ring: #4aa8f7;
+
+  /* ---- Rain: surfaces ---- */
+  --surface-0: #121213;
+  --surface-1: #202121;
+  --surface-2: #262729;
+  --hover: #33343a;
+  --selected: #40414a;
+  --border-strong: #707279;
+  --text-3: #adaeb5;
+
+  /* ---- Rain: status (always paired with a shape, see StatusDot) ---- */
+  --status-running: #4aa8f7;
+  --status-waiting: #fda62a;
+  --status-success: #1fd382;
+  --status-failed: #f4777b;
+  --status-idle: #a8a9b1;
+
+  /* ---- Rain: heatmap, one hue; on-heat is the text on a filled step ---- */
+  --heat-0: #3c3d44;
+  --heat-1: #2a74b3;
+  --heat-2: #348ccf;
+  --heat-3: #4aa4e8;
+  --heat-4: #7cc2f8;
+  --on-heat: #06090f;
+
+  /* ---- Rain: file categories (treemap); on-file is the label on a block ---- */
+  --file-video: #9a8cf0;
+  --file-image: #4ec0b6;
+  --file-audio: #e0934a;
+  --file-archive: #cdb645;
+  --file-code: #6aa6ee;
+  --file-document: #86c46e;
+  --file-app: #d9728c;
+  --file-other: #8f9098;
+  --on-file: #101011;
+
+  /* ---- Rain: scrollbar, text selection, overlays ---- */
+  --scrollbar-thumb: #55565d;
+  --scrollbar-thumb-hover: #74767e;
+  --selection-bg: #0a78cc;
+  --selection-fg: #ffffff;
+  --scrim: rgb(0 0 0 / 0.3);
+  --scrim-strong: rgb(0 0 0 / 0.8);
+  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+/* High contrast: near-white text and icons, strong borders and selection. */
+:root[data-theme="high-contrast"] {
+  color-scheme: dark;
+
+  /* ---- shadcn-vue variables ---- */
+  --background: #0a0a0b;
+  --foreground: #ffffff;
+  --card: #1c1c20;
+  --card-foreground: #ffffff;
+  --popover: #141416;
+  --popover-foreground: #ffffff;
+  --primary: #1470d6;
+  --primary-foreground: #ffffff;
+  --secondary: #1c1c20;
+  --secondary-foreground: #ffffff;
+  --muted: #1c1c20;
+  --muted-foreground: #e6e7ea;
+  --accent: #2e2e35;
+  --accent-foreground: #ffffff;
+  --destructive: #ff989b;
+  --destructive-foreground: #000000;
+  --border: #77797f;
+  --input: #a8aab2;
+  --ring: #6cc4ff;
+
+  /* ---- charts and icon tints ---- */
+  --chart-1: #6fb0f5;
+  --chart-2: #52d0c6;
+  --chart-3: #f0a050;
+  --chart-4: #b3a6ff;
+  --chart-5: #8fdc72;
+
+  /* ---- sidebar ---- */
+  --sidebar: #141416;
+  --sidebar-foreground: #f4f4f6;
+  --sidebar-primary: #1470d6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #2e2e35;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #77797f;
+  --sidebar-ring: #6cc4ff;
+
+  /* ---- Rain: surfaces ---- */
+  --surface-0: #000000;
+  --surface-1: #141416;
+  --surface-2: #1c1c20;
+  --hover: #2e2e35;
+  --selected: #45454f;
+  --border-strong: #a8aab2;
+  --text-3: #cfd0d6;
+
+  /* ---- Rain: status (always paired with a shape, see StatusDot) ---- */
+  --status-running: #6cc4ff;
+  --status-waiting: #ffbb40;
+  --status-success: #40e898;
+  --status-failed: #ff8a8e;
+  --status-idle: #c4c5cc;
+
+  /* ---- Rain: heatmap, one hue; on-heat is the text on a filled step ---- */
+  --heat-0: #4a4b54;
+  --heat-1: #3a88c8;
+  --heat-2: #4a9ee0;
+  --heat-3: #66b4f0;
+  --heat-4: #98d2ff;
+  --on-heat: #000000;
+
+  /* ---- Rain: file categories (treemap); on-file is the label on a block ---- */
+  --file-video: #b0a4ff;
+  --file-image: #5ee0d4;
+  --file-audio: #f2a558;
+  --file-archive: #e6cc50;
+  --file-code: #80b8ff;
+  --file-document: #9ee084;
+  --file-app: #f08aa4;
+  --file-other: #b4b5bc;
+  --on-file: #000000;
+
+  /* ---- Rain: scrollbar, text selection, overlays ---- */
+  --scrollbar-thumb: #8a8c94;
+  --scrollbar-thumb-hover: #b4b6be;
+  --selection-bg: #ffffff;
+  --selection-fg: #000000;
+  --scrim: rgb(0 0 0 / 0.5);
+  --scrim-strong: rgb(0 0 0 / 0.9);
+  --shadow-overlay: 0 0 0 1px rgb(255 255 255 / 0.35), 0 8px 24px rgb(0 0 0 / 0.7);
+}
+
+/* Dim: a softer blue-grey dark, in the spirit of node editors. */
+:root[data-theme="dim"] {
+  color-scheme: dark;
+
+  /* ---- shadcn-vue variables ---- */
+  --background: #242932;
+  --foreground: #eef1f6;
+  --card: #343b48;
+  --card-foreground: #eef1f6;
+  --popover: #2c323d;
+  --popover-foreground: #eef1f6;
+  --primary: #3a73c9;
+  --primary-foreground: #ffffff;
+  --secondary: #343b48;
+  --secondary-foreground: #eef1f6;
+  --muted: #343b48;
+  --muted-foreground: #d0d6e2;
+  --accent: #414959;
+  --accent-foreground: #eef1f6;
+  --destructive: #fcb0b2;
+  --destructive-foreground: #1a0b0c;
+  --border: #4c5666;
+  --input: #7f8aa0;
+  --ring: #79b8ff;
+
+  /* ---- charts and icon tints ---- */
+  --chart-1: #7bb0f0;
+  --chart-2: #55c0b6;
+  --chart-3: #eaa05a;
+  --chart-4: #b2a5f5;
+  --chart-5: #8fd079;
+
+  /* ---- sidebar ---- */
+  --sidebar: #2c323d;
+  --sidebar-foreground: #dce1ea;
+  --sidebar-primary: #3a73c9;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #414959;
+  --sidebar-accent-foreground: #eef1f6;
+  --sidebar-border: #4c5666;
+  --sidebar-ring: #79b8ff;
+
+  /* ---- Rain: surfaces ---- */
+  --surface-0: #1b1f26;
+  --surface-1: #2c323d;
+  --surface-2: #343b48;
+  --hover: #414959;
+  --selected: #465064;
+  --border-strong: #7f8aa0;
+  --text-3: #bac2d2;
+
+  /* ---- Rain: status (always paired with a shape, see StatusDot) ---- */
+  --status-running: #8cc2ff;
+  --status-waiting: #f8b04a;
+  --status-success: #4cdc9c;
+  --status-failed: #ff9ea1;
+  --status-idle: #b3bbca;
+
+  /* ---- Rain: heatmap, one hue; on-heat is the text on a filled step ---- */
+  --heat-0: #465064;
+  --heat-1: #4a8ccc;
+  --heat-2: #5a9ee0;
+  --heat-3: #74b4f0;
+  --heat-4: #9cccf8;
+  --on-heat: #0a0d13;
+
+  /* ---- Rain: file categories (treemap); on-file is the label on a block ---- */
+  --file-video: #a597f2;
+  --file-image: #58c4ba;
+  --file-audio: #e59d57;
+  --file-archive: #d0ba52;
+  --file-code: #74abf0;
+  --file-document: #8dc977;
+  --file-app: #df7e96;
+  --file-other: #98a0b0;
+  --on-file: #12151a;
+
+  /* ---- Rain: scrollbar, text selection, overlays ---- */
+  --scrollbar-thumb: #5b6578;
+  --scrollbar-thumb-hover: #7a869b;
+  --selection-bg: #3a73c9;
+  --selection-fg: #ffffff;
+  --scrim: rgb(8 10 16 / 0.35);
+  --scrim-strong: rgb(8 10 16 / 0.8);
+  --shadow-overlay: 0 8px 24px rgb(5 8 14 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.07);
+}
+
+/* Midnight: deep blue surfaces with a warm orange accent. */
+:root[data-theme="midnight"] {
+  color-scheme: dark;
+
+  /* ---- shadcn-vue variables ---- */
+  --background: #0b1022;
+  --foreground: #eef1fc;
+  --card: #1a2445;
+  --card-foreground: #eef1fc;
+  --popover: #121a34;
+  --popover-foreground: #eef1fc;
+  --primary: #c2570c;
+  --primary-foreground: #ffffff;
+  --secondary: #1a2445;
+  --secondary-foreground: #eef1fc;
+  --muted: #1a2445;
+  --muted-foreground: #bcc5e6;
+  --accent: #25315c;
+  --accent-foreground: #eef1fc;
+  --destructive: #ff959d;
+  --destructive-foreground: #1a0b0c;
+  --border: #324170;
+  --input: #6573ab;
+  --ring: #ffa24d;
+
+  /* ---- charts and icon tints ---- */
+  --chart-1: #6c9cf0;
+  --chart-2: #4fc0b8;
+  --chart-3: #f0974a;
+  --chart-4: #a597f5;
+  --chart-5: #86ce72;
+
+  /* ---- sidebar ---- */
+  --sidebar: #121a34;
+  --sidebar-foreground: #ccd3ee;
+  --sidebar-primary: #c2570c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #25315c;
+  --sidebar-accent-foreground: #eef1fc;
+  --sidebar-border: #324170;
+  --sidebar-ring: #ffa24d;
+
+  /* ---- Rain: surfaces ---- */
+  --surface-0: #070b18;
+  --surface-1: #121a34;
+  --surface-2: #1a2445;
+  --hover: #25315c;
+  --selected: #32407a;
+  --border-strong: #6573ab;
+  --text-3: #aab4dc;
+
+  /* ---- Rain: status (always paired with a shape, see StatusDot) ---- */
+  --status-running: #78b8ff;
+  --status-waiting: #ffb13d;
+  --status-success: #38dc90;
+  --status-failed: #ff8690;
+  --status-idle: #a6b0d6;
+
+  /* ---- Rain: heatmap, one hue; on-heat is the text on a filled step ---- */
+  --heat-0: #2f3b6c;
+  --heat-1: #b3600f;
+  --heat-2: #d0741a;
+  --heat-3: #ec8c2c;
+  --heat-4: #ffb25e;
+  --on-heat: #0a0d18;
+
+  /* ---- Rain: file categories (treemap); on-file is the label on a block ---- */
+  --file-video: #a99cf8;
+  --file-image: #4fcfc4;
+  --file-audio: #f09c52;
+  --file-archive: #d8c250;
+  --file-code: #78a8f5;
+  --file-document: #8fd277;
+  --file-app: #e5809a;
+  --file-other: #8e98c0;
+  --on-file: #070b18;
+
+  /* ---- Rain: scrollbar, text selection, overlays ---- */
+  --scrollbar-thumb: #3d4a80;
+  --scrollbar-thumb-hover: #5866a0;
+  --selection-bg: #c2570c;
+  --selection-fg: #ffffff;
+  --scrim: rgb(2 4 12 / 0.4);
+  --scrim-strong: rgb(2 4 12 / 0.85);
+  --shadow-overlay: 0 8px 24px rgb(2 4 14 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+/* Light: light surfaces and dark text. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* ---- shadcn-vue variables ---- */
+  --background: #f4f5f8;
+  --foreground: #13151a;
+  --card: #eceff4;
+  --card-foreground: #13151a;
+  --popover: #ffffff;
+  --popover-foreground: #13151a;
+  --primary: #1060c0;
+  --primary-foreground: #ffffff;
+  --secondary: #eceff4;
+  --secondary-foreground: #13151a;
+  --muted: #eceff4;
+  --muted-foreground: #40454f;
+  --accent: #dde2ea;
+  --accent-foreground: #13151a;
+  --destructive: #a82429;
+  --destructive-foreground: #ffffff;
+  --border: #c4cad5;
+  --input: #7b8394;
+  --ring: #1060c0;
+
+  /* ---- charts and icon tints ---- */
+  --chart-1: #2f6fc0;
+  --chart-2: #1c8078;
+  --chart-3: #b0600f;
+  --chart-4: #6a58c4;
+  --chart-5: #377d22;
+
+  /* ---- sidebar ---- */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #2d323c;
+  --sidebar-primary: #1060c0;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #dde2ea;
+  --sidebar-accent-foreground: #13151a;
+  --sidebar-border: #c4cad5;
+  --sidebar-ring: #1060c0;
+
+  /* ---- Rain: surfaces ---- */
+  --surface-0: #e6e9ef;
+  --surface-1: #ffffff;
+  --surface-2: #eceff4;
+  --hover: #dde2ea;
+  --selected: #cbd3e0;
+  --border-strong: #7b8394;
+  --text-3: #505663;
+
+  /* ---- Rain: status (always paired with a shape, see StatusDot) ---- */
+  --status-running: #1560b8;
+  --status-waiting: #8c5000;
+  --status-success: #0e6c37;
+  --status-failed: #b3262c;
+  --status-idle: #586070;
+
+  /* ---- Rain: heatmap, one hue; on-heat is the text on a filled step ---- */
+  --heat-0: #c0c7d4;
+  --heat-1: #3f82c6;
+  --heat-2: #2f74bb;
+  --heat-3: #1d609f;
+  --heat-4: #0d4580;
+  --on-heat: #ffffff;
+
+  /* ---- Rain: file categories (treemap); on-file is the label on a block ---- */
+  --file-video: #6a58c4;
+  --file-image: #1c8078;
+  --file-audio: #b0600f;
+  --file-archive: #8a7400;
+  --file-code: #2f6fc0;
+  --file-document: #387a24;
+  --file-app: #b04466;
+  --file-other: #6b7280;
+  --on-file: #ffffff;
+
+  /* ---- Rain: scrollbar, text selection, overlays ---- */
+  --scrollbar-thumb: #a3abbb;
+  --scrollbar-thumb-hover: #7f889a;
+  --selection-bg: #1060c0;
+  --selection-fg: #ffffff;
+  --scrim: rgb(20 24 34 / 0.2);
+  --scrim-strong: rgb(20 24 34 / 0.6);
+  --shadow-overlay: 0 8px 24px rgb(20 28 48 / 0.18), 0 0 0 1px rgb(20 28 48 / 0.08);
+}
+
 @theme inline {
   /* Every Tailwind transition runs at the Rain speed (spec 5.5). */
   --default-transition-duration: var(--dur);
@@ -162,6 +531,9 @@
   --color-heat-2: var(--heat-2);
   --color-heat-3: var(--heat-3);
   --color-heat-4: var(--heat-4);
+  --color-on-heat: var(--on-heat);
+  --color-scrim: var(--scrim);
+  --color-scrim-strong: var(--scrim-strong);
 
   --radius-sm: calc(var(--radius) - 4px); /* 4  keycaps */
   --radius-md: calc(var(--radius) - 2px); /* 6  controls, tags, chips */
@@ -204,22 +576,61 @@
     overflow: hidden;
     user-select: none;
   }
-  /* Lets the frameless window be dragged by its header. */
-  [data-tauri-drag-region] {
-    app-region: drag;
-  }
+  /* The header drag is Tauri's own script (data-tauri-drag-region); see src/shell/tauri.ts. */
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--selected);
+    background: var(--scrollbar-thumb);
     border-radius: 5px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: content-box;
+  }
   ::-webkit-scrollbar-track {
     background: transparent;
+  }
+  ::selection {
+    background: var(--selection-bg);
+    color: var(--selection-fg);
+  }
+  /*
+   * Everything clickable gets the pointer: enabled buttons and links, the ARIA roles that act
+   * like them (rows are role=option), and checkbox labels. A disabled control and the header's
+   * drag region never do. This is the base layer, so a utility class (cursor-text on an
+   * input group, cursor-not-allowed) still wins.
+   */
+  :where(
+      button,
+      a[href],
+      summary,
+      select,
+      [role="button"],
+      [role="link"],
+      [role="tab"],
+      [role="option"],
+      [role="menuitem"],
+      [role="menuitemcheckbox"],
+      [role="menuitemradio"],
+      [role="checkbox"],
+      [role="radio"],
+      [role="switch"],
+      label:has(input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="switch"])
+    ):not(
+      :disabled,
+      [disabled],
+      [aria-disabled="true"],
+      [data-disabled],
+      [data-tauri-drag-region]
+    ) {
+    cursor: pointer;
+  }
+  [data-tauri-drag-region] {
+    cursor: default;
   }
   /* Paths, commands and logs may be selected and copied; nothing else. */
   .selectable {

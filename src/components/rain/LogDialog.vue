@@ -129,7 +129,7 @@ const barColor: Record<LogLine['level'], string> = {
               v-for="run in request.runs"
               :key="run.id"
               :value="run.id"
-              class="flex h-9 cursor-default items-center gap-2 rounded-md px-2 text-13 outline-none transition-colors data-highlighted:bg-hover data-[state=checked]:bg-selected"
+              class="flex h-9 items-center gap-2 rounded-md px-2 text-13 outline-none transition-colors data-highlighted:bg-hover data-[state=checked]:bg-selected"
             >
               <StatusDot :status="run.status" :size="12" />
               <span class="min-w-0 flex-1 truncate">{{ runLabel(run.startedAt) }}</span>

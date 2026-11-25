@@ -16,7 +16,7 @@
 //! | `service`, `routes` | the module's logic and its HTTP routes |
 
 mod book;
-mod claude_paths;
+pub(crate) mod claude_paths;
 mod focus;
 mod hook_wire;
 mod hooks_install;

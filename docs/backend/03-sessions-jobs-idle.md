@@ -104,12 +104,26 @@ Notes:
 
 ### 2.2 Scheduled jobs (module `jobs`)
 
+`GET /jobs` lists Rain's own jobs, then the scheduled tasks of the Claude desktop app (2.2.1). Those are shown only: `PATCH` and `POST .../runs` for their ids answer `conflict` `claudeAppJob`.
+
 | Method | Path | Request | Response | OK | Errors | Idem. | Topic effects |
 |---|---|---|---|---|---|---|---|
 | GET | `/jobs` | none | `ScheduledJob[]` (file order of `jobs.toml`) | 200 | `unavailable` `moduleFailed` | yes | none |
 | PATCH | `/jobs/{id}` | `EnabledBody` `{ "enabled": boolean }` | `ScheduledJob` | 200 | `notFound` `unknownJob`; `invalid` `badBody`; `conflict` `configChanged` (the entry moved or vanished while writing); `failed` `saveFailed` (message "Could not save jobs.toml"); `conflict` `configNewer` (written by a newer Rain, read only); `conflict` `configBroken` (the file does not parse: it is never overwritten) | yes (absolute value) | `jobs` |
 | POST | `/jobs/{id}/runs` | none | `JobRun` | 201 (a new run); 200 (a run of this job is already in progress: that run is returned, nothing new starts) | `notFound` `unknownJob`; `conflict` `gameMode`; `unavailable` `shuttingDown` | no (second press returns the run in progress) | `jobs` |
 | GET | `/runs/{id}/log` | none | `LogLine[]` (oldest first; at most 2000 lines; when lines were cut the first line is a `warn` that says how many) | 200 | `notFound` `unknownRun` | yes | none |
+
+#### 2.2.1 Scheduled tasks of the Claude app (read only)
+
+The Claude desktop app runs two daily tasks of the owner in its own browser. Rain does not start them and must not. The list shows them so the owner sees how the last runs went.
+
+- Source. In `ScheduledJob`, `source` is `rain` or `claude-app`. A Claude-app entry has the id `claude-app:<task id>`, kind `claude`, and `JobRun.outcome`, the one-line summary of a run.
+- Where the data is. The app keeps `claude-code-sessions/<account>/<organisation>/scheduled-tasks.json` in its data folder (`%LOCALAPPDATA%\Claude-Data\<profile>`, and the older `%APPDATA%\Claude`). Per task it has `id`, `displayName`, `cronExpression` and `enabled`. Next to it, one `local_*.json` per session: a session that a task started has `scheduledTaskId`, `createdAt`, `lastTurnEdgeAt`, `lastActivityAt` and `postTurnSummary` (`status_category` and `status_detail`, Claude's own summary of the run). The folder `<claude folder>/scheduled-tasks/<id>/SKILL.md` holds only the prompt, so Rain does not read it.
+- Rows. Name, schedule text (from the cron text), on or off, next run (from the cron text, only when on), the last 20 runs newest first. A run has its start time, its state, its length (only for a run that ended) and the outcome line. State: `completed` is success, `blocked`, `failed` and `error` are failed, a session without a summary that was active in the last 30 minutes is running, anything else is idle (ended, outcome unknown).
+- Left out on purpose: an exit code (the app has none), the transcript and its log (a run has no Rain log), and a task without an id or without an `enabled` value. Without the app's task file no entry is listed: the schedule and the on or off state would be guesses.
+- When it is read. At start, and on every `GET /jobs`, in a blocking task. No timer and no watcher. Session files are parsed again only when their size or time changed, and files older than 60 days are not read. The topic `jobs` carries the entries from the last read and is sent again after a read that found a change.
+- Tests and sandbox runs. The folder is `<claude folder>/desktop-app/` when `Config.claude_dir` (`RAIN_CLAUDE_DIR`) is set, so a test never reads the real one. The path code is in `sessions/claude_paths.rs`.
+- `Service::list` (used by the launcher) returns Rain's own jobs only.
 
 ### 2.3 Idle jobs (module `idle`)
 
@@ -295,6 +309,10 @@ use crate::common::Status;
 #[serde(rename_all = "camelCase")]
 pub enum JobKind { Cron, Claude }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+pub enum JobSource { Rain, ClaudeApp }    // "rain" | "claude-app" (2.2.1)
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(optional_fields)]
@@ -308,6 +326,8 @@ pub struct JobRun {
     pub duration_ms: Option<u64>,         // absent only while running
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i64>,           // the real process exit code (u32 widened); absent while running and when no code exists (timeout, stopped, could not start)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,          // one line; only runs of the Claude app have it (2.2.1)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -328,6 +348,8 @@ pub struct LogLine {
 #[ts(optional_fields)]
 pub struct ScheduledJob {
     pub id: String,
+    #[ts(inline)]
+    pub source: JobSource,                // "rain" | "claude-app"
     pub name: String,
     #[ts(inline)]
     pub kind: JobKind,

@@ -2,6 +2,7 @@
 //!
 //! The definitions are the user's `jobs.toml`; the code ships no job. What lives here:
 //! - `model` and `entry`: reading the file entry by entry (a bad entry is skipped and named);
+//! - `claude_app`: the scheduled tasks of the Claude desktop app, read only (shown, never run);
 //! - `schedule`: cron, the next occurrence and the label (the only file that knows `chrono`);
 //! - `scheduler`: the one task and the pure rules of when a job is due and what is made up;
 //! - `command`, `claude_stream`, `runner`, `log`: one run, from the command line to the log;
@@ -10,6 +11,7 @@
 //!
 //! `idle` uses `entry`, `runner`, `log` and `file_edit` for its own runs.
 
+mod claude_app;
 mod claude_stream;
 pub(crate) mod command;
 pub(crate) mod entry;
@@ -58,7 +60,10 @@ pub const ENTRY: ModuleEntry = ModuleEntry {
     start: |state| {
         Box::pin(async move {
             let jobs = state.jobs();
-            jobs.start(&state).await
+            jobs.start(&state).await?;
+            // Once, so the first frame of the topic already has the tasks of the Claude app.
+            jobs.refresh_claude_app().await;
+            Ok(())
         })
     },
     stop: |state| {

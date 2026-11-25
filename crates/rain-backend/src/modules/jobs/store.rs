@@ -208,6 +208,7 @@ pub async fn load_recent(db: &Db) -> Result<HashMap<String, Vec<JobRun>>, DbErro
                 started_at: row.get(3)?,
                 duration_ms: row.get::<_, Option<i64>>(4)?.map(|ms| ms.max(0) as u64),
                 exit_code: row.get(5)?,
+                outcome: None,
             })
         })?;
         let mut by_job: HashMap<String, Vec<JobRun>> = HashMap::new();

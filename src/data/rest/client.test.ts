@@ -308,6 +308,7 @@ describe('REST client: games (section 02)', () => {
 describe('REST client: jobs and idle jobs (section 03)', () => {
   const job = {
     id: 'job-echo',
+    source: 'rain',
     name: 'Say hello',
     kind: 'cron',
     cron: '0 6 * * *',

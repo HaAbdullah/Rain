@@ -1,5 +1,7 @@
 import { createApp } from 'vue'
 import './styles/tokens.css'
+// Keeps data-theme on <html> in step with the stored choice (index.html applied it before the first paint).
+import '@/composables/useTheme'
 import App from './App.vue'
 import { resetLaunches } from '@/composables/useLaunch'
 import { refreshResources } from '@/composables/useResource'

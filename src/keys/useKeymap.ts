@@ -75,6 +75,9 @@ const REPEATABLE = new Set([
   'Ctrl+ArrowDown',
 ])
 
+/** MouseEvent.button of the two side buttons, as the names the key table uses. */
+const MOUSE_COMBOS: Record<number, string> = { 3: 'MouseBack', 4: 'MouseForward' }
+
 const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta'])
 
 function isBlocked(combo: string, inOverlay: boolean): boolean {
@@ -137,7 +140,11 @@ export function useKeymap(): void {
       return
     }
     const isSectionChord = combo.startsWith('Ctrl+Digit')
-    const handled = isSectionChord && dispatch(combo, (binding) => binding.group === 'Go')
+    // Zoom works in a field too: a text field has no use for these chords.
+    const handled = dispatch(
+      combo,
+      (binding) => (isSectionChord && binding.group === 'Go') || binding.id.startsWith('zoom-'),
+    )
     if (handled || isBlocked(combo, false)) event.preventDefault()
   }
 
@@ -198,6 +205,19 @@ export function useKeymap(): void {
     if (event.key === 'Alt') event.preventDefault()
   }
 
+  /**
+   * The side buttons of a mouse send Back and Forward. They run the same two bindings as the
+   * keys; WebView2's own history step is stopped (there is no page to go back to).
+   */
+  function onMouseup(event: MouseEvent) {
+    const combo = MOUSE_COMBOS[event.button]
+    if (!combo) return
+    event.preventDefault()
+    if (shell.hidden.value || isOverlayOpen(event.target)) return
+    dispatch(combo)
+  }
+
+  useEventListener(window, 'mouseup', onMouseup, { capture: true })
   useEventListener(window, 'keydown', onKeydown, { capture: true })
   useEventListener(window, 'keyup', onKeyup, { capture: true })
   // Alt+Tab away: the key-up goes to the other window.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Header (spec 3.2, 2.5): section title, the search field, loader line and window controls.
-import { HandIcon, MaximizeIcon, MinimizeIcon, PinIcon, XIcon } from '@lucide/vue'
+import { HandIcon, Maximize2Icon, Minimize2Icon, PinIcon, XIcon } from '@lucide/vue'
 import { computed } from 'vue'
 import { toggleKeepOpen } from '@/actions/common'
 import { actionContext } from '@/actions/context'
@@ -15,7 +15,7 @@ import KeyHint from './KeyHint.vue'
 import SearchField from './SearchField.vue'
 
 const nav = useNav()
-const { keepOpen, fullscreen } = shell
+const { keepOpen, maximized } = shell
 const { waiting } = useNeedsYou()
 
 const title = computed(() => routeByName[nav.displayed.value].title)
@@ -37,7 +37,7 @@ const iconButton =
       <SearchField />
     </div>
 
-    <div class="flex items-center gap-1 pr-3 [app-region:no-drag]">
+    <div data-tauri-drag-region class="flex h-full items-center gap-1 pr-3">
       <Tooltip v-if="waiting > 0">
         <TooltipTrigger as-child>
           <button
@@ -81,16 +81,15 @@ const iconButton =
             type="button"
             tabindex="-1"
             :class="iconButton"
-            :aria-label="fullscreen ? 'Leave full screen' : 'Full screen'"
-            :aria-pressed="fullscreen"
+            :aria-label="maximized ? 'Restore' : 'Maximise'"
             @mousedown="keepFocus"
-            @click="shell.toggleFullscreen()"
+            @click="shell.toggleMaximize()"
           >
-            <component :is="fullscreen ? MinimizeIcon : MaximizeIcon" class="size-4" />
+            <component :is="maximized ? Minimize2Icon : Maximize2Icon" class="size-4" />
           </button>
         </TooltipTrigger>
         <TooltipContent>
-          <span>{{ fullscreen ? 'Leave full screen' : 'Full screen' }}</span>
+          <span>{{ maximized ? 'Restore' : 'Maximise' }}</span>
           <KeyHint keys="F11" />
         </TooltipContent>
       </Tooltip>

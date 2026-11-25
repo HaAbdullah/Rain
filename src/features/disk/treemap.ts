@@ -24,8 +24,8 @@ const MIN_SIDE = 2
 const LABEL_MIN_WIDTH = 80
 const LABEL_MIN_HEIGHT = 24
 const LABEL_INSET = 6
-/** Fills are drawn this opaque over the background, which keeps the 12 px labels readable. */
-const FILL_ALPHA = 0.75
+/** Fills are drawn fully opaque: the label colour (--on-file) is checked against the plain fill, in every theme. */
+const FILL_ALPHA = 1
 
 export interface Palette {
   fills: Record<FileCategory, string>
@@ -53,7 +53,7 @@ export function readPalette(): Palette {
     },
     background: token('--surface-0'),
     frame: token('--border-strong'),
-    text: token('--foreground'),
+    text: token('--on-file'),
     outline: token('--foreground'),
     font: `12px ${token('--rain-font-sans')}`,
   }

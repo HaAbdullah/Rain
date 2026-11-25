@@ -48,7 +48,7 @@ pub fn single_file(config: &Config) -> String {
         EnvKind, EnvStep, Project,
         GameSource, Game, GameSourceStatus, GameLibrary, CustomGameDraft, GamePatch,
         // sessions, jobs and idle jobs (section 03)
-        JobKind, JobRun, LogLevel, LogLine, ScheduledJob, IdleState, IdleResource, IdleJob, EnabledBody,
+        JobKind, JobSource, JobRun, LogLevel, LogLine, ScheduledJob, IdleState, IdleResource, IdleJob, EnabledBody,
         PermissionAnswer, PermissionRequest, SessionEventKind, SessionEvent, SessionHost, ClaudeSession,
         PermissionAnswerBody, PermissionAnswerResult, FocusKind, FocusResult,
         // life (section 04)

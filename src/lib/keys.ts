@@ -26,6 +26,10 @@ const CAPS: Record<string, string> = {
   PageUp: 'PgUp',
   PageDown: 'PgDn',
   Delete: 'Del',
+  MouseBack: 'Mouse back',
+  MouseForward: 'Mouse forward',
+  BrowserBack: 'Back key',
+  BrowserForward: 'Forward key',
 }
 
 function cap(key: string): string {

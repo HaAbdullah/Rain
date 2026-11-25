@@ -13,6 +13,8 @@ use crate::config::Config;
 #[derive(Debug, Clone)]
 pub struct ClaudePaths {
     root: PathBuf,
+    /// Folders that may hold the data of the Claude desktop app (see `app_session_folders`).
+    app_parents: Vec<PathBuf>,
 }
 
 impl ClaudePaths {
@@ -22,6 +24,7 @@ impl ClaudePaths {
     /// 2. the environment variable `CLAUDE_CONFIG_DIR`, which Claude Code itself honours;
     /// 3. `.claude` in the user's profile folder.
     pub fn resolve(config: &Config) -> Self {
+        let overridden = config.claude_dir.is_some();
         let root = config
             .claude_dir
             .clone()
@@ -30,12 +33,55 @@ impl ClaudePaths {
                 std::env::var_os("USERPROFILE").map(|home| Path::new(&home).join(".claude"))
             })
             .unwrap_or_default();
-        Self { root }
+        // A throwaway Claude folder carries its own copy of the app's data, so that a test or a
+        // sandbox run never reads the real one.
+        let app_parents = if overridden {
+            vec![root.join("desktop-app")]
+        } else {
+            let local = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
+            let roaming = std::env::var_os("APPDATA").map(PathBuf::from);
+            [
+                local.map(|dir| dir.join("Claude-Data")),
+                roaming.map(|dir| dir.join("Claude")),
+            ]
+            .into_iter()
+            .flatten()
+            .collect()
+        };
+        Self { root, app_parents }
     }
 
     #[cfg(test)]
     pub fn with_root(root: PathBuf) -> Self {
-        Self { root }
+        Self {
+            root,
+            app_parents: Vec::new(),
+        }
+    }
+
+    /// The folders `claude-code-sessions` of the Claude desktop app: one for each profile folder
+    /// below `Claude-Data` (named after the app package), and one directly in the older
+    /// `%APPDATA%\Claude`. Only folders that exist are returned. The app keeps its list of
+    /// scheduled tasks and one small file for each of its sessions there.
+    pub fn app_session_folders(&self) -> Vec<PathBuf> {
+        const NAME: &str = "claude-code-sessions";
+        let mut found = Vec::new();
+        for parent in &self.app_parents {
+            let direct = parent.join(NAME);
+            if direct.is_dir() {
+                found.push(direct);
+            }
+            let Ok(entries) = std::fs::read_dir(parent) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let nested = entry.path().join(NAME);
+                if nested.is_dir() {
+                    found.push(nested);
+                }
+            }
+        }
+        found
     }
 
     pub fn root(&self) -> &Path {

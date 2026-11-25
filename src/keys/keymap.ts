@@ -8,6 +8,7 @@ import type { ActionTarget } from '@/actions/types'
 import { useActionPanel } from '@/composables/useActionPanel'
 import { useCheatSheet } from '@/composables/useCheatSheet'
 import { refreshResources } from '@/composables/useResource'
+import { resetZoom, zoomIn, zoomOut } from '@/composables/useZoom'
 import { useScreenState, type ScreenController } from '@/composables/useScreen'
 import type { useSearch } from '@/composables/useSearch'
 import { poolEditor } from '@/features/apps/actions'
@@ -137,6 +138,15 @@ function escape({ route, search, screen }: KeyContext) {
   else void shell.hide()
 }
 
+/**
+ * History back, as in a file manager or a browser: leave what is open inside the screen (the open
+ * habit, the folder on Disk), else return to the screen before. Unlike Esc it never hides Rain.
+ */
+function historyBack({ screen }: KeyContext) {
+  if (screen?.back?.() || screen?.stepOut?.()) return
+  nav.stepBack()
+}
+
 // ---- the table ----
 
 /**
@@ -158,6 +168,28 @@ const goBindings: KeyBinding[] = routes.map((def) => ({
   label: def.title,
   run: () => nav.go(def.name),
 }))
+
+/**
+ * Back and Forward are actions; the inputs below are only what sends them. `MouseBack` and
+ * `MouseForward` are the side buttons of a mouse (useKeymap turns the button into this name),
+ * `BrowserBack` and `BrowserForward` the keys some keyboards have.
+ */
+const historyBindings: KeyBinding[] = [
+  {
+    id: 'history-back',
+    combo: ['Alt+ArrowLeft', 'BrowserBack', 'MouseBack'],
+    group: 'Go',
+    label: 'Back',
+    run: historyBack,
+  },
+  {
+    id: 'history-forward',
+    combo: ['Alt+ArrowRight', 'BrowserForward', 'MouseForward'],
+    group: 'Go',
+    label: 'Forward',
+    run: () => void nav.stepForward(),
+  },
+]
 
 const ALT_DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => `Alt+Digit${digit}`)
 
@@ -187,15 +219,38 @@ export const keymap: KeyBinding[] = [
     run: () => toggleKeepOpen(actionContext()),
   },
   {
-    id: 'fullscreen',
+    id: 'maximize',
     combo: 'F11',
     group: 'Window',
-    label: 'Full screen on / off',
-    run: () => void shell.toggleFullscreen(),
+    label: 'Maximise / restore',
+    run: () => void shell.toggleMaximize(),
+  },
+  // Ctrl+Shift+Equal is the plus key of a layout that needs Shift for it.
+  {
+    id: 'zoom-in',
+    combo: ['Ctrl+Equal', 'Ctrl+Shift+Equal', 'Ctrl+NumpadAdd'],
+    group: 'Window',
+    label: 'Zoom in',
+    run: () => void zoomIn(),
+  },
+  {
+    id: 'zoom-out',
+    combo: ['Ctrl+Minus', 'Ctrl+NumpadSubtract'],
+    group: 'Window',
+    label: 'Zoom out',
+    run: () => void zoomOut(),
+  },
+  {
+    id: 'zoom-reset',
+    combo: ['Ctrl+Digit0', 'Ctrl+Numpad0'],
+    group: 'Window',
+    label: 'Reset zoom',
+    run: () => void resetZoom(),
   },
 
   // Go
   ...goBindings,
+  ...historyBindings,
   {
     id: 'sub-view',
     combo: ['Tab', 'Shift+Tab'],

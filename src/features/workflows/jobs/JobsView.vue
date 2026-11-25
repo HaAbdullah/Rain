@@ -80,7 +80,7 @@ defineExpose({ target, move, page, group })
       v-else-if="hasData && jobs.data.value?.length === 0"
       icon="calendar-clock"
       title="No scheduled jobs"
-      hint="Jobs are defined in jobs.toml in your data folder"
+      hint="Jobs are defined in jobs.toml in your data folder. Scheduled tasks of the Claude app show here too"
     />
     <EmptyState v-else-if="hasData && shownCount === 0" icon="search-x" title="No match" />
     <template v-else-if="hasData">
@@ -97,7 +97,7 @@ defineExpose({ target, move, page, group })
         :groups="groups"
         :selected-id="selectedId"
         @update:selected-id="select"
-        @activate="run('log')"
+        @activate="selected?.source === 'claude-app' ? undefined : run('log')"
         @context="openPanel"
       >
         <template #row="{ item, selected: isSelected }">

@@ -33,7 +33,7 @@ import {
   type SettingValue,
 } from './settingValues'
 
-const SKELETON_GROUPS = [4, 6, 1] as const
+const SKELETON_GROUPS = [1, 4, 6, 1] as const
 
 const notice = useNotice()
 const query = useSectionQuery('settings')

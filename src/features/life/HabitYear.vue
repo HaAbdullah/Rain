@@ -56,7 +56,7 @@ const columns = computed(() => `auto repeat(${grid.value.weekCount}, minmax(0, 1
       :state="cell.date < windowFrom ? 'none' : stateOf(cell.date)"
       :today="cell.date === today"
       :selected="cell.date === selected"
-      :class="{ 'opacity-50': cell.date < tickableFrom }"
+      :class="['cursor-pointer', { 'opacity-50': cell.date < tickableFrom }]"
       :style="{ gridColumnStart: cell.column + 2, gridRowStart: cell.row + 2 }"
       @click="emit('select', cell.date)"
     />

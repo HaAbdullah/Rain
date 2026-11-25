@@ -12,6 +12,8 @@ import { Switch } from '@/components/ui/switch'
 import { useOverlay } from '@/composables/useOverlay'
 import { useSearch } from '@/composables/useSearch'
 import { keepFocus } from '@/lib/focus'
+import ThemePicker from './ThemePicker.vue'
+import ZoomControl from './ZoomControl.vue'
 import { settingActivation } from './actions'
 import type { SettingValue } from './settingValues'
 import { selectChoices } from './settingDefs'
@@ -37,6 +39,14 @@ const emit = defineEmits<{
 
 const search = useSearch()
 const root = useTemplateRef<HTMLElement>('root')
+
+// The Appearance row shows the theme picker where a Select row shows its Select. The theme is
+// kept by the window (useTheme), so the row neither reads nor reports a value.
+const isTheme = computed(() => props.def.id === 'theme')
+const picker = useTemplateRef<InstanceType<typeof ThemePicker>>('picker')
+// The Zoom row is the same: the window keeps the level (useZoom).
+const isZoom = computed(() => props.def.id === 'zoom')
+const zoomControl = useTemplateRef<InstanceType<typeof ZoomControl>>('zoomControl')
 
 const selectOpen = ref(false)
 useOverlay(selectOpen)
@@ -81,6 +91,8 @@ function endEdit() {
 watch(settingActivation, (activation) => {
   if (activation?.def.id !== props.def.id) return
   if (props.def.kind === 'switch') emit('change', props.value !== true)
+  else if (isTheme.value) picker.value?.focus()
+  else if (isZoom.value) zoomControl.value?.focus()
   else if (props.def.kind === 'select') selectOpen.value = true
   else root.value?.querySelector('input')?.focus()
 })
@@ -122,8 +134,12 @@ watch(settingActivation, (activation) => {
 
       <StatusDot v-if="rowState" :status="rowState.status" :label="rowState.text" />
 
+      <ThemePicker v-if="isTheme" ref="picker" />
+
+      <ZoomControl v-else-if="isZoom" ref="zoomControl" />
+
       <Switch
-        v-if="def.kind === 'switch'"
+        v-else-if="def.kind === 'switch'"
         :model-value="value === true"
         :aria-label="def.label"
         tabindex="-1"

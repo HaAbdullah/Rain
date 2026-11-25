@@ -15,11 +15,14 @@ use std::time::{Duration, SystemTime};
 
 use futures_util::future::BoxFuture;
 use rain_types::time::iso_from_system_time;
-use rain_types::{ConfigIssue, JobRun, Jobs, LogLine, ScheduledJob, SourceState, Status};
+use rain_types::{
+    ConfigIssue, JobRun, JobSource, Jobs, LogLine, ScheduledJob, SourceState, Status,
+};
 use tokio::sync::{Notify, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
+use super::claude_app;
 use super::claude_stream::{self, ClaudeResult};
 use super::command::{self, SpawnSpec};
 use super::entry::entry_lines;
@@ -40,6 +43,7 @@ use crate::core::state::{AppState, WeakAppState};
 use crate::core::task::spawn_named;
 use crate::core::throttle::Throttle;
 use crate::core::winddown::{Counts, StopOutcome, Stopped, WindDownPort};
+use crate::modules::sessions::claude_paths::ClaudePaths;
 use crate::platform::job::{OutputLine, Stream};
 use crate::platform::power::{ResumeWatch, on_resume};
 use crate::store::db::Db;
@@ -157,6 +161,9 @@ pub(super) struct Inner {
     activity: Activity,
     resume_watch: Mutex<Option<ResumeWatch>>,
     next_run_number: AtomicU64,
+    /// The tasks of the Claude desktop app: the reader, and what it found last (read only).
+    desktop_reader: Arc<claude_app::Reader>,
+    desktop_shown: Mutex<Vec<ScheduledJob>>,
 }
 
 /// The `jobs` module's service. Other modules call it, and only it.
@@ -202,6 +209,7 @@ impl Inner {
             .map(iso_from_system_time);
         ScheduledJob {
             id: def.id.clone(),
+            source: JobSource::Rain,
             name: def.name.clone(),
             kind: def.kind,
             cron: def.schedule.clone(),
@@ -228,6 +236,19 @@ impl Inner {
             .collect()
     }
 
+    /// Rain's own jobs, then the tasks of the Claude app as they were read last. Memory only.
+    fn list_all(&self) -> Vec<ScheduledJob> {
+        let mut all = self.list();
+        all.extend(
+            self.desktop_shown
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .iter()
+                .cloned(),
+        );
+        all
+    }
+
     pub(super) fn publish(&self) {
         // Nobody listens: no frame, and no timer of the throttle. A client that connects later
         // fetches the list again (the `resync` of the stream).
@@ -235,7 +256,7 @@ impl Inner {
             return;
         }
         // The topic carries plain JSON; the list is built from the typed `ScheduledJob`s.
-        let payload = serde_json::to_value(self.list()).unwrap_or_default();
+        let payload = serde_json::to_value(self.list_all()).unwrap_or_default();
         self.publisher.publish(&payload);
     }
 
@@ -317,6 +338,7 @@ impl Inner {
             started_at: iso_from_system_time(now),
             duration_ms: None,
             exit_code: None,
+            outcome: None,
         };
         let cancel = CancellationToken::new();
         {
@@ -769,6 +791,8 @@ impl Service {
             activity: state.activity.clone(),
             resume_watch: Mutex::new(None),
             next_run_number: AtomicU64::new(0),
+            desktop_reader: Arc::new(claude_app::Reader::new(ClaudePaths::resolve(&state.config))),
+            desktop_shown: Mutex::new(Vec::new()),
         });
         let first = inner.file.get();
         inner.apply_file(&first).await;
@@ -856,8 +880,8 @@ impl Service {
             .take();
     }
 
-    /// The same list as `GET /jobs`, from memory, no I/O. The launcher maps it to search items
-    /// of the type `job`.
+    /// Rain's own jobs, from memory, no I/O. The launcher maps it to search items of the type
+    /// `job`; the tasks of the Claude app are not in it, because Rain cannot start them.
     pub fn list(&self) -> Vec<ScheduledJob> {
         self.inner.list()
     }
@@ -876,12 +900,49 @@ impl Service {
         }
     }
 
+    /// `GET /jobs`: Rain's jobs and the tasks of the Claude app, read from its files now. The
+    /// topic `jobs` is sent again only when the tasks changed since the last read.
+    pub async fn list_with_claude_app(&self) -> Vec<ScheduledJob> {
+        self.refresh_claude_app().await;
+        self.inner.list_all()
+    }
+
+    /// Reads the files of the Claude app again (off the async threads) and keeps the result.
+    pub async fn refresh_claude_app(&self) {
+        let reader = Arc::clone(&self.inner.desktop_reader);
+        let now = self.inner.clock.now();
+        let read = tokio::task::spawn_blocking(move || reader.read(now)).await;
+        let Ok(found) = read else {
+            warn!("could not read the scheduled tasks of the Claude app");
+            return;
+        };
+        let changed = {
+            let mut shown = self
+                .inner
+                .desktop_shown
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let changed = *shown != found;
+            *shown = found;
+            changed
+        };
+        if changed {
+            self.inner.publish();
+        }
+    }
+
     /// Makes the scheduler look at the clock again. Free: no timer.
     pub fn nudge(&self) {
         self.inner.wake.notify_one();
     }
 
     fn def(&self, id: &str) -> ApiResult<Arc<JobDef>> {
+        if id.starts_with(claude_app::ID_PREFIX) {
+            return Err(ApiError::conflict(
+                "claudeAppJob",
+                "This job runs in the Claude app. Rain only shows it.",
+            ));
+        }
         self.inner
             .lock()
             .defs

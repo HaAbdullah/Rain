@@ -2,6 +2,8 @@
 // them with lib/score.ts and merges them into the result list, so "sett" finds
 // Settings.
 import { useCheatSheet } from '@/composables/useCheatSheet'
+import { setTheme, themes } from '@/composables/useTheme'
+import { resetZoom, zoomIn, zoomOut } from '@/composables/useZoom'
 import { poolEditor, rescanApps } from '@/features/apps/actions'
 import { scanDrive } from '@/features/disk/actions'
 import { habitEditor, openTodaysNote } from '@/features/life/actions'
@@ -41,6 +43,15 @@ const goCommands: CommandDef[] = routes.map((def) => ({
   keywords: ROUTE_KEYWORDS[def.name],
   keys: def.combo,
   run: ({ nav }) => nav.go(def.name),
+}))
+
+/** One command per theme, so the look can be switched from the list. */
+const themeCommands: CommandDef[] = themes.map((entry) => ({
+  id: `theme-${entry.id}`,
+  title: `Theme: ${entry.name}`,
+  icon: 'palette',
+  keywords: ['theme', 'colours', 'colors', 'appearance', 'look', 'dark', 'light', entry.name.toLowerCase()],
+  run: () => setTheme(entry.id),
 }))
 
 export const commands: CommandDef[] = [
@@ -112,13 +123,38 @@ export const commands: CommandDef[] = [
     run: toggleKeepOpen,
   },
   {
-    id: 'fullscreen',
-    title: 'Full screen',
+    id: 'maximize',
+    title: 'Maximise or restore',
     icon: 'maximize',
-    keywords: ['fullscreen', 'maximise', 'maximize', 'big', 'window'],
+    keywords: ['maximize', 'restore', 'fullscreen', 'full screen', 'big', 'window'],
     keys: 'F11',
-    run: ({ shell }) => shell.toggleFullscreen(),
+    run: ({ shell }) => shell.toggleMaximize(),
   },
+  {
+    id: 'zoom-in',
+    title: 'Zoom in',
+    icon: 'zoom-in',
+    keywords: ['bigger', 'larger', 'magnify', 'scale', 'text size'],
+    keys: 'Ctrl+Equal',
+    run: () => zoomIn(),
+  },
+  {
+    id: 'zoom-out',
+    title: 'Zoom out',
+    icon: 'zoom-out',
+    keywords: ['smaller', 'shrink', 'scale', 'text size'],
+    keys: 'Ctrl+Minus',
+    run: () => zoomOut(),
+  },
+  {
+    id: 'zoom-reset',
+    title: 'Reset zoom',
+    icon: 'rotate-ccw',
+    keywords: ['zoom', '100', 'default size', 'scale'],
+    keys: 'Ctrl+Digit0',
+    run: () => resetZoom(),
+  },
+  ...themeCommands,
 ]
 
 /** A command has one action: run it. */

@@ -4,7 +4,7 @@ Status: the frontend design contract. The UI was first built as a prototype on m
 
 > **Amendments after the first test with the owner (2026-11-21). They win over the text below.**
 > - The bottom action bar (section 3.6) is removed. The frame is the rail, the header and the content area. Results of actions show in a small notice pill at the bottom of the window, only while there is something to say. Enter, Ctrl+Enter and Ctrl+K work as described; their labels are in the Ctrl+K panel and on the buttons in detail panes. Screens no longer provide a `summary`.
-> - F11 and a header button toggle true full screen (the window covers the taskbar), not maximise. Double-clicking the header still maximises.
+> - F11 and a header button maximise and restore the window (it fills the work area, the taskbar stays visible). Double-clicking the header does the same. Ctrl+plus, Ctrl+minus and Ctrl+0 zoom the page (80 to 200 percent, see section 2.5).
 > - The icon package is `@lucide/vue`; `RainApi.search` takes `SearchType[]`; path fields in Settings ask `api.checkPaths`; `useSelection` has `resetOn`; `useSearch` has `disabled`.
 
 Base concept: **home-first** (winner on the daily-use and clarity lenses), built on **workspace-first's single show/hide window** (winner on buildability), with palette-first's safety rules, flat result list and fixed detail pane grafted in.
@@ -15,7 +15,7 @@ Stack (fixed): Vue 3 + TypeScript + Vite, Tailwind CSS v4, shadcn-vue (Reka UI),
 
 ## 1. Decisions at a glance
 
-1. **One window, one size, show/hide only.** 1280x800 logical px, resizable, size and position remembered by the stock window-state plugin. Rain never resizes its own window. F11 is the native maximise toggle.
+1. **One window, one size, show/hide only.** 1280x800 logical px, resizable, size and position remembered by the stock window-state plugin. Rain resizes its own window only to keep the layout inside it when the zoom grows (the minimum size is 1040x680 times the zoom). F11 is the native maximise toggle.
 2. **Fixed frame on every screen:** 56 px icon rail (left), 56 px header with the one search field (top), 40 px action bar (bottom). Only the content area changes.
 3. **Ctrl+` always lands the caret in the search field.** The query and the scope chip are cleared on every summon, so `Ctrl+``, type, Enter always launches, whatever section is showing.
 4. **Scope is visible.** No chip in the search field = search everything (results replace the content as one flat ranked list). Chip = filter this section in place. Going to a section adds the chip; a summon removes it.
@@ -27,7 +27,7 @@ Stack (fixed): Vue 3 + TypeScript + Vite, Tailwind CSS v4, shadcn-vue (Reka UI),
 10. **Esc ladder is four steps:** close overlay, leave a sub-view, clear query, hide. Shift+Esc hides at once. Ctrl+1 goes Home.
 11. **Tab means one thing:** next sub-view (the strip under the header). Ctrl+Up/Down means next group.
 12. **Game mode is gated.** If something would be interrupted, the countdown does not start until "Wait" or "Stop anyway" is chosen. Otherwise it starts at once.
-13. **System fonts, one dark theme, no toast library, no router, no state library.** Added packages: `d3-hierarchy`, `simple-icons` only.
+13. **System fonts, five colour themes (Dark by default), no toast library, no router, no state library.** Added packages: `d3-hierarchy`, `simple-icons` only.
 14. **Idle cost:** only the active screen is mounted, Disk is a lazy chunk, all intervals and the spinner stop while hidden, and after 60 s hidden Rain resets to Home.
 15. **One data interface.** Every screen reads `RainApi`, which maps 1:1 to the backend's REST routes. States such as empty or failing are produced by starting the backend on a fixture data folder or by stopping it, not by a switch in the app.
 
@@ -72,7 +72,7 @@ Stack (fixed): Vue 3 + TypeScript + Vite, Tailwind CSS v4, shadcn-vue (Reka UI),
 
 Plugins: `tauri-plugin-single-instance` (registered first), `tauri-plugin-global-shortcut`, `tauri-plugin-window-state` (save size, position and maximised state; do **not** save visibility).
 
-Capabilities: `core:default`, `core:window:default`, `core:window:allow-start-dragging`, `core:window:allow-hide`, `core:window:allow-show`, `core:window:allow-set-focus`, `core:window:allow-toggle-maximize`, `core:window:allow-close`.
+Capabilities: `core:default`, `core:window:default`, `core:window:allow-start-dragging`, `core:window:allow-hide`, `core:window:allow-show`, `core:window:allow-set-focus`, `core:window:allow-toggle-maximize`, `core:window:allow-set-min-size`, `core:window:allow-set-size` and `core:webview:allow-set-webview-zoom` (is-visible, is-maximized, inner-size, scale-factor, current-monitor and the drag-region double click come with `core:window:default`). The window config keeps `zoomHotkeysEnabled` off: the key table handles the zoom keys.
 
 There is no second window, no compact mode, no programmatic `setSize` or `setPosition` anywhere.
 
@@ -112,8 +112,9 @@ Exceptions: on the Game mode screen Esc cancels game mode and returns to the pre
 
 ### 2.5 Drag region and window controls
 
-- Drag region: the header background, the section title, and the 56x56 cell at the top of the rail. Each carries `data-tauri-drag-region`; interactive children do not. Double-clicking it maximises (native behaviour).
-- CSS: `[data-tauri-drag-region] { app-region: drag; }`.
+- Drag region: the header background, the section title, and the 56x56 cell at the top of the rail. Each carries `data-tauri-drag-region`; interactive children do not. Double-clicking it maximises or restores. Tauri's own drag script does this, so the shell switches the CSS `app-region: drag` off at start (WebView2 would take the mouse events itself and the script would never see the second click). Buttons and fields inside the header do not trigger it.
+- Zoom: `useZoom` (`zoom`, `zoomIn`, `zoomOut`, `resetZoom`, `setZoom`) uses the WebView zoom in Tauri and CSS zoom on the root in a browser tab. Levels are 80, 90, 100, 110, 125, 150, 175 and 200 percent; a level is offered only when 1040x680 times the zoom fits the monitor's work area. The level is kept in localStorage `rain.zoom` and applied before the app is set up. A small pill shows it for a second after a change.
+- CSS: none. The stylesheet has no `app-region` rule; `src/shell/tauri.ts` adds `[data-tauri-drag-region] { app-region: no-drag !important; }` at start in the app, and a drag region keeps the default cursor.
 - Controls, right end of the header, 32x32 ghost icon buttons:
   - Waiting pill (`hand` + count, amber; hidden at 0; click goes to Workflows).
   - Keep open (`pin`; lit in `--ring` when on; F10).
@@ -247,6 +248,7 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 - Right-click selects and opens `ActionPanel` at the pointer.
 - Hover shows `--hover` fill only. Nothing is revealed on hover except tooltips.
 - A click on empty space returns focus to the search field.
+- The pointer cursor shows on everything clickable: enabled buttons, links, `role` button, tab, option, menuitem, checkbox, radio and switch, `summary`, and labels of checkboxes. List rows and grid tiles are `role="option"`, so they get it too. One base rule in `tokens.css` does this. A disabled control and the header's drag region never get it. The treemap canvas shows it only over a block that can be opened, not over an "other" block or empty space.
 
 ---
 
@@ -275,9 +277,14 @@ Feature dialogs (pool editor, custom game) live in their feature folder and regi
 | Window | F1 or Ctrl+/ | Shortcut sheet | Always |
 | Window | F10 | Keep open on/off | Always |
 | Window | F11 | Maximise / restore | Always |
+| Window | Ctrl+= or Ctrl+Num+ | Zoom in | Always |
+| Window | Ctrl+- or Ctrl+Num- | Zoom out | Always |
+| Window | Ctrl+0 | Reset zoom | Always |
 | Go | Ctrl+1 .. Ctrl+7 | Home, Apps, Projects, Games, Workflows, Life, Disk | Always |
 | Go | Ctrl+, | Settings | Always |
 | Go | Ctrl+G | Game mode | Always |
+| Go | Alt+← , the mouse's back button, a keyboard's Back key | Back: leave the open habit or folder, else the screen before. Never hides Rain | Always |
+| Go | Alt+→ , the mouse's forward button, a keyboard's Forward key | Forward: the screen that Back left | Always |
 | Go | Tab / Shift+Tab | Next / previous sub-view | Screen has a `ViewStrip` |
 | Move | Up / Down | Move selection | Always |
 | Move | Left / Right | Move selection | Grid screens |
@@ -351,194 +358,67 @@ export function formatCombo(combo: string): string[]   // 'Ctrl+Enter' -> ['Ctrl
 
 ## 5. Design tokens
 
-Dark is the only theme. `<html class="dark">` is set in `index.html` so shadcn-vue's `dark:` utilities apply. No light theme in the prototype (a second token set is not cheap to test).
+Five themes. Each one is a full set of the same colour tokens, chosen by `data-theme` on `<html>`. Dark is the default. `<html class="dark">` is kept for every theme except Light, so shadcn-vue's `dark:` utilities apply only where they should.
+
+| Theme | `data-theme` | Character |
+|---|---|---|
+| Dark | `dark` | Neutral grey surfaces, blue accent. The default, with clearer muted text, icons, borders and empty heatmap cells than before |
+| High contrast | `high-contrast` | Near-white text and icons, 3:1 or better dividers, white selection |
+| Dim | `dim` | Softer blue-grey, in the spirit of node editors |
+| Midnight | `midnight` | Deep blue surfaces, orange accent and orange heatmap |
+| Light | `light` | Light surfaces, dark text, `color-scheme: light` |
+
+The choice lives in the window, not in the backend: `localStorage` key `rain.theme`. A small inline script in `index.html` sets `data-theme` before the first paint, so there is no flash. `src/composables/useTheme.ts` exports `theme` (readonly ref), `themes` (id, name, the three swatch colours) and `setTheme(id)`. An unknown stored value means Dark. Settings, group Appearance, has the picker (7.9).
 
 ### 5.1 `src/styles/tokens.css`
 
-```css
-@import "tailwindcss";
-@import "tw-animate-css";
+The file is the source of truth for every value; this section says how it is built.
 
-@custom-variant dark (&:is(.dark *));
+- One `:root` block holds what is the same in every theme: radius, layout sizes, motion and fonts.
+- One block per theme (`:root, :root[data-theme="dark"]` for the default, then one `:root[data-theme="…"]` each) holds `color-scheme` and every colour. All five blocks define exactly the same tokens. `src/styles/tokens.test.ts` checks this, checks the contrast figures below, and checks that no hex value is left outside these blocks.
+- Components never write a hex, rgb or Tailwind palette colour. They use the tokens, through the `@theme inline` map (`bg-surface-1`, `text-text-3`, `bg-scrim`, …) or `var(--token)`. A canvas reads the tokens once with `getComputedStyle` (the treemap).
 
-:root {
-  color-scheme: dark;
+Token groups, in every theme:
 
-  /* ---- shadcn-vue variables ---- */
-  --background: #171718;
-  --foreground: #f2f2f3;
-  --card: #262729;
-  --card-foreground: #f2f2f3;
-  --popover: #202121;
-  --popover-foreground: #f2f2f3;
-  --primary: #0a78cc;              /* one step darker than #0b8ce9 so white 14px text reaches 4.5:1 */
-  --primary-foreground: #ffffff;
-  --secondary: #262729;
-  --secondary-foreground: #f2f2f3;
-  --muted: #262729;
-  --muted-foreground: #a6a7ab;
-  --accent: #313235;               /* hover and highlight inside shadcn components */
-  --accent-foreground: #f2f2f3;
-  --destructive: #e5484d;
-  --destructive-foreground: #ffffff;
-  --border: #2d2e32;
-  --input: #494a50;
-  --ring: #0b8ce9;
-  --radius: 0.5rem;                /* 8px; sm 4, md 6, lg 8, xl 12 */
+| Group | Tokens |
+|---|---|
+| shadcn-vue | `--background`, `--foreground`, `--card`, `--popover`, `--primary`, `--secondary`, `--muted`, `--accent`, `--destructive` (each with `-foreground` where it has one), `--border`, `--input`, `--ring` |
+| Charts and icon tints | `--chart-1` to `--chart-5` |
+| Sidebar | `--sidebar`, `--sidebar-foreground` (the rail icons), `--sidebar-primary`, `--sidebar-accent`, `--sidebar-border`, `--sidebar-ring` |
+| Surfaces | `--surface-0` (wells: treemap, heatmap, log), `--surface-1` (rail, header, pane), `--surface-2` (cards, tiles, inputs), `--hover`, `--selected`, `--border-strong`, `--text-3` |
+| Status | `--status-running`, `-waiting`, `-success`, `-failed`, `-idle` |
+| Heatmap | `--heat-0` (empty) to `--heat-4`, and `--on-heat`, the text on a filled step |
+| File categories | `--file-video`, `-image`, `-audio`, `-archive`, `-code`, `-document`, `-app`, `-other`, and `--on-file`, the label on a block. Blocks are drawn fully opaque |
+| Scrollbar, selection, overlays | `--scrollbar-thumb`, `--scrollbar-thumb-hover`, `--selection-bg`, `--selection-fg`, `--scrim` (dialog backdrop), `--scrim-strong`, `--shadow-overlay` |
 
-  --chart-1: #4f8fd6;
-  --chart-2: #3fa7a0;
-  --chart-3: #c77d3a;
-  --chart-4: #7c6bd6;
-  --chart-5: #6fae5a;
+Base rules in the same file (`@layer base`): the `<html>` and `<body>` defaults, the frameless-window drag region, the scrollbars, `::selection`, `.selectable`, the paused animations while hidden, reduced motion, and the pointer cursor (3.8).
 
-  --sidebar: #202121;
-  --sidebar-foreground: #a6a7ab;
-  --sidebar-primary: #0a78cc;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #313235;
-  --sidebar-accent-foreground: #f2f2f3;
-  --sidebar-border: #2d2e32;
-  --sidebar-ring: #0b8ce9;
+#### Contrast
 
-  /* ---- Rain: surfaces ---- */
-  --surface-0: #141414;            /* wells: treemap, heatmap, log, code block */
-  --surface-1: #202121;            /* rail, header, action bar, detail pane */
-  --surface-2: #262729;            /* cards, tiles, inputs, keycaps */
-  --hover: #313235;                /* pointer hover */
-  --selected: #3c3d42;             /* keyboard selection fill */
-  --border-strong: #494a50;        /* inputs, overlay outline */
-  --text-3: #84858c;               /* placeholder, disabled, hints only */
+Every text and icon colour reaches WCAG AA on the surfaces it is drawn on: 4.5:1 for text, 3:1 for icons, focus and borders that carry meaning. The figure is the lowest ratio over the surfaces the pair is used on (`--background`, `--surface-0`, `--surface-1`, `--surface-2`, `--hover`, `--selected`; heatmap steps over the first three). Status colours are text-sized on the plain surfaces and icon-sized on the selected row. Dividers and the empty heatmap cell only separate things, so they are not held to 3:1.
 
-  /* ---- Rain: status (always paired with a shape, see StatusDot) ---- */
-  --status-running: #3aa0f5;
-  --status-waiting: #fd9903;
-  --status-success: #00cd72;
-  --status-failed: #e5484d;
-  --status-idle: #84858c;
-
-  /* ---- Rain: heatmap, one hue ---- */
-  --heat-0: #262729;
-  --heat-1: #12395a;
-  --heat-2: #0f5a94;
-  --heat-3: #0b7bcc;
-  --heat-4: #3aa5f2;
-
-  /* ---- Rain: file categories (treemap) ---- */
-  --file-video: #7c6bd6;
-  --file-image: #3fa7a0;
-  --file-audio: #c77d3a;
-  --file-archive: #b8a13a;
-  --file-code: #4f8fd6;
-  --file-document: #6fae5a;
-  --file-app: #c2607a;
-  --file-other: #55565e;
-
-  /* ---- Rain: layout ---- */
-  --rail-w: 56px;
-  --header-h: 56px;
-  --footer-h: 40px;
-  --strip-h: 40px;
-  --row-h: 40px;
-  --row-lg-h: 56px;
-  --pane-w: 340px;
-  --pane-w-wide: 420px;
-
-  /* ---- Rain: elevation and motion ---- */
-  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.06);
-  --dur: 100ms;
-  --dur-overlay: 80ms;
-  --ease: cubic-bezier(0, 0, 0.2, 1);
-
-  /* ---- Rain: type ---- */
-  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-
-  --color-surface-0: var(--surface-0);
-  --color-surface-1: var(--surface-1);
-  --color-surface-2: var(--surface-2);
-  --color-hover: var(--hover);
-  --color-selected: var(--selected);
-  --color-border-strong: var(--border-strong);
-  --color-text-3: var(--text-3);
-  --color-status-running: var(--status-running);
-  --color-status-waiting: var(--status-waiting);
-  --color-status-success: var(--status-success);
-  --color-status-failed: var(--status-failed);
-  --color-status-idle: var(--status-idle);
-  --color-heat-0: var(--heat-0);
-  --color-heat-1: var(--heat-1);
-  --color-heat-2: var(--heat-2);
-  --color-heat-3: var(--heat-3);
-  --color-heat-4: var(--heat-4);
-
-  --radius-sm: calc(var(--radius) - 4px);   /* 4  keycaps */
-  --radius-md: calc(var(--radius) - 2px);   /* 6  controls, tags, chips */
-  --radius-lg: var(--radius);               /* 8  rows, cards, tiles, covers */
-  --radius-xl: calc(var(--radius) + 4px);   /* 12 popovers, dialogs */
-  --radius-cell: 3px;                       /* heatmap cells */
-
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-  --text-13: 0.8125rem;                     /* utility: text-13 */
-  --text-13--line-height: 1.125rem;
-  --text-countdown: 2rem;                   /* utility: text-countdown */
-  --text-countdown--line-height: 2.5rem;
-}
-
-@layer base {
-  * { border-color: var(--border); }
-  html { font-size: 16px; }
-  body {
-    background: var(--background); color: var(--foreground);
-    font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.25rem;
-    font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
-    overflow: hidden; user-select: none;
-  }
-  [data-tauri-drag-region] { app-region: drag; }
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-thumb { background: var(--selected); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  .selectable { user-select: text; }       /* paths, commands, logs */
-  html[data-hidden] * { animation-play-state: paused !important; }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
-}
-```
+| Pair | Needs | dark | high-contrast | dim | midnight | light |
+|---|---|---|---|---|---|---|
+| Text, `--foreground` | 4.5 | 9.2 | 9.5 | 7.2 | 8.7 | 12.1 |
+| Secondary text, `--muted-foreground` | 4.5 | 5.9 | 7.7 | 5.6 | 5.7 | 6.4 |
+| Hint text and quiet icons, `--text-3` | 4.5 | 4.6 | 6.2 | 4.5 | 4.8 | 4.9 |
+| Rail icons, `--sidebar-foreground` | 4.5 | 7.0 | 8.6 | 6.2 | 6.6 | 8.5 |
+| Danger text, `--destructive` | 4.5 | 4.6 | 4.6 | 4.6 | 4.7 | 4.7 |
+| Status colours on rows and panes | 4.5 | 4.6 | 6.0 | 4.6 | 5.4 | 4.8 |
+| Status icons on the selected row | 3 | 3.8 | 4.2 | 4.1 | 4.2 | 4.1 |
+| Focus ring and header icons, `--ring` | 3 | 4.0 | 5.0 | 3.9 | 4.9 | 4.0 |
+| Input and overlay borders, `--border-strong` | 3 | 3.1 | 7.3 | 3.2 | 3.3 | 3.3 |
+| Icon tints, `--chart-1` to `--chart-5` | 3 | 3.3 | 4.2 | 3.6 | 3.6 | 3.1 |
+| Heatmap steps 1 to 4 | 3 | 3.3 | 4.8 | 3.6 | 3.8 | 3.3 |
+| Heatmap empty cell, `--heat-0` | 1.3 | 1.5 | 2.1 | 1.6 | 1.6 | 1.4 |
+| Divider lines, `--border` | 1.4 | 1.5 | 3.9 | 1.5 | 1.5 | 1.4 |
+| White or dark text on `--primary` | 4.5 | 4.6 | 4.9 | 4.7 | 4.5 | 6.1 |
+| Text on `--destructive` | 4.5 | 8.8 | 10.2 | 10.9 | 9.1 | 7.1 |
+| Done habit chip, `--on-heat` on `--heat-3` | 4.5 | 7.4 | 9.3 | 8.8 | 7.7 | 6.5 |
+| Treemap label, `--on-file` on every block | 4.5 | 6.0 | 8.9 | 6.6 | 6.9 | 4.6 |
+| Treemap block against its well | 3 | 5.9 | 8.9 | 6.0 | 6.9 | 3.8 |
+| Selected text, `--selection-fg` | 4.5 | 4.6 | 21.0 | 4.7 | 4.5 | 6.1 |
+| Letter tile | 4.5 | 7.2 | 8.1 | 5.7 | 7.0 | 8.8 |
 
 ### 5.2 Type scale
 
@@ -695,7 +575,10 @@ export interface Shell {
   readonly keepOpen: Ref<boolean>               // F10
   show(): Promise<void>
   hide(): Promise<void>
-  toggleMaximize(): Promise<void>
+  readonly maximized: Readonly<Ref<boolean>>    // follows the real window
+  toggleMaximize(): Promise<void>               // F11, header button
+  workArea(): Promise<Size | null>              // logical px of the monitor, for zoom
+  applyZoom(percent: number): Promise<void>     // page zoom; window minimum size is 1040x680 times it
   holdOpen(reason: string): () => void          // suspends hide on blur until the returned function is called
   onSummon(cb: () => void): () => void
   onHide(cb: () => void): () => void
@@ -740,7 +623,7 @@ export function actionsFor(target: ActionTarget, ctx: ActionContext): RainAction
 
 Each feature folder owns one `actions.ts` exporting its `ActionProvider`s. `registry.ts` imports them by fixed path and is not edited after the foundation phase.
 
-`CommandDef { id: string; title: string; icon: string; keywords: string[]; keys?: string; run(ctx: ActionContext): void }`, defined in `src/actions/commands.ts`: Go to each of the 9 routes, Game mode, Open today's note, Scan drive C:, New pool, Shortcut sheet, and Keep open. Commands are scored client-side with `lib/score.ts` and merged into the result list.
+`CommandDef { id: string; title: string; icon: string; keywords: string[]; keys?: string; run(ctx: ActionContext): void }`, defined in `src/actions/commands.ts`: Go to each of the 9 routes, Game mode, Open today's note, Scan drive C:, New pool, Shortcut sheet, Keep open, Maximise or restore, Zoom in, Zoom out, Reset zoom, and one "Theme: Name" command per theme (Dark, High contrast, Dim, Midnight, Light). Commands are scored client-side with `lib/score.ts` and merged into the result list.
 
 ---
 
@@ -783,7 +666,7 @@ Layout: `ScreenFrame pane="md"`. Main 884 px: `ItemList` (`clickRuns`), 8 px pad
 
 **TodayPanel** (`features/home/TodayPanel.vue`), 16 px padding, two blocks divided by `Separator`:
 1. Header: "Today" 16/600 and the date "Sat 21 Nov" 12 px muted.
-2. Habits: one row of 28x28 tiles, one per habit (max 7). Done: icon `--foreground` on `--heat-3`. Not yet: icon `--muted-foreground` on `--surface-2`. Tooltip: name and "done" or "not yet". Click goes to Life. Under the tiles "3 of 5 done today" (12 px muted). No habits: "No habits yet. Add one in Life", linking to Life. Home never ticks a habit.
+2. Habits: one row of 28x28 tiles, one per habit (max 7). Done: icon `--on-heat` on `--heat-3`. Not yet: icon `--muted-foreground` on `--surface-2`. Tooltip: name and "done" or "not yet". Click goes to Life. Under the tiles "3 of 5 done today" (12 px muted). No habits: "No habits yet. Add one in Life", linking to Life. Home never ticks a habit.
 3. Bottom: `Button variant="outline"` "Today's note" with `notebook-pen` and `KeyHint` Ctrl T.
 
 Keys: section 4.3. Home has no chip, no sub-views.
@@ -865,7 +748,8 @@ Why this beats the default app: waiting sessions are always first and also on Ho
 - Enter opens `LogDialog` with the job's runs on the left and the most recent failed run selected (else the latest). The log loads on demand with `api.getRunLog(runId)`.
 - Run now starts the job at once, also when it is switched off. The row shows running while the real run goes on, then the new run appears. The log dialog follows a running run: it reloads every 3 seconds while that run is the selected one and the window is visible.
 - Schedule labels are written from the cron text ("Every day at 06:00", "Weekdays at 09:30", "Every 15 minutes"); a job may set its own label in `jobs.toml`.
-- Empty: `EmptyState` `calendar-clock` "No scheduled jobs", hint "Jobs are defined in jobs.toml in your data folder".
+- Jobs of the Claude app (backend section 03, 2.2.1) are in the same list. The row has a small "Claude app" mark after the name. When the last run failed, the row shows its outcome line in `--status-failed` after the mark, so a failure cannot hide. The pane starts with one line: "This job runs in the Claude app. Rain only shows it." It shows "Enabled" as On or Off (no switch), has no buttons, and lists each run with its outcome line under it. These jobs have no Run now and no log: Enter does nothing, and Ctrl+K offers only "Copy cron".
+- Empty: `EmptyState` `calendar-clock` "No scheduled jobs", hint "Jobs are defined in jobs.toml in your data folder. Scheduled tasks of the Claude app show here too".
 
 **(c) Idle (`idle/IdleView.vue`)**
 
@@ -881,6 +765,7 @@ Layout: `ScreenFrame pane="none"`, no strip. Rain reads your vault and writes ex
 
 - **List.** `ItemList` with three groups, "Daily", "Weekly", "Monthly" (group header with a count; empty groups are not drawn). One row per habit, 40 px: habit icon 20, name 14 px, for weekly and monthly "2 / 3" (13 px; `--foreground` when the target is reached, else `--muted-foreground`), the heat strip, today's `Checkbox`. The strips are right aligned so the checkboxes form one column.
 - **Heat strip.** Daily: the last 70 days, one 10 px cell per day, gap 2, today last with a 1 px `--foreground` outline. Weekly: the last 12 weeks, one 14 px cell per week (Monday to Sunday), gap 3. Monthly: the last 12 months, one 14 px cell per month. Cells (radius 3): done `--heat-3`; partial (some ticks, fewer than the target; weekly and monthly only) `--heat-1`; miss `--heat-0`; no note that day (daily only) transparent with a 1 px `--selected` border. The current period has the 1 px outline. Cells shrink with the window.
+- **All habits heatmap** (`AllHabitsHeat.vue`, `allHabitsHeat.ts`). At the bottom of the list view, under the scrolling list, at most about 140 px high. Heading "All habits" (13 px), "N days with everything done" (12 px `--text-3`), and a "Less ... More" legend of the five steps on the right. GitHub style: 10 px cells, gap 3, one column per week (Monday to Sunday), newest week on the right, as many weeks as fit up to 53, month names above, today with the 1 px `--foreground` outline, no future days. A cell is the habits ticked that day (any cadence) divided by the daily habits (all habits when none is daily), capped at 1, in five steps `--heat-0` (nothing) to `--heat-4` (more than three quarters). Tooltip: "Fri 20 Nov: 7 of 18 done". Today is taken from the list rows so a tick shows at once; the other days come from one `GET /habit-days` for the range, fetched when the screen opens and again after a change in the habits. Cells do nothing when clicked (no pointer cursor).
 - **Keys.** Enter ticks or unticks today. Ctrl+Enter opens the habit's full view. Ctrl+K: Edit habit, Open today's note, Re-read vault, Delete habit (confirm). Ctrl+N: new habit. Ctrl+R: re-read the vault. Typing with the chip filters habits by name. Left and Right belong to the caret. Mouse: the checkbox ticks, a click on the row opens the full view, a right click opens the action panel.
 - **Full view (a sub-view of Life, not a route).** Header: back button (`arrow-left`, tooltip "Back" + `Esc`), icon, name, "Weekly, 3 times", today's `Checkbox`, edit button (`pencil`). Under it a row of figures (label 12 px `--text-3`, value 20 px): Streak, Best (in days, weeks or months), Rate, This week, This month, This year. Then the year grid for one habit: 53 week columns x 7 rows, 12 px cells, gap 3, month labels above, M / W / F on the left; done `--heat-3`, not done `--heat-0`, no note hollow; future days are not drawn; days older than 31 days at 50% opacity; today has the 1 px outline and the selected day the 2 px `--ring` outline. Beside the year label two chevron buttons change the year. Under the grid one read-out line: "Sun 22 Nov: done", "not done" or "no note".
 - **Full view keys.** Left/Right: one week. Up/Down: one day. PageUp/PageDown: one year. Enter: tick or untick the selected day, only within the last 31 days (an older day shows the notice "That day is too old for Rain to change. Open its note instead."). Ctrl+Enter: open that day's note. Esc or Backspace on an empty query: back to the list; the list keeps its selection.
@@ -937,6 +822,8 @@ Layout: `ScreenFrame pane="none"`, one 640 px column, 24 px padding, scrolls. No
 
 | Group | Row | Control |
 |---|---|---|
+| Appearance | Theme | `ThemePicker`: five swatch cards (surface, text, accent colour and the name), a radio group. Applied at once and kept in `localStorage`, not in the backend. Enter focuses the chosen card, Left and Right switch theme, Enter returns to the search field |
+| Appearance | Zoom | `ZoomControl`: zoom out, the level ("125%"), zoom in and reset buttons, built on `useZoom`. Enter focuses the group, Left and Right step the level, Enter returns to the search field |
 | General | Summon hotkey | `KeyHint` Ctrl ` (read-only), hint "Takes this chord from other apps while Rain runs"; a failed dot when another app holds the chord |
 | General | Hide when focus is lost | `Switch` |
 | General | Return to Home after | `Select`: 30 s, 60 s, 5 min |
@@ -978,7 +865,7 @@ How a screen shows the state of its data:
 ### 9.1 Tree
 
 ```
-index.html                      <html class="dark">
+index.html                      <html class="dark" data-theme="dark"> plus the inline theme script
 vite.config.ts                  @ alias to src, @tailwindcss/vite
 components.json                 shadcn-vue config (foundation only)
 src/

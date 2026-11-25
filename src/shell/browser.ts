@@ -8,10 +8,11 @@ import { createSignal, type Shell } from './shell'
 export function createBrowserShell(): Shell {
   const hidden = ref(false)
   const keepOpen = ref(false)
-  const fullscreen = ref(document.fullscreenElement !== null)
+  // A tab cannot maximise; the browser's full screen is the closest stand-in.
+  const maximized = ref(document.fullscreenElement !== null)
   // The browser can also leave full screen by itself (Esc), so follow its event.
   document.addEventListener('fullscreenchange', () => {
-    fullscreen.value = document.fullscreenElement !== null
+    maximized.value = document.fullscreenElement !== null
   })
   const summoned = createSignal()
   const hid = createSignal()
@@ -33,11 +34,20 @@ export function createBrowserShell(): Shell {
       hid.emit()
     },
 
-    fullscreen: readonly(fullscreen),
+    maximized: readonly(maximized),
 
-    async toggleFullscreen() {
+    async toggleMaximize() {
       if (document.fullscreenElement) await document.exitFullscreen()
       else await document.documentElement.requestFullscreen()
+    },
+
+    // A tab has no work area of its own and no window to grow.
+    async workArea() {
+      return null
+    },
+
+    async applyZoom(percent) {
+      document.documentElement.style.zoom = String(percent / 100)
     },
 
     // The browser never hides on blur, so there is nothing to suspend.

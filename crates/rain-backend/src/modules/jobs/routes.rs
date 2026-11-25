@@ -24,7 +24,7 @@ pub fn router() -> Router<AppState> {
 async fn list(State(state): State<AppState>) -> Json<Vec<ScheduledJob>> {
     let jobs = state.jobs();
     jobs.nudge();
-    Json(jobs.list())
+    Json(jobs.list_with_claude_app().await)
 }
 
 async fn set_enabled(

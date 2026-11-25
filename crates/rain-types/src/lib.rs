@@ -40,7 +40,8 @@ pub use gamemode::{
 };
 pub use games::{CustomGameDraft, Game, GameLibrary, GamePatch, GameSource, GameSourceStatus};
 pub use jobs::{
-    EnabledBody, IdleJob, IdleResource, IdleState, JobKind, JobRun, LogLevel, LogLine, ScheduledJob,
+    EnabledBody, IdleJob, IdleResource, IdleState, JobKind, JobRun, JobSource, LogLevel, LogLine,
+    ScheduledJob,
 };
 pub use launcher::{
     AppEntry, AppKind, LaunchMode, LaunchRun, LaunchStep, LaunchTarget, LaunchType, PinBody,

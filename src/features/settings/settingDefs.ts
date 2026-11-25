@@ -3,6 +3,11 @@
 import type { SettingDef } from '@/actions/types'
 
 export const settingDefs: SettingDef[] = [
+  // The picker is drawn by SettingRow (ThemePicker). The choice lives in the window, not in the backend's settings.
+  { id: 'theme', group: 'Appearance', label: 'Theme', hint: 'Colours of the whole window', kind: 'select' },
+  // Drawn by SettingRow (ZoomControl). The level lives in the window, like the theme.
+  { id: 'zoom', group: 'Appearance', label: 'Zoom', hint: 'Size of the whole window', kind: 'select' },
+
   {
     id: 'hotkey',
     group: 'General',

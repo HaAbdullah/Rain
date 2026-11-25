@@ -15,6 +15,13 @@ const props = defineProps<{
 
 /** Running, else the result of the last run, else idle. */
 const status = computed(() => (props.job.running ? 'running' : (props.job.recentRuns[0]?.status ?? 'idle')))
+
+const fromApp = computed(() => props.job.source === 'claude-app')
+/** What went wrong in the last run, for a job of the Claude app: shown on the row so a failure cannot hide. */
+const problem = computed(() => {
+  const last = props.job.recentRuns[0]
+  return fromApp.value && last?.status === 'failed' ? (last.outcome ?? 'Last run failed') : undefined
+})
 </script>
 
 <template>
@@ -25,7 +32,7 @@ const status = computed(() => (props.job.running ? 'running' : (props.job.recent
     <StatusDot :status="status" />
 
     <span class="flex min-w-0 items-center gap-2">
-      <span class="truncate text-sm text-foreground">{{ job.name }}</span>
+      <span class="truncate text-sm text-foreground" :class="{ 'shrink-0 max-w-[60%]': problem }">{{ job.name }}</span>
       <component
         :is="job.kind === 'claude' ? BotIcon : ClockIcon"
         :size="12"
@@ -33,6 +40,14 @@ const status = computed(() => (props.job.running ? 'running' : (props.job.recent
         class="shrink-0 text-text-3"
         aria-hidden="true"
       />
+      <span
+        v-if="fromApp"
+        class="shrink-0 rounded-sm bg-surface-2 px-1.5 text-xs text-muted-foreground"
+        title="Runs in the Claude app"
+      >
+        Claude app
+      </span>
+      <span v-if="problem" class="min-w-0 truncate text-xs text-status-failed" :title="problem">{{ problem }}</span>
     </span>
 
     <span class="truncate text-13 text-muted-foreground">{{ job.scheduleLabel }}</span>

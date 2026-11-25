@@ -17,6 +17,16 @@ pub enum JobKind {
     Claude,
 }
 
+/// Where a job in the list comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+pub enum JobSource {
+    /// Rain's own `jobs.toml`. Rain starts these.
+    Rain,
+    /// A scheduled task of the Claude desktop app. Rain only shows it: the app starts it.
+    ClaudeApp,
+}
+
 /// One run of a scheduled job.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +46,9 @@ pub struct JobRun {
     // limit, a deliberate stop, a program that could not start): the log says why.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i64>,
+    // One line about how the run went. Only runs of the Claude app have it (its own summary).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -61,6 +74,9 @@ pub struct LogLine {
 #[ts(optional_fields)]
 pub struct ScheduledJob {
     pub id: String,
+    // Who owns the job. A job of the Claude app has no switch and no run now: Rain cannot start it.
+    #[ts(inline)]
+    pub source: JobSource,
     pub name: String,
     #[ts(inline)]
     pub kind: JobKind,
@@ -140,6 +156,7 @@ mod tests {
             started_at: "2026-11-21T09:30:00.000Z".into(),
             duration_ms: None,
             exit_code: None,
+            outcome: None,
         }
     }
 
@@ -170,6 +187,7 @@ mod tests {
     fn a_scheduled_job_leaves_out_a_missing_next_run() {
         let job = ScheduledJob {
             id: "j".into(),
+            source: JobSource::Rain,
             name: "Job".into(),
             kind: JobKind::Claude,
             cron: "0 6 * * *".into(),
@@ -182,6 +200,11 @@ mod tests {
         let json = round_trip(&job);
         assert!(json.get("nextRunAt").is_none());
         assert_eq!(json["kind"], "claude");
+        assert_eq!(json["source"], "rain");
+        assert_eq!(
+            serde_json::to_value(JobSource::ClaudeApp).unwrap(),
+            "claude-app"
+        );
         assert_eq!(json["scheduleLabel"], "Every day at 06:00");
     }
 

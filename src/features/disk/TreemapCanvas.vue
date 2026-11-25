@@ -2,7 +2,7 @@
 // The treemap of the open folder on one canvas, with the colour legend under it.
 // The canvas is sized for the screen's pixel ratio and redrawn from one debounced ResizeObserver.
 import { useDebounceFn, useResizeObserver } from '@vueuse/core'
-import { onMounted, useTemplateRef, watch } from 'vue'
+import { onMounted, ref, useTemplateRef, watch } from 'vue'
 import type { DiskNode } from '@/data/types'
 import { keepFocus } from '@/lib/focus'
 import {
@@ -71,6 +71,14 @@ function topLevelAt(event: MouseEvent): TreemapRect | null {
   return layout ? hitTest(layout, event.offsetX, event.offsetY) : null
 }
 
+/** True while the pointer is over a block that can be opened (not an "other" block). */
+const overOpenable = ref(false)
+
+function onMove(event: MouseEvent) {
+  const hit = topLevelAt(event)
+  overOpenable.value = hit !== null && hit.data.kind !== 'other'
+}
+
 function onClick(event: MouseEvent) {
   const hit = topLevelAt(event)
   if (hit) emit('select', hit.data.path)
@@ -88,7 +96,10 @@ function onDoubleClick(event: MouseEvent) {
       <canvas
         ref="canvas"
         class="absolute inset-0 size-full"
+        :class="overOpenable ? 'cursor-pointer' : 'cursor-default'"
         @mousedown="keepFocus"
+        @mousemove="onMove"
+        @mouseleave="overOpenable = false"
         @click="onClick"
         @dblclick="onDoubleClick"
       />
@@ -96,7 +107,7 @@ function onDoubleClick(event: MouseEvent) {
 
     <ul class="flex h-6 shrink-0 items-center gap-4 overflow-hidden border-t border-border px-3" aria-label="File types">
       <li v-for="category in CATEGORIES" :key="category.id" class="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-        <span class="size-2.5 rounded-xs opacity-75" :style="{ backgroundColor: `var(--file-${category.id})` }" />
+        <span class="size-2.5 rounded-xs" :style="{ backgroundColor: `var(--file-${category.id})` }" />
         {{ category.label }}
       </li>
     </ul>

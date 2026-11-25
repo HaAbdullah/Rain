@@ -96,13 +96,15 @@ export type GamePatch = { hidden?: boolean, title?: string, exePath?: string, co
 
 export type JobKind = "cron" | "claude";
 
-export type JobRun = { id: string, jobId: string, status: "idle" | "running" | "waiting" | "success" | "failed", startedAt: string, durationMs?: number, exitCode?: number, };
+export type JobSource = "rain" | "claude-app";
+
+export type JobRun = { id: string, jobId: string, status: "idle" | "running" | "waiting" | "success" | "failed", startedAt: string, durationMs?: number, exitCode?: number, outcome?: string, };
 
 export type LogLevel = "info" | "warn" | "error";
 
 export type LogLine = { ts: string, level: "info" | "warn" | "error", text: string, };
 
-export type ScheduledJob = { id: string, name: string, kind: "cron" | "claude", cron: string, scheduleLabel: string, enabled: boolean, running: boolean, nextRunAt?: string, recentRuns: Array<JobRun>, };
+export type ScheduledJob = { id: string, source: "rain" | "claude-app", name: string, kind: "cron" | "claude", cron: string, scheduleLabel: string, enabled: boolean, running: boolean, nextRunAt?: string, recentRuns: Array<JobRun>, };
 
 export type IdleState = "queued" | "running" | "paused" | "success" | "failed";
 

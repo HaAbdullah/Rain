@@ -256,6 +256,8 @@ import {
   WrenchIcon,
   XIcon,
   ZapIcon,  SquareDashedIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
 } from '@lucide/vue'
 
 const icons: Record<string, Component> = {
@@ -511,6 +513,8 @@ const icons: Record<string, Component> = {
   'wrench': WrenchIcon,
   'x': XIcon,
   'zap': ZapIcon,
+  'zoom-in': ZoomInIcon,
+  'zoom-out': ZoomOutIcon,
 
   // Names from before Lucide renamed them, kept so older data still resolves.
   'alert-triangle': TriangleAlertIcon,

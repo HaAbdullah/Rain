@@ -206,6 +206,11 @@ function runJobNow(job: ScheduledJob): RainAction {
 }
 
 export const jobActions: ActionProvider<TargetOf<'job'>> = ({ item: job }, { where }) => {
+  // A job of the Claude app runs there: Rain has no switch, no run and no log for it.
+  if (job.source === 'claude-app') {
+    return where === 'home' ? [showInWorkflows('jobs', job.id)] : job.cron ? [copyAction('cron', job.cron)] : []
+  }
+
   if (where === 'home') {
     return [
       showInWorkflows('jobs', job.id),

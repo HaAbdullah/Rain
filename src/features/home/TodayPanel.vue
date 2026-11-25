@@ -72,7 +72,7 @@ function openTodayNote() {
               type="button"
               tabindex="-1"
               class="flex size-7 items-center justify-center rounded-md transition-colors"
-              :class="item.todayDone ? 'bg-heat-3 text-foreground' : 'bg-surface-2 text-muted-foreground'"
+              :class="item.todayDone ? 'bg-heat-3 text-on-heat' : 'bg-surface-2 text-muted-foreground'"
               :aria-label="`${item.habit.name}: ${item.todayDone ? 'done' : 'not yet'}`"
               @mousedown="keepFocus"
               @click="nav.go('life')"

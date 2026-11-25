@@ -25,6 +25,8 @@ import { api } from '@/data'
 import { keepFocus } from '@/lib/focus'
 import { toISODate } from '@/lib/time'
 import { useNav } from '@/nav/useNav'
+import AllHabitsHeat from './AllHabitsHeat.vue'
+import { HEAT_MAX_WEEKS, heatStart } from './allHabitsHeat'
 import { closeHabit, habitEditor, lifeView, openHabit } from './actions'
 import HabitEditorDialog from './HabitEditorDialog.vue'
 import HabitRow from './HabitRow.vue'
@@ -47,6 +49,17 @@ const habits = useResource('habits', () => api.listHabits(), { live: 'habits' })
 watch(today, () => void habits.reload())
 
 const habitList = computed(() => habits.data.value ?? [])
+
+// The days of the aggregate heatmap: one request for the whole range when the screen opens, and
+// again after midnight or when the habits change (a tick, an edit). The map shows today from the
+// list at once, so a tick does not wait for this answer.
+const heatDays = useResource('habitDays:heat', () =>
+  api.listHabitDays(heatStart(today.value, HEAT_MAX_WEEKS), today.value),
+)
+const habitsSignature = computed(() =>
+  habitList.value.map((summary) => `${summary.habit.id}:${summary.habit.cadence}:${summary.todayDone}`).join(),
+)
+watch([today, habitsSignature], () => void heatDays.reload())
 const open = useOpenHabit(habitList, today)
 
 const failed = computed(() => vault.error.value ?? habits.error.value)
@@ -207,6 +220,8 @@ function openSettings() {
           />
         </template>
       </ItemList>
+
+      <AllHabitsHeat :habits="habitList" :days="heatDays.data.value ?? []" :today="today" />
     </template>
 
     <HabitEditorDialog />
