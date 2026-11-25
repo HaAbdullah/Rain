@@ -174,6 +174,21 @@ pub struct SeenWindow {
     pub title: String,
 }
 
+/// Whether a window title names `text` (lower case) as one of its parts. The parts are split at
+/// " - ", like "file - folder - Visual Studio Code". A part names the text when it is the text, or
+/// starts with it and goes on with a space or a bracket ("web-shop (Workspace)"). A plain
+/// substring would take "rain-data" for "rain".
+fn title_has(title: &str, text: &str) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+    title.to_lowercase().split(" - ").any(|part| {
+        let part = part.trim().trim_start_matches(['\u{25cf}', '*']).trim();
+        part.strip_prefix(text)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '(', '[']))
+    })
+}
+
 /// The window that a step made, or `None`.
 ///
 /// A candidate belongs to the started program (its process id, or an image name of the query),
@@ -195,7 +210,7 @@ pub fn find_window(
         let title_ok = query
             .title_has
             .as_deref()
-            .is_none_or(|text| w.title.to_lowercase().contains(text));
+            .is_none_or(|text| title_has(&w.title, text));
         // The started process owns the window itself: its title needs no rule.
         let own = started_pid.is_some_and(|pid| pid != 0 && pid == w.pid);
         // A query without image names but with a title rule (a store app, whose window belongs to
@@ -761,6 +776,19 @@ mod tests {
             find_window(&open, &both, &HashSet::new(), &with, Some(99)),
             Some(7)
         );
+    }
+
+    #[test]
+    fn the_title_rule_names_a_part_of_the_title_not_a_piece_of_text() {
+        assert!(title_has("lib.rs - rain - Visual Studio Code", "rain"));
+        assert!(title_has("rain (Workspace) - Visual Studio Code", "rain"));
+        assert!(!title_has("rain-data - Visual Studio Code", "rain"));
+        assert!(!title_has("Terrain - Visual Studio Code", "rain"));
+        assert!(!title_has("anything", ""));
+        // An open window of another folder is never taken for an open project.
+        let open = [window(2, 21, "code.exe", "rain-data - Visual Studio Code")];
+        let q = query(&["code.exe"], Some("rain"), true);
+        assert_eq!(find_window(&open, &open, &HashSet::new(), &q, None), None);
     }
 
     #[test]
